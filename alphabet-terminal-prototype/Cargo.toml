@@ -1,0 +1,31 @@
+[package]
+name = "graph-learning-core"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+
+[lib]
+name = "graph_learning_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "graph-learning-cli"
+path = "src/main.rs"
+
+[dependencies]
+crossterm = "0.27"
+serde = { workspace = true }
+serde_json = { workspace = true }
+rand = { workspace = true }
+rand_distr = { workspace = true }
+chrono = { workspace = true }
+statrs = { workspace = true }
+uuid = { workspace = true }
+tokio = { workspace = true, optional = true }
+tracing = { workspace = true }
+
+[features]
+default = ["cli"]
+cli = ["crossterm"]
+async = ["tokio"]
