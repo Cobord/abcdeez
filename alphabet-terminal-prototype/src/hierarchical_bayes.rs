@@ -407,13 +407,15 @@ impl HierarchicalBayesianModel {
             self.sample_population_parameters(&mut rng);
             
             // Sample individual parameters
-            for learner in self.individual_models.values_mut() {
-                self.sample_individual_parameters(learner, &mut rng);
+            let learner_ids: Vec<String> = self.individual_models.keys().cloned().collect();
+            for learner_id in learner_ids {
+                self.sample_individual_parameters_by_id(&learner_id, &mut rng);
             }
             
-            // Sample item parameters
-            for item in self.item_bank.values_mut() {
-                self.sample_item_parameters(item, &mut rng);
+            // Sample item parameters  
+            let item_ids: Vec<String> = self.item_bank.keys().cloned().collect();
+            for item_id in item_ids {
+                self.sample_item_parameters_by_id(&item_id, &mut rng);
             }
             
             // Store sample
@@ -479,6 +481,94 @@ impl HierarchicalBayesianModel {
         
         let gamma = Gamma::new(alpha, 1.0 / beta).unwrap();
         self.population_parameters.variance_ability = 1.0 / gamma.sample(rng);
+    }
+    
+    fn sample_individual_parameters_by_id(&mut self, learner_id: &str, rng: &mut ThreadRng) {
+        // Sample ability
+        let responses: Vec<_> = self.data_points.iter()
+            .filter(|r| r.learner_id == learner_id)
+            .cloned()
+            .collect();
+        
+        if !responses.is_empty() && self.individual_models.contains_key(learner_id) {
+            // Calculate likelihood
+            let mut log_likelihood = 0.0;
+            {
+                let learner = &self.individual_models[learner_id];
+                for response in &responses {
+                    if let Some(item) = self.item_bank.get(&response.task_id) {
+                        let p = self.predict_probability(learner, item);
+                        log_likelihood += if response.correct { p.ln() } else { (1.0 - p).ln() };
+                    }
+                }
+            }
+            
+            // Prior
+            let prior_dist = Normal::new(
+                self.population_parameters.mean_ability,
+                self.population_parameters.variance_ability.sqrt()
+            ).unwrap();
+            
+            // Metropolis step
+            let proposal_std = 0.2;
+            let current = self.individual_models[learner_id].ability;
+            let proposal = Normal::new(current, proposal_std).unwrap().sample(rng);
+            
+            let log_prior_ratio = prior_dist.ln_pdf(proposal) - prior_dist.ln_pdf(current);
+            
+            // Calculate likelihood ratio with proposed value
+            let old_ability = self.individual_models[learner_id].ability;
+            self.individual_models.get_mut(learner_id).unwrap().ability = proposal;
+            
+            let mut new_log_likelihood = 0.0;
+            for response in &responses {
+                if let Some(item) = self.item_bank.get(&response.task_id) {
+                    let learner = &self.individual_models[learner_id];
+                    let p = self.predict_probability(learner, item);
+                    new_log_likelihood += if response.correct { p.ln() } else { (1.0 - p).ln() };
+                }
+            }
+            
+            let log_ratio = new_log_likelihood - log_likelihood + log_prior_ratio;
+            
+            if rng.gen::<f64>().ln() >= log_ratio {
+                self.individual_models.get_mut(learner_id).unwrap().ability = old_ability; // Reject proposal
+            }
+            
+            // Sample strategy weights (Dirichlet)
+            let alpha = {
+                let learner = &self.individual_models[learner_id];
+                learner.strategy_weights.iter().map(|w| w * 10.0).collect::<Vec<_>>()
+            };
+            let new_weights = self.sample_dirichlet(&alpha);
+            self.individual_models.get_mut(learner_id).unwrap().strategy_weights = new_weights;
+        }
+    }
+    
+    fn sample_item_parameters_by_id(&mut self, item_id: &str, rng: &mut ThreadRng) {
+        // Sample difficulty
+        let responses: Vec<_> = self.data_points.iter()
+            .filter(|r| r.task_id == item_id)
+            .cloned()
+            .collect();
+        
+        if responses.len() > 5 && self.item_bank.contains_key(item_id) {
+            let n_correct = responses.iter().filter(|r| r.correct).count() as f64;
+            let n_total = responses.len() as f64;
+            
+            // Beta-binomial conjugate update
+            let alpha = n_correct + 1.0;
+            let beta = n_total - n_correct + 1.0;
+            
+            let beta_dist = Beta::new(alpha, beta).unwrap();
+            let p_correct = beta_dist.sample(rng);
+            
+            // Convert to difficulty (logit scale)
+            if let Some(item) = self.item_bank.get_mut(item_id) {
+                item.difficulty = -(p_correct / (1.0 - p_correct)).ln();
+                item.difficulty = item.difficulty.max(-3.0).min(3.0);
+            }
+        }
     }
     
     fn sample_individual_parameters(&mut self, learner: &mut IndividualParameters, rng: &mut ThreadRng) {

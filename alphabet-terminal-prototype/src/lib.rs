@@ -17,6 +17,7 @@ pub mod transfer_learning;
 pub mod statistical_validation;
 pub mod strategy_mixture;
 pub mod hierarchical_bayes;
+pub mod experiments;
 
 // Re-export commonly used types at the root level
 pub use topology::{Topology, TopologyType, Node, Edge};

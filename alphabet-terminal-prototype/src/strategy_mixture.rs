@@ -253,7 +253,7 @@ impl StrategyMixtureModel {
         };
         
         // Response time component (log-normal distribution)
-        let expected_rt = match strategy.strategy_type {
+        let expected_rt: f64 = match strategy.strategy_type {
             MixtureStrategyType::Sequential => 1.5,
             MixtureStrategyType::Chunking => 2.0,
             MixtureStrategyType::Anchoring => 1.2,
