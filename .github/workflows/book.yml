@@ -1,0 +1,74 @@
+name: Build and Deploy Book
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'alphabet-terminal-prototype/book/**'
+      - '.github/workflows/book.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'alphabet-terminal-prototype/book/**'
+  workflow_dispatch:
+
+env:
+  BOOK_DIR: alphabet-terminal-prototype/book
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: 'latest'
+
+      - name: Install mdbook-katex
+        run: |
+          cargo install mdbook-katex
+
+      - name: Build book
+        run: |
+          cd ${{ env.BOOK_DIR }}
+          mdbook build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: book
+          path: ${{ env.BOOK_DIR }}/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: book
+          path: ./book
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: ./book
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2

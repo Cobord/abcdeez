@@ -12,12 +12,12 @@ build-dir = "build"
 after = ["links"]
 
 [output.html]
-theme = "rust"
-default-theme = "rust"
+#theme = "rust"
+#default-theme = "rust"
 preferred-dark-theme = "navy"
 mathjax-support = true
-git-repository-url = "https://github.com/user/alphabet-terminal-prototype"
-edit-url-template = "https://github.com/user/alphabet-terminal-prototype/edit/main/{path}"
+git-repository-url = "https://github.com/emberian/abcdeez"
+edit-url-template = "https://github.com/emberian/abcdeez/edit/main/alphabet-terminal-prototype/book/{path}"
 
 [output.html.playground]
 editable = true

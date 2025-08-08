@@ -1,0 +1,159 @@
+name: Check Book Quality
+
+on:
+  pull_request:
+    paths:
+      - 'alphabet-terminal-prototype/book/**'
+  push:
+    branches: [main, dev]
+    paths:
+      - 'alphabet-terminal-prototype/book/**'
+
+env:
+  BOOK_DIR: alphabet-terminal-prototype/book
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: 'latest'
+
+      - name: Install linting tools
+        run: |
+          cargo install mdbook-linkcheck
+          npm install -g markdownlint-cli
+          pip install proselint
+
+      - name: Check markdown formatting
+        run: |
+          markdownlint ${{ env.BOOK_DIR }}/src/**/*.md \
+            --disable MD013 MD033 MD041 \
+            --ignore ${{ env.BOOK_DIR }}/src/SUMMARY.md
+
+      - name: Check prose quality
+        continue-on-error: true
+        run: |
+          find ${{ env.BOOK_DIR }}/src -name "*.md" -exec proselint {} \;
+
+      - name: Build and check links
+        run: |
+          cd ${{ env.BOOK_DIR }}
+          # Install linkcheck preprocessor
+          cat >> book.toml << 'EOF'
+          
+          [output.linkcheck]
+          follow-web-links = true
+          warning-policy = "warn"
+          EOF
+          
+          mdbook build
+
+      - name: Check code examples
+        run: |
+          # Extract Rust code blocks and check syntax
+          cd ${{ env.BOOK_DIR }}
+          for file in src/*.md; do
+            echo "Checking $file"
+            # Extract ```rust blocks
+            awk '/```rust/,/```/' "$file" | \
+              grep -v '```' > /tmp/check.rs 2>/dev/null || true
+            
+            if [ -s /tmp/check.rs ]; then
+              # Add minimal wrapper for syntax checking
+              echo "fn main() {" > /tmp/wrapped.rs
+              cat /tmp/check.rs >> /tmp/wrapped.rs
+              echo "}" >> /tmp/wrapped.rs
+              
+              # Check syntax (don't require it to compile, just parse)
+              rustc --edition 2021 -Z parse-only /tmp/wrapped.rs 2>&1 | \
+                grep -v "warning" || true
+            fi
+          done
+
+      - name: Validate book.toml
+        run: |
+          cd ${{ env.BOOK_DIR }}
+          mdbook init --force --title test --ignore git
+          # This will fail if book.toml is invalid
+          mdbook build
+
+  test-build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: 'latest'
+
+      - name: Install mdbook-katex
+        run: |
+          cargo install mdbook-katex
+
+      - name: Test build
+        run: |
+          cd ${{ env.BOOK_DIR }}
+          mdbook build
+          mdbook test
+
+      - name: Check output
+        run: |
+          # Verify key files exist
+          test -f "${{ env.BOOK_DIR }}/build/index.html"
+          test -f "${{ env.BOOK_DIR }}/build/introduction.html"
+          test -d "${{ env.BOOK_DIR }}/build/css"
+          test -f "${{ env.BOOK_DIR }}/build/searchindex.json"
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check documentation coverage
+        run: |
+          cd ${{ env.BOOK_DIR }}
+          
+          # Check that all src/*.rs files have corresponding documentation
+          echo "Checking documentation coverage..."
+          
+          MISSING=""
+          for rust_file in ../src/*.rs; do
+            basename=$(basename "$rust_file" .rs)
+            
+            # Skip test files and main.rs
+            if [[ "$basename" == "main" ]] || [[ "$basename" == *"test"* ]]; then
+              continue
+            fi
+            
+            # Check if mentioned in any .md file
+            if ! grep -r "$basename" src/*.md > /dev/null 2>&1; then
+              MISSING="$MISSING $basename"
+            fi
+          done
+          
+          if [ -n "$MISSING" ]; then
+            echo "Warning: No documentation found for:$MISSING"
+          else
+            echo "All modules documented!"
+          fi
+
+      - name: Generate coverage report
+        run: |
+          cd ${{ env.BOOK_DIR }}
+          
+          # Count sections and code examples
+          echo "## Documentation Statistics"
+          echo "Total chapters: $(find src -name "*.md" | wc -l)"
+          echo "Total lines: $(wc -l src/*.md | tail -1 | awk '{print $1}')"
+          echo "Code examples: $(grep -c '```rust' src/*.md | paste -sd+ | bc)"
+          echo "Mathematical formulas: $(grep -c '\$\$\|\\\[' src/*.md | paste -sd+ | bc)"
+          echo "Internal links: $(grep -o '\[.*\](\./' src/*.md | wc -l)"

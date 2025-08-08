@@ -1,0 +1,63 @@
+name: Book PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'alphabet-terminal-prototype/book/**'
+      - '.github/workflows/book-pr.yml'
+
+env:
+  BOOK_DIR: alphabet-terminal-prototype/book
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: 'latest'
+
+      - name: Install mdbook-katex
+        run: |
+          cargo install mdbook-katex
+
+      - name: Build book
+        run: |
+          cd ${{ env.BOOK_DIR }}
+          mdbook build
+
+      - name: Deploy preview to Netlify
+        id: netlify
+        uses: nwtgck/actions-netlify@v2
+        with:
+          publish-dir: ${{ env.BOOK_DIR }}/build
+          production-deploy: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Deploy from GitHub Actions"
+          enable-pull-request-comment: true
+          enable-commit-comment: false
+          overwrites-pull-request-comment: true
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+      - name: Comment PR
+        if: github.event_name == 'pull_request' && steps.netlify.outputs.deploy-url
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.netlify.outputs.deploy-url }}';
+            const body = `📚 **Book Preview Ready!**\n\n[View the preview documentation](${url})\n\n_This preview will be updated automatically with new commits._`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
