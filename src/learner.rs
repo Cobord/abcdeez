@@ -117,6 +117,8 @@ impl LearnerModel {
                 ]
             }
             crate::topology::TopologyType::Cyclic => vec![],
+            crate::topology::TopologyType::PartialOrder => vec![],
+            crate::topology::TopologyType::GeneralGraph => vec![],
         };
 
         LearnerModel {
@@ -158,8 +160,9 @@ impl LearnerModel {
             let time_since = now.signed_duration_since(mem.last_practice);
             let hours_since = time_since.num_hours() as f64;
             
-            let decay_rate = 0.05;
-            let decayed_strength = mem.strength * (-decay_rate * hours_since).exp();
+            let current_strength = mem.strength;
+            let decay_rate = Self::calculate_decay_rate_static(current_strength);
+            let decayed_strength = Self::apply_forgetting_curve_static(current_strength, hours_since, decay_rate);
             
             if correct {
                 mem.strength = (decayed_strength + 0.2).min(1.0);
@@ -169,6 +172,62 @@ impl LearnerModel {
             
             mem.last_practice = now;
         }
+    }
+
+    fn calculate_decay_rate_static(current_strength: f64) -> f64 {
+        0.05 * (2.0 - current_strength)
+    }
+
+    fn apply_forgetting_curve_static(strength: f64, hours_elapsed: f64, decay_rate: f64) -> f64 {
+        strength * (-decay_rate * hours_elapsed).exp()
+    }
+
+    fn calculate_decay_rate(&self, current_strength: f64) -> f64 {
+        0.05 * (2.0 - current_strength)
+    }
+
+    fn apply_forgetting_curve(&self, strength: f64, hours_elapsed: f64, decay_rate: f64) -> f64 {
+        strength * (-decay_rate * hours_elapsed).exp()
+    }
+
+    pub fn get_retention_probability(&self, node_id: &str) -> f64 {
+        if let Some(mem) = self.memory_strengths.get(node_id) {
+            let now = chrono::Utc::now();
+            let time_since = now.signed_duration_since(mem.last_practice);
+            let hours_since = time_since.num_hours() as f64;
+            
+            let decay_rate = self.calculate_decay_rate(mem.strength);
+            self.apply_forgetting_curve(mem.strength, hours_since, decay_rate)
+        } else {
+            0.0
+        }
+    }
+
+    pub fn get_optimal_review_time(&self, node_id: &str, target_retention: f64) -> Option<chrono::DateTime<chrono::Utc>> {
+        let mem = self.memory_strengths.get(node_id)?;
+        
+        if mem.strength <= target_retention {
+            return Some(chrono::Utc::now());
+        }
+        
+        let decay_rate = self.calculate_decay_rate(mem.strength);
+        let hours_until_review = -(target_retention / mem.strength).ln() / decay_rate;
+        
+        Some(mem.last_practice + chrono::Duration::hours(hours_until_review as i64))
+    }
+
+    pub fn get_items_needing_review(&self, threshold: f64) -> Vec<String> {
+        let mut items = Vec::new();
+        
+        for (node_id, _) in &self.memory_strengths {
+            if self.get_retention_probability(node_id) < threshold {
+                if let Some(node) = self.node_embeddings.get(node_id) {
+                    items.push(node.node_id.clone());
+                }
+            }
+        }
+        
+        items
     }
 
     pub fn update_confusability(&mut self, node_a: &str, node_b: &str, confused: bool) {

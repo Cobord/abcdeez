@@ -62,7 +62,7 @@ impl TerminalApp {
 
             stdout.flush()?;
 
-            if event::poll(Duration::from_millis(100))? {
+            if event::poll(Duration::from_millis(10000))? {
                 if let Event::Key(key) = event::read()? {
                     if !self.handle_input(key)? {
                         break;

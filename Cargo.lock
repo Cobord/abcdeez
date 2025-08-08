@@ -9,6 +9,7 @@ dependencies = [
  "chrono",
  "crossterm",
  "rand",
+ "rand_distr",
  "serde",
  "serde_json",
  "statrs",

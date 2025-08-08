@@ -97,6 +97,251 @@ pub fn run_demo() {
     println!("═══════════════════════════════════════════════════\n");
 }
 
+pub fn demonstrate_dag_tasks() {
+    println!("\n═══════════════════════════════════════════════════");
+    println!("    DAG/PARTIAL ORDER TASK DEMONSTRATIONS");
+    println!("═══════════════════════════════════════════════════\n");
+
+    let dag = crate::topology::Topology::example_dag();
+    let mut generator = crate::tasks::TaskGenerator::new(dag.clone());
+
+    println!("Example DAG: Software Deployment Pipeline");
+    println!("──────────────────────────────────────────────────");
+    if let Some(topo_sort) = dag.get_topological_sort() {
+        println!("Valid ordering: {}", topo_sort.join(" -> "));
+    }
+    println!();
+
+    println!("1. Comparability Task:");
+    println!("──────────────────────────────────────────────────");
+    let task = generator.generate_task(Some(crate::tasks::TaskType::Comparability {
+        a: "Database Setup".to_string(),
+        b: "Frontend".to_string(),
+    }));
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("2. Minimal Elements (Entry Points):");
+    println!("──────────────────────────────────────────────────");
+    let task = generator.generate_task(Some(crate::tasks::TaskType::MinimalElements));
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("3. Maximal Elements (Final Tasks):");
+    println!("──────────────────────────────────────────────────");
+    let task = generator.generate_task(Some(crate::tasks::TaskType::MaximalElements));
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("4. Topological Sort (Subset):");
+    println!("──────────────────────────────────────────────────");
+    let task = generator.generate_task(Some(crate::tasks::TaskType::TopologicalSort {
+        items: vec![
+            "Database Setup".to_string(),
+            "API Server".to_string(),
+            "User Auth".to_string(),
+        ],
+    }));
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("5. Shortest Path:");
+    println!("──────────────────────────────────────────────────");
+    let task = generator.generate_task(Some(crate::tasks::TaskType::ShortestPath {
+        from: "Database Setup".to_string(),
+        to: "Deploy".to_string(),
+    }));
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+}
+
+pub fn demonstrate_eig() {
+    println!("\n═══════════════════════════════════════════════════");
+    println!("    EXPECTED INFORMATION GAIN DEMONSTRATION");
+    println!("═══════════════════════════════════════════════════\n");
+
+    let topology = crate::topology::Topology::alphabet();
+    let learner_model = crate::learner::LearnerModel::new("eig_demo".to_string(), &topology);
+    let mut scheduler = crate::adaptive::AdaptiveScheduler::new_with_eig(learner_model, topology.clone(), true);
+    
+    println!("Initial model entropy: {:.2}", scheduler.get_model_entropy());
+    println!("\nGenerating candidate tasks and ranking by EIG...\n");
+    
+    // Generate various task types
+    let mut task_gen = crate::tasks::TaskGenerator::new(topology.clone());
+    let candidates = vec![
+        task_gen.generate_task(Some(crate::tasks::TaskType::PairwiseOrder {
+            a: "M".to_string(),
+            b: "N".to_string(),
+        })),
+        task_gen.generate_task(Some(crate::tasks::TaskType::PairwiseOrder {
+            a: "A".to_string(),
+            b: "Z".to_string(),
+        })),
+        task_gen.generate_task(Some(crate::tasks::TaskType::Successor {
+            item: "G".to_string(),
+        })),
+        task_gen.generate_task(Some(crate::tasks::TaskType::Segment {
+            start: "F".to_string(),
+            count: 4,
+            reverse: false,
+        })),
+        task_gen.generate_task(Some(crate::tasks::TaskType::KJump {
+            start: "L".to_string(),
+            k: 3,
+        })),
+    ];
+    
+    let bayesian_model = scheduler.get_bayesian_model();
+    let ranked = bayesian_model.rank_tasks_by_eig(candidates);
+    
+    println!("Tasks ranked by Expected Information Gain:");
+    println!("──────────────────────────────────────────────────");
+    for (i, (task, eig)) in ranked.iter().enumerate().take(5) {
+        println!("{}. EIG = {:.4}", i + 1, eig);
+        println!("   Task: {}", task.prompt);
+        println!("   Type: {:?}", task.task_type);
+        println!();
+    }
+    
+    println!("Simulating 10 adaptive selections with EIG...\n");
+    let mut total_entropy_reduction = 0.0;
+    let initial_entropy = scheduler.get_model_entropy();
+    
+    for i in 1..=10 {
+        let entropy_before = scheduler.get_model_entropy();
+        let task = scheduler.select_next_task();
+        
+        // Simulate response
+        let correct = rand::random::<f64>() > 0.3;
+        scheduler.update_model(&task, correct, 1000);
+        
+        let entropy_after = scheduler.get_model_entropy();
+        let reduction = entropy_before - entropy_after;
+        total_entropy_reduction += reduction;
+        
+        println!("Round {}: Entropy {:.3} -> {:.3} (Δ = {:.4})", 
+            i, entropy_before, entropy_after, reduction);
+    }
+    
+    println!("\n──────────────────────────────────────────────────");
+    println!("Total entropy reduction: {:.3}", total_entropy_reduction);
+    println!("Final model entropy: {:.3}", scheduler.get_model_entropy());
+    println!("Entropy reduction rate: {:.1}%", 
+        (initial_entropy - scheduler.get_model_entropy()) / initial_entropy * 100.0);
+    
+    println!("\nComparing with Random Selection:");
+    println!("──────────────────────────────────────────────────");
+    
+    let learner_model2 = crate::learner::LearnerModel::new("random".to_string(), &topology);
+    let mut scheduler2 = crate::adaptive::AdaptiveScheduler::new_with_eig(learner_model2, topology.clone(), false);
+    
+    let initial_entropy2 = scheduler2.get_model_entropy();
+    for _ in 1..=10 {
+        let task = scheduler2.select_next_task();
+        let correct = rand::random::<f64>() > 0.3;
+        scheduler2.update_model(&task, correct, 1000);
+    }
+    
+    println!("Random selection entropy reduction: {:.1}%",
+        (initial_entropy2 - scheduler2.get_model_entropy()) / initial_entropy2 * 100.0);
+    println!("\nEIG-based selection is more efficient at reducing uncertainty!");
+}
+
+pub fn demonstrate_statistical_analysis() {
+    println!("\n═══════════════════════════════════════════════════");
+    println!("    STATISTICAL ANALYSIS DEMONSTRATION");
+    println!("═══════════════════════════════════════════════════\n");
+
+    let topology = crate::topology::Topology::alphabet();
+    let mut session = crate::tasks::TaskSession::new(topology.clone());
+    let mut responses = Vec::new();
+
+    println!("Simulating 50 training trials...\n");
+    
+    for i in 0..50 {
+        session.start_task(None);
+        let correct = rand::random::<f64>() > (0.4 - i as f64 * 0.008);
+        let rt = 1000.0 + rand::random::<f64>() * 500.0 - i as f64 * 10.0;
+        
+        if let Some(task) = &session.current_task {
+            let answer = if correct {
+                task.correct_answer.clone()
+            } else {
+                "Wrong".to_string()
+            };
+            
+            let response = crate::tasks::TaskResponse {
+                task: task.clone(),
+                user_answer: answer,
+                correct,
+                response_time_ms: rt as u128,
+                timestamp: chrono::Utc::now(),
+            };
+            responses.push(response);
+        }
+    }
+
+    let analyzer = crate::statistics::SessionAnalyzer::new(responses);
+    let analysis = analyzer.generate_full_analysis();
+
+    println!("Performance Analysis Results:");
+    println!("═══════════════════════════════════════════════════");
+
+    println!("\n1. Learning Curve Analysis:");
+    println!("──────────────────────────────────────────────────");
+    println!("   Improvement rate: {:.2}%", analysis.learning_curves.improvement_rate * 100.0);
+    if let Some(plateau) = analysis.learning_curves.plateau_point {
+        println!("   Performance plateau reached at trial: {}", plateau);
+    }
+    println!("   Final accuracy: {:.1}%", 
+        analysis.learning_curves.accuracy_over_time.last().unwrap_or(&0.0) * 100.0);
+
+    println!("\n2. Strategy Analysis:");
+    println!("──────────────────────────────────────────────────");
+    println!("   RT-Distance Correlation: {:.3}", analysis.strategy_analysis.rt_distance_correlation);
+    println!("   Strategy Classification: {:?}", analysis.strategy_analysis.strategy_classification);
+    if let Some(transition) = analysis.strategy_analysis.transition_point {
+        println!("   Strategy transition detected at trial: {}", transition);
+    }
+
+    println!("\n3. Error Pattern Analysis:");
+    println!("──────────────────────────────────────────────────");
+    println!("   Locality index: {:.2} (proportion of errors within distance 1-2)", 
+        analysis.error_patterns.locality_index);
+    
+    if !analysis.error_patterns.systematic_errors.is_empty() {
+        println!("   Systematic errors detected:");
+        for (expected, actual, count) in &analysis.error_patterns.systematic_errors[..3.min(analysis.error_patterns.systematic_errors.len())] {
+            println!("     {} <-> {}: {} times", expected, actual, count);
+        }
+    }
+
+    println!("\n4. Response Time Statistics by Task Type:");
+    println!("──────────────────────────────────────────────────");
+    for (task_type, stats) in analysis.task_type_stats.iter().take(3) {
+        println!("   {}:", task_type);
+        println!("     Mean RT: {:.0}ms (SD: {:.0}ms)", stats.mean, stats.std_dev);
+        println!("     Median: {:.0}ms, IQR: {:.0}ms", stats.median, stats.iqr);
+    }
+
+    println!("\n5. Ex-Gaussian RT Model:");
+    println!("──────────────────────────────────────────────────");
+    let all_rts: Vec<f64> = analysis.rt_by_distance.values()
+        .flatten()
+        .cloned()
+        .collect();
+    
+    if !all_rts.is_empty() {
+        let ex_gaussian = crate::statistics::ExGaussianModel::fit(&all_rts);
+        println!("   μ (Gaussian mean): {:.0}ms", ex_gaussian.params.mu);
+        println!("   σ (Gaussian SD): {:.0}ms", ex_gaussian.params.sigma);
+        println!("   τ (Exponential rate): {:.0}ms", ex_gaussian.params.tau);
+        println!("   Model mean: {:.0}ms", ex_gaussian.mean());
+        println!("   Model variance: {:.0}", ex_gaussian.variance());
+    }
+}
+
 pub fn demonstrate_task_types() {
     println!("\n═══════════════════════════════════════════════════");
     println!("    TASK TYPE DEMONSTRATIONS");

@@ -4,6 +4,8 @@ mod tasks;
 mod adaptive;
 mod ui;
 mod demo;
+mod statistics;
+mod bayesian;
 
 use std::env;
 use std::io;
@@ -15,6 +17,9 @@ fn main() -> io::Result<()> {
     if args.len() > 1 && args[1] == "demo" {
         demo::run_demo();
         demo::demonstrate_task_types();
+        demo::demonstrate_dag_tasks();
+        demo::demonstrate_statistical_analysis();
+        demo::demonstrate_eig();
         Ok(())
     } else {
         let mut app = TerminalApp::new();

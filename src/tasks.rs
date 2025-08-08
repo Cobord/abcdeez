@@ -15,6 +15,11 @@ pub enum TaskType {
     Index { item: String },
     MissingItem { before: String, after: String },
     ShortestDistance { from: String, to: String },
+    Comparability { a: String, b: String },
+    TopologicalSort { items: Vec<String> },
+    ShortestPath { from: String, to: String },
+    MinimalElements,
+    MaximalElements,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +66,11 @@ impl TaskGenerator {
             TaskType::Index { item } => self.generate_index(item),
             TaskType::MissingItem { before, after } => self.generate_missing_item(before, after),
             TaskType::ShortestDistance { from, to } => self.generate_shortest_distance(from, to),
+            TaskType::Comparability { a, b } => self.generate_comparability(a, b),
+            TaskType::TopologicalSort { items } => self.generate_topological_sort(items),
+            TaskType::ShortestPath { from, to } => self.generate_shortest_path(from, to),
+            TaskType::MinimalElements => self.generate_minimal_elements(),
+            TaskType::MaximalElements => self.generate_maximal_elements(),
         }
     }
 
@@ -298,6 +308,118 @@ impl TaskGenerator {
             correct_answer,
             options,
             difficulty: (distance as f64 / 10.0).min(1.0),
+            operation: OperationType::PairwiseOrder,
+        }
+    }
+
+    fn generate_comparability(&self, a: String, b: String) -> Task {
+        let prompt = format!("Are '{}' and '{}' comparable (one must come before the other)?", a, b);
+        
+        let comparable = self.topology.are_comparable(&a, &b).unwrap_or(true);
+        let correct_answer = if comparable { "Yes" } else { "No" }.to_string();
+
+        Task {
+            task_type: TaskType::Comparability { a, b },
+            prompt,
+            correct_answer: correct_answer.clone(),
+            options: vec!["Yes".to_string(), "No".to_string()],
+            difficulty: 0.6,
+            operation: OperationType::PairwiseOrder,
+        }
+    }
+
+    fn generate_topological_sort(&self, items: Vec<String>) -> Task {
+        let prompt = format!("Arrange these items in a valid order: {:?}", items);
+        
+        let correct_answer = if let Some(sorted) = self.topology.get_topological_sort() {
+            let filtered: Vec<String> = sorted.into_iter()
+                .filter(|s| items.contains(s))
+                .collect();
+            filtered.join(", ")
+        } else {
+            "Not applicable".to_string()
+        };
+
+        Task {
+            task_type: TaskType::TopologicalSort { items },
+            prompt,
+            correct_answer,
+            options: vec![],
+            difficulty: 0.8,
+            operation: OperationType::PairwiseOrder,
+        }
+    }
+
+    fn generate_shortest_path(&self, from: String, to: String) -> Task {
+        let prompt = format!("What is the shortest path from '{}' to '{}'?", from, to);
+        
+        let path = self.topology.shortest_path(&from, &to);
+        let correct_answer = path
+            .map(|p| p.join(" -> "))
+            .unwrap_or_else(|| "No path".to_string());
+
+        Task {
+            task_type: TaskType::ShortestPath { from, to },
+            prompt,
+            correct_answer,
+            options: vec![],
+            difficulty: 0.7,
+            operation: OperationType::PairwiseOrder,
+        }
+    }
+
+    fn generate_minimal_elements(&self) -> Task {
+        let prompt = "Which elements have no prerequisites?".to_string();
+        
+        let mut minimal = Vec::new();
+        for node in &self.topology.nodes {
+            let has_incoming = self.topology.edges.iter()
+                .any(|e| e.to == node.id);
+            if !has_incoming {
+                minimal.push(node.label.clone());
+            }
+        }
+        
+        let correct_answer = if minimal.is_empty() {
+            "None".to_string()
+        } else {
+            minimal.join(", ")
+        };
+
+        Task {
+            task_type: TaskType::MinimalElements,
+            prompt,
+            correct_answer,
+            options: vec![],
+            difficulty: 0.5,
+            operation: OperationType::PairwiseOrder,
+        }
+    }
+
+    fn generate_maximal_elements(&self) -> Task {
+        let prompt = "Which elements have no dependent tasks?".to_string();
+        
+        let mut maximal = Vec::new();
+        for node in &self.topology.nodes {
+            let has_outgoing = self.topology.edges.iter()
+                .any(|e| e.from == node.id);
+            if !has_outgoing {
+                maximal.push(node.label.clone());
+            }
+        }
+        
+        let correct_answer = if maximal.is_empty() {
+            "None".to_string()
+        } else {
+            maximal.join(", ")
+        };
+
+        Task {
+            task_type: TaskType::MaximalElements,
+            prompt,
+            correct_answer,
+            options: vec![],
+            difficulty: 0.5,
             operation: OperationType::PairwiseOrder,
         }
     }

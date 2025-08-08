@@ -1,23 +1,42 @@
 use crate::learner::LearnerModel;
 use crate::tasks::{Task, TaskType, TaskGenerator};
 use crate::topology::Topology;
+use crate::bayesian::{BayesianLearnerModel, ResponseData};
 use rand::Rng;
 
 pub struct AdaptiveScheduler {
     learner_model: LearnerModel,
+    bayesian_model: BayesianLearnerModel,
     topology: Topology,
     task_generator: TaskGenerator,
     epsilon: f64,
+    use_eig: bool,
 }
 
 impl AdaptiveScheduler {
     pub fn new(learner_model: LearnerModel, topology: Topology) -> Self {
         let task_generator = TaskGenerator::new(topology.clone());
+        let bayesian_model = BayesianLearnerModel::new(&topology);
         AdaptiveScheduler {
             learner_model,
+            bayesian_model,
             topology: topology.clone(),
             task_generator,
             epsilon: 0.1,
+            use_eig: true,
+        }
+    }
+
+    pub fn new_with_eig(learner_model: LearnerModel, topology: Topology, use_eig: bool) -> Self {
+        let task_generator = TaskGenerator::new(topology.clone());
+        let bayesian_model = BayesianLearnerModel::new(&topology);
+        AdaptiveScheduler {
+            learner_model,
+            bayesian_model,
+            topology: topology.clone(),
+            task_generator,
+            epsilon: 0.1,
+            use_eig,
         }
     }
 
@@ -28,9 +47,44 @@ impl AdaptiveScheduler {
             self.task_generator.generate_task(None)
         } else {
             let candidates = self.generate_candidate_tasks();
-            let best_task = self.select_best_task(candidates);
+            let best_task = if self.use_eig {
+                self.select_best_task_by_eig(candidates)
+            } else {
+                self.select_best_task(candidates)
+            };
             best_task
         }
+    }
+
+    fn select_best_task_by_eig(&self, candidates: Vec<Task>) -> Task {
+        let ranked = self.bayesian_model.rank_tasks_by_eig(candidates);
+        
+        // Filter by difficulty zone (70-80% success rate)
+        let p_correct_target = 0.75;
+        let tolerance = 0.15;
+        
+        let mut best_task = None;
+        for (task, _eig) in &ranked {
+            let p_correct = self.learner_model.get_probability_correct(&task.operation, task.difficulty);
+            if (p_correct - p_correct_target).abs() < tolerance {
+                best_task = Some(task.clone());
+                break;
+            }
+        }
+        
+        // If no task in target difficulty, return highest EIG
+        best_task.unwrap_or_else(|| {
+            ranked.into_iter().next()
+                .map(|(task, _)| task)
+                .unwrap_or_else(|| Task {
+                    task_type: TaskType::Successor { item: "A".to_string() },
+                    prompt: "What comes after 'A'?".to_string(),
+                    correct_answer: "B".to_string(),
+                    options: vec!["B".to_string(), "C".to_string()],
+                    difficulty: 0.3,
+                    operation: crate::learner::OperationType::Successor,
+                })
+        })
     }
 
     fn generate_candidate_tasks(&mut self) -> Vec<Task> {
@@ -203,6 +257,15 @@ impl AdaptiveScheduler {
     }
 
     pub fn update_model(&mut self, task: &Task, correct: bool, response_time_ms: u128) {
+        // Update Bayesian model with response
+        let response_data = ResponseData {
+            task: task.clone(),
+            correct,
+            response_time: response_time_ms as f64,
+        };
+        self.bayesian_model.update_with_response(response_data);
+        
+        // Continue with existing updates
         self.learner_model.update_operation_proficiency(&task.operation, correct);
         
         match &task.task_type {
@@ -253,6 +316,14 @@ impl AdaptiveScheduler {
 
     pub fn get_learner_model_mut(&mut self) -> &mut LearnerModel {
         &mut self.learner_model
+    }
+    
+    pub fn get_bayesian_model(&self) -> &BayesianLearnerModel {
+        &self.bayesian_model
+    }
+    
+    pub fn get_model_entropy(&self) -> f64 {
+        self.bayesian_model.total_entropy()
     }
 }
 
