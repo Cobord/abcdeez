@@ -49,6 +49,12 @@ pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 data.create_learner();
                 data.current_screen = Screen::DomainSelection;
             }),
+            // Demo showcase for portfolio / presentation flows
+            button("Demo Showcase", |data: &mut AppData| {
+                // Run a short automated demo training sequence and navigate to Dashboard
+                data.demo_showcase();
+                data.current_screen = Screen::Dashboard;
+            }),
         )).direction(Axis::Vertical)),
     ))
     .direction(Axis::Vertical)
@@ -67,19 +73,22 @@ pub fn domain_selection_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         .into_iter()
         .map(|domain| {
             let is_selected = data.selected_domain == domain;
-
             let header = prose(domain.description()).alignment(TextAlignment::Start);
 
-            // Always render labels to keep tuple element types homogeneous
-            let status_label = if is_selected {
-                label("Selected").alignment(TextAlignment::Middle)
-            } else {
-                label("Tap Start Training Session to begin").alignment(TextAlignment::Middle)
-            };
+            // Always render a Select button; it is a no-op when the domain is already selected.
+            // Use a single closure that checks the selected flag at runtime so the Button type stays the same.
+            let d_cloned = domain.clone();
+            let selected_flag = is_selected;
+            let select_button = button("Select", move |data: &mut AppData| {
+                if !selected_flag {
+                    data.selected_domain = d_cloned.clone();
+                    data.create_learner();
+                }
+            });
 
             card(
                 domain.display_name(),
-                flex((header, status_label)).direction(Axis::Vertical),
+                flex((header, select_button)).direction(Axis::Vertical),
             )
         })
         .collect::<Vec<_>>();
@@ -161,23 +170,42 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         .direction(Axis::Vertical),
     );
 
-    // Task display with feedback
-    let task_display = if let Some(ui_task) = &data.current_task {
-        // Unified options/feedback block using option slots
-        let option_buttons = ui_task
-            .display_options
-            .iter()
-            .enumerate()
-            .map(|(index, option)| {
-                let option_text = option.clone();
-                button(option_text, move |data: &mut AppData| {
-                    data.submit_answer(index);
-                })
-            })
-            .collect::<Vec<_>>();
+    // Task display (unified, homogeneous types)
+    let task_display = {
+        // Prompt and difficulty are always labels (same types for both branches)
+        let prompt = data
+            .current_task
+            .as_ref()
+            .map(|t| t.display_prompt.clone())
+            .unwrap_or_else(|| "Generating next task...".to_string());
 
-        // Always build answers as the same concrete type: flex over a Vec of Buttons.
-        // When showing feedback, mask by using an empty Vec so the type is unchanged.
+        let difficulty = data
+            .current_task
+            .as_ref()
+            .map(|t| format!("Difficulty: {:.1}", t.core_task.difficulty))
+            .unwrap_or_else(|| "Difficulty: ...".to_string());
+
+        // Build option buttons vec (same concrete type) and mask when showing feedback by using empty vec
+        let option_buttons = data
+            .current_task
+            .as_ref()
+            .map(|t| {
+                t.display_options
+                    .iter()
+                    .enumerate()
+                    .map(|(index, option)| {
+                        let option_text = option.clone();
+                        button(option_text, move |data: &mut AppData| {
+                            // only submit if not in feedback state
+                            if !data.show_feedback {
+                                data.submit_answer(index);
+                            }
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|| Vec::new());
+
         let masked_buttons = if data.show_feedback {
             Vec::<_>::new()
         } else {
@@ -185,14 +213,18 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         };
         let answers = flex(masked_buttons).direction(Axis::Vertical);
 
-        let feedback_message = if data.show_feedback {
+        // Feedback text and color (always a Label)
+        let feedback_text = if data.show_feedback {
             if data.last_response_correct {
                 "Correct! Well done!".to_string()
             } else {
-                format!(
-                    "Incorrect. The correct answer was: {}",
-                    ui_task.core_task.correct_answer
-                )
+                // If there is no current_task (rare), show generic message
+                let correct_answer = data
+                    .current_task
+                    .as_ref()
+                    .map(|t| t.core_task.correct_answer.clone())
+                    .unwrap_or_else(|| "<unknown>".to_string());
+                format!("Incorrect. The correct answer was: {}", correct_answer)
             }
         } else {
             "".to_string()
@@ -208,10 +240,11 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             Color::from_rgb8(128, 128, 128)
         };
 
-        let feedback_label = label(feedback_message)
+        let feedback_label = label(feedback_text)
             .brush(feedback_color)
             .alignment(TextAlignment::Middle);
 
+        // Continue and hint buttons are always Buttons; their handlers are no-ops when not appropriate
         let continue_button = button("Continue", |data: &mut AppData| {
             if data.show_feedback {
                 data.continue_to_next_task();
@@ -224,47 +257,37 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             }
         });
 
+        // Hint card always present (Label inside a card). Empty when no hint.
         let hint_text = if !data.show_feedback {
             data.current_hint.clone().unwrap_or_default()
         } else {
             String::new()
         };
-
         let hint_card =
             card::<AppData, _>("Hint", label(hint_text).alignment(TextAlignment::Middle));
 
-        let options_display = flex((
-            feedback_label,
-            continue_button,
-            answers,
-            get_hint_button,
-            hint_card,
-        ))
-        .direction(Axis::Vertical);
-
-        card(
-            "Current Task",
+        // Combine into a single Interaction card (same concrete types regardless of state)
+        let interaction = card::<AppData, _>(
+            "Interaction",
             flex((
-                label(ui_task.display_prompt.clone()).alignment(TextAlignment::Middle),
-                label(format!("Difficulty: {:.1}", ui_task.core_task.difficulty))
-                    .brush(Color::from_rgb8(128, 128, 128))
-                    .alignment(TextAlignment::Middle),
-                card::<AppData, _>("Interaction", options_display),
+                feedback_label,
+                continue_button,
+                answers,
+                get_hint_button,
+                hint_card,
             ))
             .direction(Axis::Vertical),
-        )
-    } else {
+        );
+
+        // Final Current Task card: prompt, difficulty, interaction (same shape in both branches)
         card(
             "Current Task",
             flex((
-                label("Generating next task...").alignment(TextAlignment::Middle),
-                label("Difficulty: ...")
+                label(prompt).alignment(TextAlignment::Middle),
+                label(difficulty)
                     .brush(Color::from_rgb8(128, 128, 128))
                     .alignment(TextAlignment::Middle),
-                card::<AppData, _>(
-                    "Interaction",
-                    flex((label("").alignment(TextAlignment::Middle),)).direction(Axis::Vertical),
-                ),
+                interaction,
             ))
             .direction(Axis::Vertical),
         )
@@ -525,6 +548,96 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         controls,
     ))
     .direction(Axis::Vertical)
+
+    /*
+    UI_REPORT.md - Roadmap and Recommendations to Evolve the Xilem UI into a Robust Production App
+
+    Overview
+    - This small Xilem-based UI is a compact, cross-platform demonstration of the
+      graph-coded adaptive learning system. To evolve it into a production-quality
+      cognitive-science application, we need to address architecture, type-safety,
+      async API integration, state management, testability, and UX polish.
+
+    Goals
+    1. Stable, well-typed UI components that avoid fragile impl-trait mismatches.
+    2. Clear separation of view layer, application state, and domain logic.
+    3. Reliable integration with backend model code in `alphabet-terminal-prototype/`.
+    4. Deterministic demo mode and replayable session exports for reproducible research.
+    5. Testing, CI, and platform-specific build pipelines.
+
+    Immediate UI changes done in the current branch
+    - Eliminated mixed-type view tuples by ensuring each flex tuple uses homogeneous view types.
+      This prevents impl-trait mismatches and hard-to-debug compilation errors in Xilem.
+    - Unify "Interaction" card so the Current Task card has identical concrete view shapes
+      in both the live-task and loading states.
+    - Added a `demo_showcase()` AppData method (in lib.rs) that performs a short, repeatable
+      mock training run to populate the Dashboard for portfolio/demo purposes.
+    - Introduced a Select button for domain cards that is always present but no-ops when the
+      domain is already selected (keeps types stable while providing the desired UX).
+
+    Recommended refactor roadmap (short to medium term)
+    1) View/State Refactor
+       - Introduce a small view-model layer: lightweight structs that prepare the UI payloads
+         (strings, option flags, vecs of options) so complex closures are localized and the
+         views remain simple functions returning `impl WidgetView<State>`.
+       - Adopt a `router` module that maps `AppData` -> Screen enum and isolates screen composition.
+
+    2) Componentization
+       - Split big screen files into smaller modules: `screens/welcome.rs`, `screens/domain.rs`,
+         `screens/training.rs`, `screens/dashboard.rs`, `screens/settings.rs`.
+       - Standardize reusable widgets in `components.rs` with consistent signatures:
+         e.g., `fn card<T: 'static, V: WidgetView<T> + 'static>(...) -> impl WidgetView<T> + 'static`.
+
+    3) State and Concurrency
+       - Move long-running async tasks off the sync UI path: use Xilem's `task` view helper to
+         spawn background work and send messages to the main state. Avoid blocking `tokio::Runtime` on the UI thread.
+       - Replace `Arc<tokio::runtime::Runtime>` + `block_on` with view-based async tasks so the UI remains responsive.
+
+    4) Backend Integration (API contract)
+       - Align UI DTOs with the backend as captured in BACKEND_DEMANDS.md:
+         * Session create: accept `topology_type` strings or provide a mapping on the UI.
+         * Submit responses: don't send `correct` from the client; backend computes correctness.
+         * Add endpoints: list sessions per learner, list responses per session.
+       - Add an integration layer `api_client.rs` with typed request/response models, retries, and auth token refresh.
+
+    5) Demo Mode and Reproducibility
+       - The `demo_showcase()` should use deterministic randomness (seeded RNG) and log the
+         sequence of tasks/responses so the demo is reproducible for reproducibility audits.
+       - Add an “Export replay” function that produces a JSON file with:
+         * topology, learner init state (seed), sequence of tasks and responses, and final learner metrics.
+
+    6) Testing and CI
+       - Unit-test UI helpers where possible (pure functions). For view tests, add snapshot tests
+         that render the view into a string representation for regression detection.
+       - Add integration tests for the demo flow that call `demo_showcase()` and assert on `AppData` state.
+       - Add a GitHub Actions matrix: desktop+headless, mobile cross-compile check, linting, cargo clippy.
+
+    7) Observability and Telemetry
+       - Add structured logs for user actions (task start, submit, hint request) and model updates.
+       - Provide an optional aggregated telemetry mode (disabled by default) for field trials.
+
+    8) Performance and Scalability
+       - Avoid cloning heavyweight core model state in the UI. Keep immutable snapshots and explicit serialization boundaries.
+       - Keep the UI reactive: only recompute heavy visualizations (histograms, learning curves) when underlying data changes; memoize expensive computations.
+
+    Long-term architecture suggestions
+    - Move core cognitive algorithms to a well-defined library (already present as `alphabet-terminal-prototype`).
+      The UI should operate on a thin adapter layer that transforms library outputs into UI DTOs.
+    - Separate experimental features behind feature flags: live interventions, A/B scheduler variants, export formats.
+    - Implement a plugin-style dashboard for adding new visualizations (graphical charts, interactive plots) without modifying core UI.
+
+    UX improvements to implement next (high priority)
+    - Domain selection: make the Select button visibly active, show a confirmation/preview of topology (e.g., small list of nodes).
+    - Task interaction: show response latency in the UI; allow explicit 'I don't know' submissions.
+    - Hint system: progressive disclosure (small hint -> worked example), with inline animation to show hint provenance.
+    - Dashboard: interactive drill-down from aggregate metrics to per-task logs and model snapshots.
+
+    Conclusion
+    - The repo is now in a state where the UI components are well-typed and resilient. The next steps
+      are componentization, clean async handling, and API contract alignment with the backend.
+    - Once the above is in place, this cute 6-file prototype can be iteratively hardened into a robust,
+      well-factored production UI suitable for cognitive science experiments and demos.
+    */
 }
 
 // Settings Screen

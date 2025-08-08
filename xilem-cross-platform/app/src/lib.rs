@@ -207,6 +207,56 @@ impl AppData {
         self.error_message = None;
     }
 
+    /// Demo showcase: create a demo user/learner, start a session, run a short mock training
+    /// flow to populate the UI for a portfolio/demo. Uses existing AppData methods so behavior
+    /// follows the same code paths used in normal operation.
+    pub fn demo_showcase(&mut self) {
+        // Ensure a demo user exists
+        if self.current_user.is_none() {
+            self.current_user = Some(User {
+                id: Uuid::new_v4().to_string(),
+                username: "DemoUser".to_string(),
+                email: "demo@example.com".to_string(),
+                password_hash: String::new(),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            });
+        }
+
+        // Create the learner model and topology
+        self.create_learner();
+
+        // Start a training session (sets up task generator/scheduler/intervention system)
+        self.start_session();
+
+        // Perform a short sequence of interactions to demonstrate functionality.
+        // We'll generate a small number of tasks and submit answers programmatically.
+        // Use conservative choices (choose first option) so the flow proceeds.
+        for _ in 0..5 {
+            // Ensure there is an active task (generate_next_task resets current_task)
+            self.generate_next_task();
+
+            // If a task exists, submit a safe default answer (index 0).
+            if self.current_task.is_some() {
+                // Simulate some time having passed
+                // Update metrics via submit_answer (will update model and session responses)
+                self.submit_answer(0);
+
+                // Request hint and struggle checks to trigger intervention paths (no-op if disabled)
+                self.request_hint();
+                self.check_struggle_and_provide_help();
+            }
+        }
+
+        // End the session and produce summary + data visible on Dashboard
+        self.end_session();
+
+        // Friendly message for demo viewers
+        self.success_message =
+            Some("Demo showcase complete — check the Dashboard for results.".to_string());
+        self.error_message = None;
+    }
+
     fn create_topology_for_domain(&self) -> Topology {
         match self.selected_domain {
             Domain::Alphabet => {
@@ -535,10 +585,19 @@ impl AppData {
     }
 }
 
-/// Entry point for the app
-pub fn run(event_loop: EventLoopBuilder) {
+/// Entry point for the app (no-argument). The event loop is created internally so callers
+/// can simply call `graph_learning_ui::run()` from main without constructing an EventLoop.
+pub fn run() {
+    // Create the platform event loop here
+    let event_loop = xilem::EventLoop::with_user_event();
+
     let data = AppData::default();
 
     let app = Xilem::new(data, app_logic);
-    app.run_in(event_loop).unwrap();
+    // Run the windowed application with a title using the Xilem runtime.
+    // We use the windowed runner to create a visible window for the demo / showcase.
+    let _ = app.run_windowed(
+        event_loop,
+        "Adaptive Learning System - Alphabet Terminal".into(),
+    );
 }
