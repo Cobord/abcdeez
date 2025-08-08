@@ -6,6 +6,7 @@ mod ui;
 mod demo;
 mod statistics;
 mod bayesian;
+mod extended_tasks;
 
 use std::env;
 use std::io;
@@ -20,6 +21,7 @@ fn main() -> io::Result<()> {
         demo::demonstrate_dag_tasks();
         demo::demonstrate_statistical_analysis();
         demo::demonstrate_eig();
+        demo::demonstrate_extended_tasks();
         Ok(())
     } else {
         let mut app = TerminalApp::new();

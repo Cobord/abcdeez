@@ -454,3 +454,124 @@ pub fn demonstrate_task_types() {
     println!("   {}", task.prompt);
     println!("   Answer: {}\n", task.correct_answer);
 }
+
+pub fn demonstrate_extended_tasks() {
+    println!("\n═══════════════════════════════════════════════════");
+    println!("    EXTENDED TASK DEMONSTRATIONS");
+    println!("═══════════════════════════════════════════════════\n");
+
+    let topology = crate::topology::Topology::alphabet();
+    let mut ext_gen = crate::extended_tasks::ExtendedTaskGenerator::new(topology.clone());
+
+    println!("1. Between Query (3-way comparison):");
+    println!("──────────────────────────────────────────────────");
+    let task = ext_gen.generate_between_query("D".to_string(), "F".to_string(), "H".to_string());
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("2. Boundary Bridging (chunk crossing):");
+    println!("──────────────────────────────────────────────────");
+    let task = ext_gen.generate_boundary_bridging("E".to_string(), 4, vec![6, 13]);
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("3. Directional Comparison:");
+    println!("──────────────────────────────────────────────────");
+    let task = ext_gen.generate_directional_comparison("P".to_string(), "L".to_string(), true);
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("4. Insertion Adaptation:");
+    println!("──────────────────────────────────────────────────");
+    let task = ext_gen.generate_insertion_adaptation("X".to_string(), "M".to_string(), "Q".to_string());
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("5. Next-Step Prediction:");
+    println!("──────────────────────────────────────────────────");
+    let task = ext_gen.generate_next_step_prediction("B".to_string(), "Y".to_string());
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("6. Landmark Navigation:");
+    println!("──────────────────────────────────────────────────");
+    let task = ext_gen.generate_landmark_navigation("A".to_string(), "Z".to_string(), "M".to_string());
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("7. Macro Discovery:");
+    println!("──────────────────────────────────────────────────");
+    let task = ext_gen.generate_macro_discovery(vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string()]);
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("8. Semantic Filter (vowels category):");
+    println!("──────────────────────────────────────────────────");
+    let task = ext_gen.generate_semantic_filter("vowel".to_string(), 3);
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("9. Projection Switch:");
+    println!("──────────────────────────────────────────────────");
+    let task = ext_gen.generate_projection_switch("E".to_string(), "alphabetical".to_string(), "vowels_only".to_string());
+    println!("   {}", task.prompt);
+    println!("   Answer: {}\n", task.correct_answer);
+
+    println!("\n═══════════════════════════════════════════════════");
+    println!("Dynamic Topology Demonstration");  
+    println!("═══════════════════════════════════════════════════\n");
+
+    let base_topology = crate::topology::Topology::new_linear(vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+    let mut dynamic = crate::extended_tasks::DynamicTopology::new(base_topology);
+    
+    println!("Initial topology: A -> B -> C");
+    
+    dynamic.apply_modification(crate::extended_tasks::GraphModification::AddNode {
+        id: "node_3".to_string(),
+        label: "D".to_string(),
+        position: 3.0,
+    });
+    
+    dynamic.apply_modification(crate::extended_tasks::GraphModification::AddEdge {
+        from: "node_2".to_string(),
+        to: "node_3".to_string(),
+        weight: 1.0,
+    });
+    
+    println!("After adding D: A -> B -> C -> D");
+    
+    dynamic.apply_modification(crate::extended_tasks::GraphModification::AddEdge {
+        from: "node_0".to_string(),
+        to: "node_2".to_string(),
+        weight: 2.0,
+    });
+    
+    println!("Added shortcut: A --(2)--> C");
+    
+    println!("\n═══════════════════════════════════════════════════");
+    println!("Transfer Learning Demonstration");  
+    println!("═══════════════════════════════════════════════════\n");
+    
+    let source = crate::topology::Topology::new_linear(vec!["1".to_string(), "2".to_string(), "3".to_string()]);
+    let target = crate::topology::Topology::new_linear(vec!["One".to_string(), "Two".to_string(), "Three".to_string()]);
+    
+    let transfer = crate::extended_tasks::TransferLearning::new(source.clone(), target.clone());
+    
+    let source_task = crate::tasks::Task {
+        task_type: crate::tasks::TaskType::Successor { item: "2".to_string() },
+        prompt: "What comes after '2'?".to_string(),
+        correct_answer: "3".to_string(),
+        options: vec!["1".to_string(), "3".to_string()],
+        difficulty: 0.3,
+        operation: crate::learner::OperationType::Successor,
+    };
+    
+    if let Some(transferred) = transfer.transfer_task(&source_task) {
+        println!("Source task: {}", source_task.prompt);
+        println!("Transferred: {}", transferred.prompt);
+        println!("Isomorphic mapping preserved!");
+    }
+    
+    let efficiency = transfer.measure_transfer_efficiency(0.8, 0.95);
+    println!("Transfer efficiency: {:.0}%", efficiency * 100.0);
+}

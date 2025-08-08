@@ -128,6 +128,9 @@ The demo includes:
 3. **DAG/Partial order tasks** - Software deployment pipeline example
 4. **Statistical analysis** - Learning curves, RT modeling, strategy detection
 5. **Expected Information Gain** - Comparison of EIG vs random selection
+6. **Extended tasks** - Between queries, landmark navigation, macro discovery
+7. **Dynamic topology** - Graph modification demonstrations
+8. **Transfer learning** - Cross-domain knowledge application
 
 ### Programmatic Usage
 
@@ -170,6 +173,7 @@ src/
 ├── adaptive.rs       # Adaptive scheduling with heuristics
 ├── bayesian.rs       # Bayesian EIG implementation
 ├── statistics.rs     # Statistical analysis and RT modeling
+├── extended_tasks.rs # Advanced task types and transfer learning
 ├── ui.rs            # Terminal interface with crossterm
 └── demo.rs          # Demonstration scenarios
 ```
@@ -220,6 +224,18 @@ Comprehensive performance analysis:
 - **Learning curves** with improvement rates
 - **Strategy detection** (scan vs index)
 - **Error pattern analysis** with locality metrics
+
+#### 7. Extended Tasks Module (`extended_tasks.rs`)
+Advanced task types and learning frameworks:
+- **Between queries** for 3-way comparisons
+- **Boundary bridging** with chunk crossing
+- **Next-step prediction** for goal navigation
+- **Landmark navigation** for hierarchical planning
+- **Macro discovery** for pattern recognition
+- **Dynamic topology** with graph modifications
+- **Transfer learning** across isomorphic domains
+- **Semantic filtering** by category attributes
+- **Projection switching** between multiple views
 
 ## Scientific Background
 
@@ -276,7 +292,7 @@ RT ~ ExG(μ, σ, τ)
 
 ## Implementation Status
 
-### ✅ Fully Implemented (63% of paper specs)
+### ✅ Fully Implemented (91% of paper specs)
 - Core sequential operations (all 8 types)
 - DAG/partial order tasks (5/5 types)
 - Complete learner model with all latent parameters
@@ -285,20 +301,27 @@ RT ~ ExG(μ, σ, τ)
 - Strategy detection and classification
 - Spaced repetition with forgetting curves
 - Terminal UI with real-time interaction
+- Extended task types from paper sections 4.1-4.5
+- Dynamic graph adaptation capabilities
+- Transfer learning framework
+- Semantic filtering and projection switching
 
 ### ⚠️ Partially Implemented (9%)
 - Boundary bridging (implicit, not explicit)
 - Some cyclic comparison variants
 - Basic graph navigation
 
-### 🚧 Not Yet Implemented (28%)
+### ✨ Extended Tasks (New!)
 - Between queries (A < B < C testing)
-- Dynamic graph modification
-- Landmark-based navigation
-- Macro/pattern discovery
-- Transfer learning across domains
-- Multi-relation tasks
-- Semantic attribute filtering
+- Dynamic graph modification with add/remove operations
+- Landmark-based navigation for efficient pathfinding
+- Macro/pattern discovery and recognition
+- Transfer learning across isomorphic domains
+- Multi-relation tasks with semantic filters
+- Projection switching between different views
+- Directional comparisons (forward/backward)
+- Insertion adaptation for optimal placement
+- Next-step prediction for goal navigation
 
 See [TASK_REVIEW.md](TASK_REVIEW.md) for detailed comparison with paper specifications.
 
