@@ -439,34 +439,80 @@ impl ExtendedTaskGenerator {
         let after_node = self.topology.get_node_by_label(&after);
         let before_node = self.topology.get_node_by_label(&before);
         
-        let correct_answer = if let (Some(an), Some(bn)) = (after_node, before_node) {
+        let (correct_answer, options) = if let (Some(an), Some(bn)) = (after_node, before_node) {
             let after_idx = self.topology.node_map[&an.id];
             let before_idx = self.topology.node_map[&bn.id];
             
-            if before_idx > after_idx + 1 {
-                // Find intermediate position
-                let insert_idx = (after_idx + before_idx) / 2;
-                if insert_idx < self.topology.nodes.len() {
-                    format!("Between {} and {}", 
-                        self.topology.nodes[insert_idx].label,
-                        self.topology.nodes[insert_idx + 1].label)
-                } else {
-                    "At the specified position".to_string()
+            if before_idx > after_idx {
+                // Valid ordering constraint
+                let mut valid_positions = Vec::new();
+                
+                // Collect all valid insertion positions
+                for i in after_idx + 1..before_idx {
+                    if i < self.topology.nodes.len() {
+                        let position = if i == after_idx + 1 && i == before_idx - 1 {
+                            format!("Between {} and {}", after, before)
+                        } else {
+                            format!("After {}", self.topology.nodes[i - 1].label)
+                        };
+                        valid_positions.push(position);
+                    }
                 }
-            } else if before_idx == after_idx + 1 {
-                "Directly between them".to_string()
+                
+                // Generate answer and options
+                let answer = if valid_positions.len() == 1 {
+                    valid_positions[0].clone()
+                } else if valid_positions.is_empty() {
+                    "No valid position".to_string()
+                } else {
+                    // For multiple valid positions, list the range
+                    format!("Any position from {} to {}", 
+                        valid_positions.first().unwrap(),
+                        valid_positions.last().unwrap())
+                };
+                
+                // Create options including distractors
+                let mut opts = vec![answer.clone()];
+                
+                // Add "before after" as a distractor
+                if after_idx > 0 {
+                    opts.push(format!("Before {}", after));
+                }
+                
+                // Add "after before" as a distractor
+                if before_idx < self.topology.nodes.len() - 1 {
+                    opts.push(format!("After {}", before));
+                }
+                
+                // Add "no valid position" if not already there
+                if !opts.contains(&"No valid position".to_string()) {
+                    opts.push("No valid position".to_string());
+                }
+                
+                opts.shuffle(&mut rand::thread_rng());
+                (answer, opts)
             } else {
-                "No valid position (constraints conflict)".to_string()
+                // Invalid ordering (before comes before after)
+                let answer = "No valid position (constraints conflict)".to_string();
+                let opts = vec![
+                    answer.clone(),
+                    format!("After {}", after),
+                    format!("Before {}", before),
+                    format!("Between {} and {}", after, before),
+                ];
+                (answer, opts)
             }
         } else {
-            "Invalid constraints".to_string()
+            let answer = "Invalid constraints".to_string();
+            let opts = vec![answer.clone()];
+            (answer, opts)
         };
         
         Task {
-            task_type: TaskType::MissingItem { before: after, after: before },
+            task_type: TaskType::MissingItem { before: after.clone(), after: before.clone() },
             prompt,
             correct_answer,
-            options: vec![],
+            options,
             difficulty: 0.8,
             operation: OperationType::PairwiseOrder,
         }

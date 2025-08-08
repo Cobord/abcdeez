@@ -109,7 +109,7 @@ impl LearnerDataExport {
                     .map(|r| r.timestamp)
                     .unwrap_or_else(Utc::now),
                 end_time: responses.last().map(|r| r.timestamp),
-                topology_type: "alphabet".to_string(), // TODO: get from session
+                topology_type: format!("{:?}", session.generator.topology.topology_type),
                 responses,
                 summary,
             }
@@ -211,13 +211,71 @@ impl LearnerDataExport {
             0.0
         };
         
+        // Detect strategies based on response patterns
+        let strategy_detected = Self::detect_strategy(responses);
+        
         SessionSummary {
             total_tasks,
             correct_count,
             accuracy,
             mean_rt_ms,
             median_rt_ms,
-            strategy_detected: None, // TODO: implement strategy detection
+            strategy_detected,
+        }
+    }
+    
+    fn detect_strategy(responses: &[TaskResponse]) -> Option<crate::statistics::StrategyType> {
+        if responses.is_empty() {
+            return None;
+        }
+        
+        // Collect response times and distances for correlation analysis
+        let mut rts = Vec::new();
+        let mut distances = Vec::new();
+        
+        for response in responses {
+            rts.push(response.response_time_ms as f64);
+            
+            // Extract distance information from task type
+            let distance = match &response.task.task_type {
+                crate::tasks::TaskType::KJump { k, .. } => *k as usize,
+                crate::tasks::TaskType::Segment { count, .. } => *count,
+                _ => 1, // Default distance for other tasks
+            };
+            distances.push(distance);
+        }
+        
+        // Use the existing strategy analysis logic
+        let correlation = if rts.len() >= 2 && distances.len() >= 2 {
+            // Calculate correlation between RT and distance
+            let n = rts.len() as f64;
+            let sum_x: f64 = distances.iter().map(|&d| d as f64).sum();
+            let sum_y: f64 = rts.iter().sum();
+            let sum_xy: f64 = distances.iter().zip(rts.iter())
+                .map(|(d, rt)| *d as f64 * rt)
+                .sum();
+            let sum_x2: f64 = distances.iter().map(|&d| (d * d) as f64).sum();
+            let sum_y2: f64 = rts.iter().map(|rt| rt * rt).sum();
+            
+            let numerator = n * sum_xy - sum_x * sum_y;
+            let denominator = ((n * sum_x2 - sum_x * sum_x) * (n * sum_y2 - sum_y * sum_y)).sqrt();
+            
+            if denominator > 0.0 {
+                numerator / denominator
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+        
+        // Classify strategy based on correlation
+        if correlation > 0.7 {
+            Some(crate::statistics::StrategyType::SerialScan)
+        } else if correlation < 0.3 {
+            Some(crate::statistics::StrategyType::DirectIndex)
+        } else {
+            Some(crate::statistics::StrategyType::Mixed((correlation * 100.0) as i32))
         }
     }
     

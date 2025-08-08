@@ -42,7 +42,7 @@ pub struct TaskResponse {
 }
 
 pub struct TaskGenerator {
-    topology: Topology,
+    pub topology: Topology,
     rng: rand::rngs::ThreadRng,
 }
 

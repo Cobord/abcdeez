@@ -18,6 +18,9 @@ pub mod statistical_validation;
 pub mod strategy_mixture;
 pub mod hierarchical_bayes;
 pub mod experiments;
+pub mod demo;
+#[cfg(feature = "cli")]
+pub mod ui;
 
 // Re-export commonly used types at the root level
 pub use topology::{Topology, TopologyType, Node, Edge};

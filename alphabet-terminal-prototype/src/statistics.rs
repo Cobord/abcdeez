@@ -145,19 +145,41 @@ impl ExGaussianModel {
         // Calculate the argument for the exponential term
         let exp_arg = (lambda / 2.0) * (2.0 * self.params.mu + lambda * self.params.sigma.powi(2) - 2.0 * x);
         
-        // Prevent numerical overflow
-        if exp_arg < -20.0 {
+        // Prevent numerical overflow/underflow with wider bounds
+        if exp_arg < -50.0 {
             return 0.0;
+        }
+        if exp_arg > 50.0 {
+            // For very large exp_arg, the result would overflow
+            // Return a capped value instead
+            return 1e10;
         }
         
         // Calculate the argument for the complementary error function
         let erfc_arg = (self.params.mu + lambda * self.params.sigma.powi(2) - x) / (self.params.sigma * std::f64::consts::SQRT_2);
         
-        // Use the CDF of standard normal to compute erfc
-        // erfc(z) = 2 * (1 - Φ(z)) where Φ is the CDF of N(0,1)
-        let erfc_val = 2.0 * (1.0 - normal.cdf(erfc_arg));
+        // Check for extreme erfc arguments to prevent numerical issues
+        let erfc_val = if erfc_arg > 5.0 {
+            // For large positive values, erfc approaches 0
+            0.0
+        } else if erfc_arg < -5.0 {
+            // For large negative values, erfc approaches 2
+            2.0
+        } else {
+            // Use the CDF of standard normal to compute erfc
+            // erfc(z) = 2 * (1 - Φ(z)) where Φ is the CDF of N(0,1)
+            2.0 * (1.0 - normal.cdf(erfc_arg))
+        };
         
-        (lambda / 2.0) * exp_arg.exp() * erfc_val
+        // Calculate the result with additional stability checks
+        let result = (lambda / 2.0) * exp_arg.exp() * erfc_val;
+        
+        // Final sanity check to avoid NaN or Inf
+        if result.is_finite() {
+            result
+        } else {
+            0.0
+        }
     }
 
     pub fn mean(&self) -> f64 {

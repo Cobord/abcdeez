@@ -308,6 +308,100 @@ impl LearnerModel {
             .map(|b| b.strength)
             .sum::<f64>() / self.chunk_boundaries.len().max(1) as f64
     }
+    
+    pub fn update_chunk_boundaries(&mut self, crossed_boundary: Option<usize>) {
+        if let Some(pos) = crossed_boundary {
+            if let Some(boundary) = self.chunk_boundaries.iter_mut().find(|b| b.position == pos) {
+                boundary.strength = (boundary.strength + 0.1).min(1.0);
+            } else {
+                self.chunk_boundaries.push(ChunkBoundary {
+                    position: pos,
+                    strength: 0.1,
+                });
+            }
+        }
+    }
+    
+    /// Apply identifiability constraints to prevent gauge freedom in embeddings
+    /// This fixes the first and last nodes' positions and centers the embeddings
+    pub fn apply_identifiability_constraints(&mut self) {
+        // Fix gauge freedom by anchoring first and last nodes
+        if let Some(first_node) = self.node_embeddings.values().min_by_key(|n| n.position as i64) {
+            let first_id = first_node.node_id.clone();
+            if let Some(first) = self.node_embeddings.get_mut(&first_id) {
+                first.position = 0.0;
+                first.uncertainty = 0.01; // Very certain about anchor
+            }
+        }
+        
+        if let Some(last_node) = self.node_embeddings.values().max_by_key(|n| n.position as i64) {
+            let last_id = last_node.node_id.clone();
+            let n_nodes = self.node_embeddings.len() as f64;
+            if let Some(last) = self.node_embeddings.get_mut(&last_id) {
+                last.position = n_nodes - 1.0;
+                last.uncertainty = 0.01; // Very certain about anchor
+            }
+        }
+        
+        // Center the embeddings to prevent drift
+        let mean_position: f64 = self.node_embeddings.values().map(|n| n.position).sum::<f64>() 
+            / self.node_embeddings.len() as f64;
+        let target_mean = (self.node_embeddings.len() as f64 - 1.0) / 2.0;
+        let shift = target_mean - mean_position;
+        
+        for embedding in self.node_embeddings.values_mut() {
+            // Don't shift the anchored nodes
+            if embedding.uncertainty > 0.01 {
+                embedding.position += shift;
+            }
+        }
+        
+        // Normalize uncertainties to prevent explosion
+        let max_uncertainty = self.node_embeddings.values()
+            .map(|n| n.uncertainty)
+            .fold(0.0, f64::max);
+        
+        if max_uncertainty > 10.0 {
+            for embedding in self.node_embeddings.values_mut() {
+                embedding.uncertainty = embedding.uncertainty / max_uncertainty * 10.0;
+            }
+        }
+    }
+    
+    /// Regularize embeddings to maintain proper ordering and spacing
+    pub fn regularize_embeddings(&mut self, lambda: f64) {
+        // Sort nodes by position
+        let mut sorted_nodes: Vec<_> = self.node_embeddings.values().cloned().collect();
+        sorted_nodes.sort_by(|a, b| a.position.partial_cmp(&b.position).unwrap());
+        
+        // Apply regularization to maintain minimum spacing
+        let min_spacing = 0.1;
+        for i in 1..sorted_nodes.len() {
+            let prev_pos = sorted_nodes[i - 1].position;
+            let curr_pos = sorted_nodes[i].position;
+            
+            if curr_pos - prev_pos < min_spacing {
+                // Push current node forward
+                if let Some(node) = self.node_embeddings.get_mut(&sorted_nodes[i].node_id) {
+                    node.position = prev_pos + min_spacing;
+                }
+            }
+        }
+        
+        // Apply L2 regularization to prevent extreme positions
+        for embedding in self.node_embeddings.values_mut() {
+            let expected_pos = embedding.node_id.chars().next()
+                .and_then(|c| if c.is_ascii_uppercase() { 
+                    Some((c as u8 - b'A') as f64) 
+                } else { 
+                    None 
+                })
+                .unwrap_or(embedding.position);
+            
+            // Pull towards expected position with strength lambda
+            embedding.position = (1.0 - lambda) * embedding.position + lambda * expected_pos;
+        }
+    }
 }
 
 fn sigmoid(x: f64) -> f64 {
