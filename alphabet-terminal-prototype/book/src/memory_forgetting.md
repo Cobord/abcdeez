@@ -33,6 +33,10 @@ The classic exponential decay:
 ```rust
 impl MemoryStrength {
     pub fn ebbinghaus_retention(&self, time: Duration) -> f64 {
+        // stability is in hours - the time constant of decay
+        // After 'stability' hours, retention is 1/e ≈ 0.37
+        assert!(self.stability > 0.0, "Stability must be positive (in hours)");
+        
         let hours = time.num_hours() as f64;
         (-hours / self.stability).exp()
     }

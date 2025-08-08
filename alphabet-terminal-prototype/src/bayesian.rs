@@ -39,7 +39,9 @@ impl PosteriorDistribution {
     pub fn entropy(&self) -> f64 {
         // Differential entropy of a Gaussian: H = 0.5 * ln(2πeσ²) = 0.5 * ln(2πe) + ln(σ)
         // Simplified: H = 0.5 * ln(2π * e * σ²)
-        if self.variance <= 0.0 {
+        // Use machine epsilon for numerical stability
+        let epsilon_threshold = f64::EPSILON.sqrt();
+        if self.variance <= epsilon_threshold {
             return 0.0;
         }
         0.5 * (2.0 * std::f64::consts::PI * std::f64::consts::E * self.variance).ln()
@@ -159,7 +161,9 @@ impl BayesianLearnerModel {
     /// Calculate Expected Information Gain for a given task using Monte Carlo simulation
     /// EIG = E[KL(p(θ|D_t) || p(θ|D_t, Response to q))]
     pub fn calculate_eig(&self, task: &crate::tasks::Task) -> f64 {
-        self.monte_carlo_eig(task, 1000)
+        // Use adaptive sampling for better convergence
+        let (eig, _samples_used) = self.adaptive_monte_carlo_eig(task);
+        eig
     }
     
     /// Monte Carlo simulation for Expected Information Gain
@@ -189,6 +193,55 @@ impl BayesianLearnerModel {
         }
         
         total_eig / n_samples as f64
+    }
+    
+    /// Adaptive Monte Carlo EIG with convergence checking
+    pub fn adaptive_monte_carlo_eig(&self, task: &crate::tasks::Task) -> (f64, usize) {
+        const MIN_SAMPLES: usize = 100;
+        const MAX_SAMPLES: usize = 10000;
+        const RELATIVE_ERROR_THRESHOLD: f64 = 0.01; // 1% relative error
+        
+        use rand::prelude::*;
+        let mut rng = thread_rng();
+        
+        let mut running_mean = 0.0;
+        let mut running_var = 0.0;
+        
+        for i in 0..MAX_SAMPLES {
+            // Sample from current posterior beliefs
+            let sampled_model = self.sample_from_posterior(&mut rng);
+            
+            // Simulate response given sampled parameters
+            let response_prob = sampled_model.predict_success_probability(task);
+            let simulated_correct = rng.gen::<f64>() < response_prob;
+            
+            // Calculate KL divergence for this simulated outcome
+            let kl = if simulated_correct {
+                self.calculate_kl_if_correct_monte_carlo(task, &sampled_model)
+            } else {
+                self.calculate_kl_if_incorrect_monte_carlo(task, &sampled_model)
+            };
+            
+            // Update running statistics (Welford's method)
+            let delta = kl - running_mean;
+            running_mean += delta / (i + 1) as f64;
+            if i > 0 {
+                running_var += delta * (kl - running_mean);
+            }
+            
+            // Check convergence after minimum samples
+            if i >= MIN_SAMPLES {
+                let std_error = (running_var / (i * (i + 1)) as f64).sqrt();
+                let relative_error = std_error / running_mean.abs().max(1e-10);
+                
+                if relative_error < RELATIVE_ERROR_THRESHOLD {
+                    return (running_mean, i + 1);
+                }
+            }
+        }
+        
+        eprintln!("Warning: Monte Carlo EIG did not converge after {} samples", MAX_SAMPLES);
+        (running_mean, MAX_SAMPLES)
     }
     
     /// Sample a model from the current posterior distributions

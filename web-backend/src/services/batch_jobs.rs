@@ -1,9 +1,10 @@
+use crate::cache::ConnectionManager;
+use anyhow::Result;
+use crate::db::DbPool;
 use std::{sync::Arc, time::Duration};
 use tokio::time::interval;
 use uuid::Uuid;
-use sqlx::PgPool;
-use redis::aio::ConnectionManager;
-use anyhow::Result;
+use sqlx::Row;
 
 use crate::services::{AnalyticsService, LearnerService};
 
@@ -40,18 +41,15 @@ impl JobType {
 }
 
 pub struct BatchJobService {
-    db: Arc<PgPool>,
-    redis: Arc<ConnectionManager>,
+    db: Arc<DbPool>,
+    redis: ConnectionManager,
     analytics_service: AnalyticsService,
     learner_service: Arc<LearnerService>,
 }
 
 impl BatchJobService {
-    pub fn new(
-        db: Arc<PgPool>,
-        redis: Arc<ConnectionManager>,
-    ) -> Self {
-        let analytics_service = AnalyticsService::new(db.clone(), redis.clone());
+    pub fn new(db: Arc<DbPool>, redis: ConnectionManager) -> Self {
+        let analytics_service = AnalyticsService::new(db.clone(), Arc::new(redis.clone()));
         let learner_service = Arc::new(LearnerService::new(db.clone(), redis.clone()));
 
         Self {
@@ -65,10 +63,10 @@ impl BatchJobService {
     // Start the background job worker
     pub async fn start_worker(&self) {
         let mut interval = interval(Duration::from_secs(30)); // Check every 30 seconds
-        
+
         loop {
             interval.tick().await;
-            
+
             if let Err(e) = self.process_pending_jobs().await {
                 tracing::error!("Error processing batch jobs: {}", e);
             }
@@ -78,53 +76,68 @@ impl BatchJobService {
     // Process pending jobs from the queue
     async fn process_pending_jobs(&self) -> Result<()> {
         // Get pending jobs
-        let pending_jobs = sqlx::query!(
-            "SELECT id, job_type, payload, retry_count 
-             FROM job_queue 
-             WHERE status = 'pending' 
-             ORDER BY created_at ASC 
+        let mut conn = self.db.acquire().await?;
+        let pending_jobs = sqlx::query(
+            "SELECT id, job_type, payload, retry_count
+             FROM job_queue
+             WHERE status = 'pending'
+             ORDER BY created_at ASC
              LIMIT 10"
         )
-        .fetch_all(&**self.db)
+        .fetch_all(&mut *conn)
         .await?;
 
         for job in pending_jobs {
-            let job_id = Uuid::from_bytes(job.id.try_into().unwrap_or_default());
-            let job_type = JobType::from_str(&job.job_type);
+            let job_id_bytes: Vec<u8> = job.get::<Vec<u8>, _>("id");
+            let job_id = Uuid::from_bytes(job_id_bytes.clone().try_into().unwrap_or_default());
+            let job_type_str: String = job.get::<String, _>("job_type");
+            let payload: String = job.get::<String, _>("payload");
+            let retry_count: i32 = job.get::<i32, _>("retry_count");
+            let job_type = JobType::from_str(&job_type_str);
 
             // Mark job as running
             self.update_job_status(job_id, "running", None).await?;
 
             let result = if let Some(job_type) = job_type {
-                self.execute_job(job_type, &job.payload).await
+                self.execute_job(job_type, &payload).await
             } else {
-                Err(anyhow::anyhow!("Unknown job type: {}", job.job_type))
+                Err(anyhow::anyhow!("Unknown job type: {}", job_type_str))
             };
 
             match result {
                 Ok(_) => {
                     self.update_job_status(job_id, "completed", None).await?;
                     tracing::info!("Job {} completed successfully", job_id);
-                },
+                }
                 Err(e) => {
                     let error_msg = e.to_string();
-                    let retry_count = job.retry_count + 1;
-                    
+                    let retry_count = retry_count + 1;
+
                     if retry_count < 3 {
                         // Retry the job
-                        sqlx::query!(
-                            "UPDATE job_queue SET status = 'pending', retry_count = $1, error_message = $2 WHERE id = $3",
-                            retry_count,
-                            error_msg,
-                            job.id
+                        sqlx::query(
+                            "UPDATE job_queue SET status = 'pending', retry_count = ?, error_message = ? WHERE id = ?"
                         )
-                        .execute(&**self.db)
+                        .bind(retry_count)
+                        .bind(&error_msg)
+                        .bind(&job_id_bytes)
+                        .execute(&mut *conn)
                         .await?;
-                        tracing::warn!("Job {} failed, retrying (attempt {}): {}", job_id, retry_count, error_msg);
+                        tracing::warn!(
+                            "Job {} failed, retrying (attempt {}): {}",
+                            job_id,
+                            retry_count,
+                            error_msg
+                        );
                     } else {
                         // Mark as failed permanently
-                        self.update_job_status(job_id, "failed", Some(error_msg)).await?;
-                        tracing::error!("Job {} failed permanently after {} retries", job_id, retry_count);
+                        self.update_job_status(job_id, "failed", Some(error_msg))
+                            .await?;
+                        tracing::error!(
+                            "Job {} failed permanently after {} retries",
+                            job_id,
+                            retry_count
+                        );
                     }
                 }
             }
@@ -150,25 +163,25 @@ impl BatchJobService {
 
         // Update population stats and cache them
         let stats = self.analytics_service.population_stats().await?;
-        
+
         // Cache the updated stats
         let stats_json = serde_json::to_string(&stats)?;
         let mut conn = self.redis.clone();
-        redis::cmd("SETEX")
+        crate::cache::cmd("SETEX")
             .arg("cached_population_stats")
             .arg(3600) // 1 hour TTL
             .arg(stats_json)
-            .query_async(&mut conn)
+            .query_async::<()>(&mut conn)
             .await?;
 
         // Update bottlenecks analysis
         let bottlenecks = self.analytics_service.find_bottlenecks(50).await?;
         let bottlenecks_json = serde_json::to_string(&bottlenecks)?;
-        redis::cmd("SETEX")
+        crate::cache::cmd("SETEX")
             .arg("cached_bottlenecks")
             .arg(1800) // 30 minutes TTL
             .arg(bottlenecks_json)
-            .query_async(&mut conn)
+            .query_async::<()>(&mut conn)
             .await?;
 
         tracing::info!("Statistics update job completed");
@@ -180,7 +193,8 @@ impl BatchJobService {
         tracing::info!("Starting leaderboard refresh job");
 
         // Get top performers by accuracy
-        let top_accuracy = sqlx::query!(
+        let mut conn = self.db.acquire().await?;
+        let top_accuracy = sqlx::query(
             "SELECT l.id, l.display_name, u.username,
                     AVG(CASE WHEN r.correct THEN 1.0 ELSE 0.0 END) as accuracy,
                     COUNT(r.id) as total_responses
@@ -188,18 +202,18 @@ impl BatchJobService {
              LEFT JOIN users u ON l.user_id = u.id
              LEFT JOIN sessions s ON l.id = s.learner_id
              LEFT JOIN responses r ON s.id = r.session_id
-             WHERE r.timestamp > $1
+             WHERE r.timestamp > ?
              GROUP BY l.id, l.display_name, u.username
              HAVING COUNT(r.id) >= 100
              ORDER BY accuracy DESC
-             LIMIT 50",
-            chrono::Utc::now() - chrono::Duration::days(30)
+             LIMIT 50"
         )
-        .fetch_all(&**self.db)
+        .bind(chrono::Utc::now() - chrono::Duration::days(30))
+        .fetch_all(&mut *conn)
         .await?;
 
         // Get top performers by practice time
-        let top_practice_time = sqlx::query!(
+        let top_practice_time = sqlx::query(
             "SELECT l.id, l.display_name, u.username, l.total_practice_time_seconds
              FROM learners l
              LEFT JOIN users u ON l.user_id = u.id
@@ -207,48 +221,65 @@ impl BatchJobService {
              ORDER BY l.total_practice_time_seconds DESC
              LIMIT 50"
         )
-        .fetch_all(&**self.db)
+        .fetch_all(&mut *conn)
         .await?;
 
         // Cache leaderboards
-        let accuracy_leaderboard: Vec<serde_json::Value> = top_accuracy
+        let accuracy_leaderboard: Result<Vec<serde_json::Value>, sqlx::Error> = top_accuracy
             .into_iter()
             .enumerate()
-            .map(|(rank, row)| serde_json::json!({
-                "rank": rank + 1,
-                "learner_id": Uuid::from_bytes(row.id.try_into().unwrap_or_default()),
-                "display_name": row.display_name,
-                "username": row.username,
-                "accuracy": row.accuracy.unwrap_or(0.0),
-                "total_responses": row.total_responses.unwrap_or(0)
-            }))
+            .map(|(rank, row)| {
+                let id_bytes: Vec<u8> = row.get::<Vec<u8>, _>("id");
+                let display_name: Option<String> = row.get::<Option<String>, _>("display_name");
+                let username: Option<String> = row.get::<Option<String>, _>("username");
+                let accuracy: Option<f64> = row.get::<Option<f64>, _>("accuracy");
+                let total_responses: Option<i64> = row.get::<Option<i64>, _>("total_responses");
+                
+                Ok(serde_json::json!({
+                    "rank": rank + 1,
+                    "learner_id": Uuid::from_bytes(id_bytes.try_into().unwrap_or_default()),
+                    "display_name": display_name,
+                    "username": username,
+                    "accuracy": accuracy.unwrap_or(0.0),
+                    "total_responses": total_responses.unwrap_or(0)
+                }))
+            })
             .collect();
+        let accuracy_leaderboard = accuracy_leaderboard?;
 
-        let practice_leaderboard: Vec<serde_json::Value> = top_practice_time
+        let practice_leaderboard: Result<Vec<serde_json::Value>, sqlx::Error> = top_practice_time
             .into_iter()
             .enumerate()
-            .map(|(rank, row)| serde_json::json!({
-                "rank": rank + 1,
-                "learner_id": Uuid::from_bytes(row.id.try_into().unwrap_or_default()),
-                "display_name": row.display_name,
-                "username": row.username,
-                "total_practice_hours": row.total_practice_time_seconds as f64 / 3600.0
-            }))
+            .map(|(rank, row)| {
+                let id_bytes: Vec<u8> = row.get::<Vec<u8>, _>("id");
+                let display_name: Option<String> = row.get::<Option<String>, _>("display_name");
+                let username: Option<String> = row.get::<Option<String>, _>("username");
+                let total_practice_time_seconds: i32 = row.get::<i32, _>("total_practice_time_seconds");
+                
+                Ok(serde_json::json!({
+                    "rank": rank + 1,
+                    "learner_id": Uuid::from_bytes(id_bytes.try_into().unwrap_or_default()),
+                    "display_name": display_name,
+                    "username": username,
+                    "total_practice_hours": total_practice_time_seconds as f64 / 3600.0
+                }))
+            })
             .collect();
+        let practice_leaderboard = practice_leaderboard?;
 
         let mut conn = self.redis.clone();
-        redis::cmd("SETEX")
+        crate::cache::cmd("SETEX")
             .arg("leaderboard_accuracy")
             .arg(3600) // 1 hour TTL
             .arg(serde_json::to_string(&accuracy_leaderboard)?)
-            .query_async(&mut conn)
+            .query_async::<()>(&mut conn)
             .await?;
 
-        redis::cmd("SETEX")
+        crate::cache::cmd("SETEX")
             .arg("leaderboard_practice_time")
             .arg(3600) // 1 hour TTL
             .arg(serde_json::to_string(&practice_leaderboard)?)
-            .query_async(&mut conn)
+            .query_async::<()>(&mut conn)
             .await?;
 
         tracing::info!("Leaderboard refresh job completed");
@@ -260,47 +291,54 @@ impl BatchJobService {
         tracing::info!("Starting model snapshot job");
 
         // Get active learners
-        let active_learners = sqlx::query!(
-            "SELECT DISTINCT l.id 
-             FROM learners l 
-             JOIN sessions s ON l.id = s.learner_id 
-             WHERE s.start_time > $1",
-            chrono::Utc::now() - chrono::Duration::hours(24)
+        let mut conn = self.db.acquire().await?;
+        let active_learners = sqlx::query(
+            "SELECT DISTINCT l.id
+             FROM learners l
+             JOIN sessions s ON l.id = s.learner_id
+             WHERE s.start_time > ?"
         )
-        .fetch_all(&**self.db)
+        .bind(chrono::Utc::now() - chrono::Duration::hours(24))
+        .fetch_all(&mut *conn)
         .await?;
 
         let mut snapshots_created = 0;
-        
+
         for learner_row in active_learners {
-            let learner_id = Uuid::from_bytes(learner_row.id.try_into().unwrap_or_default());
-            
+            let id_bytes: Vec<u8> = learner_row.get::<Vec<u8>, _>("id");
+            let learner_id = Uuid::from_bytes(id_bytes.try_into().unwrap_or_default());
+
             if let Ok(learner) = self.learner_service.get_learner(learner_id).await {
                 // Create snapshot (this would normally be done by the service)
                 let snapshot_id = Uuid::new_v4();
                 let learner_id_bytes = learner_id.as_bytes();
                 let snapshot_id_bytes = snapshot_id.as_bytes();
-                
-                let parameters = serde_json::to_string(&learner.core_model)?;
-                let metrics = serde_json::to_string(&graph_learning_core::LearnerMetrics::from_model(&learner.core_model))?;
 
-                sqlx::query!(
-                    "INSERT INTO model_snapshots (id, learner_id, timestamp, parameters, metrics) 
-                     VALUES ($1, $2, $3, $4, $5)",
-                    snapshot_id_bytes,
-                    learner_id_bytes,
-                    chrono::Utc::now(),
-                    parameters,
-                    metrics
+                let parameters = serde_json::to_string(&learner.learning_model)?;
+                let metrics = serde_json::to_string(
+                    &graph_learning_core::LearnerMetrics::from_model(&learner.learning_model),
+                )?;
+
+                sqlx::query(
+                    "INSERT INTO model_snapshots (id, learner_id, timestamp, parameters, metrics)
+                     VALUES (?, ?, ?, ?, ?)"
                 )
-                .execute(&**self.db)
+                .bind(snapshot_id_bytes)
+                .bind(learner_id_bytes)
+                .bind(chrono::Utc::now())
+                .bind(parameters)
+                .bind(metrics)
+                .execute(&mut *conn)
                 .await?;
 
                 snapshots_created += 1;
             }
         }
 
-        tracing::info!("Model snapshot job completed: {} snapshots created", snapshots_created);
+        tracing::info!(
+            "Model snapshot job completed: {} snapshots created",
+            snapshots_created
+        );
         Ok(())
     }
 
@@ -311,19 +349,18 @@ impl BatchJobService {
         let cutoff_date = chrono::Utc::now() - chrono::Duration::days(90);
 
         // Clean up old audit logs (keep 90 days)
-        let deleted_audit = sqlx::query!(
-            "DELETE FROM audit_log WHERE timestamp < $1",
-            cutoff_date
-        )
-        .execute(&**self.db)
-        .await?;
+        let mut conn = self.db.acquire().await?;
+        let deleted_audit = sqlx::query("DELETE FROM audit_log WHERE timestamp < ?")
+            .bind(cutoff_date)
+            .execute(&mut *conn)
+            .await?;
 
         // Clean up old job queue entries
-        let deleted_jobs = sqlx::query!(
-            "DELETE FROM job_queue WHERE created_at < $1 AND status IN ('completed', 'failed')",
-            cutoff_date
+        let deleted_jobs = sqlx::query(
+            "DELETE FROM job_queue WHERE created_at < ? AND status IN ('completed', 'failed')"
         )
-        .execute(&**self.db)
+        .bind(cutoff_date)
+        .execute(&mut *conn)
         .await?;
 
         tracing::info!(
@@ -342,31 +379,33 @@ impl BatchJobService {
         // Warmup population statistics
         let stats = self.analytics_service.population_stats().await?;
         let mut conn = self.redis.clone();
-        redis::cmd("SETEX")
+        crate::cache::cmd("SETEX")
             .arg("warmed_population_stats")
             .arg(1800) // 30 minutes TTL
             .arg(serde_json::to_string(&stats)?)
-            .query_async(&mut conn)
+            .query_async::<()>(&mut conn)
             .await?;
 
         // Warmup common learner models (most active learners)
-        let active_learners = sqlx::query!(
+        let mut db_conn = self.db.acquire().await?;
+        let active_learners = sqlx::query(
             "SELECT l.id, COUNT(r.id) as response_count
              FROM learners l
              JOIN sessions s ON l.id = s.learner_id
              JOIN responses r ON s.id = r.session_id
-             WHERE r.timestamp > $1
+             WHERE r.timestamp > ?
              GROUP BY l.id
              ORDER BY response_count DESC
-             LIMIT 20",
-            chrono::Utc::now() - chrono::Duration::days(7)
+             LIMIT 20"
         )
-        .fetch_all(&**self.db)
+        .bind(chrono::Utc::now() - chrono::Duration::days(7))
+        .fetch_all(&mut *db_conn)
         .await?;
 
         for learner_row in active_learners {
-            let learner_id = Uuid::from_bytes(learner_row.id.try_into().unwrap_or_default());
-            
+            let id_bytes: Vec<u8> = learner_row.get::<Vec<u8>, _>("id");
+            let learner_id = Uuid::from_bytes(id_bytes.try_into().unwrap_or_default());
+
             // This will cache the learner model if it's not already cached
             if let Err(_) = self.learner_service.get_learner(learner_id).await {
                 continue; // Skip if learner can't be loaded
@@ -378,28 +417,34 @@ impl BatchJobService {
     }
 
     // Update job status
-    async fn update_job_status(&self, job_id: Uuid, status: &str, error_message: Option<String>) -> Result<()> {
+    async fn update_job_status(
+        &self,
+        job_id: Uuid,
+        status: &str,
+        error_message: Option<String>,
+    ) -> Result<()> {
         let job_id_bytes = job_id.as_bytes();
         let now = chrono::Utc::now();
 
+        let mut conn = self.db.acquire().await?;
         if status == "running" {
-            sqlx::query!(
-                "UPDATE job_queue SET status = $1, started_at = $2 WHERE id = $3",
-                status,
-                now,
-                job_id_bytes
+            sqlx::query(
+                "UPDATE job_queue SET status = ?, started_at = ? WHERE id = ?"
             )
-            .execute(&**self.db)
+            .bind(status)
+            .bind(now)
+            .bind(job_id_bytes)
+            .execute(&mut *conn)
             .await?;
         } else {
-            sqlx::query!(
-                "UPDATE job_queue SET status = $1, completed_at = $2, error_message = $3 WHERE id = $4",
-                status,
-                now,
-                error_message,
-                job_id_bytes
+            sqlx::query(
+                "UPDATE job_queue SET status = ?, completed_at = ?, error_message = ? WHERE id = ?"
             )
-            .execute(&**self.db)
+            .bind(status)
+            .bind(now)
+            .bind(error_message)
+            .bind(job_id_bytes)
+            .execute(&mut *conn)
             .await?;
         }
 
@@ -407,17 +452,22 @@ impl BatchJobService {
     }
 
     // Schedule a new job
-    pub async fn schedule_job(&self, job_type: JobType, payload: serde_json::Value) -> Result<Uuid> {
+    pub async fn schedule_job(
+        &self,
+        job_type: JobType,
+        payload: serde_json::Value,
+    ) -> Result<Uuid> {
         let job_id = Uuid::new_v4();
         let job_id_bytes = job_id.as_bytes();
 
-        sqlx::query!(
-            "INSERT INTO job_queue (id, job_type, payload, status) VALUES ($1, $2, $3, 'pending')",
-            job_id_bytes,
-            job_type.as_str(),
-            payload.to_string()
+        let mut conn = self.db.acquire().await?;
+        sqlx::query(
+            "INSERT INTO job_queue (id, job_type, payload, status) VALUES (?, ?, ?, 'pending')"
         )
-        .execute(&**self.db)
+        .bind(job_id_bytes)
+        .bind(job_type.as_str())
+        .bind(payload.to_string())
+        .execute(&mut *conn)
         .await?;
 
         Ok(job_id)

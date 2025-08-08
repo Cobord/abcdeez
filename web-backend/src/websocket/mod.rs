@@ -7,6 +7,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 use tokio::time::{interval, Duration};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 
 use graph_learning_core::{
     Task,
@@ -127,7 +128,7 @@ async fn handle_session_socket(socket: WebSocket, state: Arc<AppState>, session_
 
     // Create services
     let learner_service = Arc::new(LearnerService::new(
-        state.db_pool.clone(),
+        state.db_pool.clone().into(),
         state.redis_conn.clone(),
     ));
     let adaptation_service = AdaptationService::new(learner_service.clone());
@@ -198,8 +199,8 @@ async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>) {
     
     // Create analytics service
     let analytics_service = AnalyticsService::new(
-        state.db_pool.clone(),
-        state.redis_conn.clone(),
+        state.db_pool.clone().into(),
+        state.redis_conn.clone().into(),
     );
 
     // Set up broadcast interval (every 5 seconds)
@@ -287,7 +288,7 @@ async fn handle_client_message(
             
             let task_message = TaskMessage {
                 task: task.clone(),
-                difficulty: task.difficulty.unwrap_or(0.5),
+                difficulty: task.difficulty,
                 expected_duration_ms: predicted_rt,
             };
 
@@ -351,7 +352,17 @@ async fn handle_client_message(
                         message: "Here's a hint to help you".to_string(),
                         suggestion: Some(format!("Hint level: {:?}", level)),
                     },
-                    InterventionAction::ReduceDifficulty => InterventionMessage {
+                    InterventionAction::ProvideWorkedExample(example) => InterventionMessage {
+                        intervention_type: "worked_example".to_string(),
+                        message: "Here's a worked example to help you understand".to_string(),
+                        suggestion: Some(example),
+                    },
+                    InterventionAction::IncreaseDifficulty => InterventionMessage {
+                        intervention_type: "difficulty".to_string(),
+                        message: "Great progress! Let's try something more challenging".to_string(),
+                        suggestion: Some("Difficulty increased".to_string()),
+                    },
+                    InterventionAction::DecreaseDifficulty => InterventionMessage {
                         intervention_type: "difficulty".to_string(),
                         message: "Let's try something a bit easier".to_string(),
                         suggestion: Some("Difficulty reduced".to_string()),
@@ -360,6 +371,11 @@ async fn handle_client_message(
                         intervention_type: "break".to_string(),
                         message: "You've been practicing for a while. Consider taking a short break!".to_string(),
                         suggestion: None,
+                    },
+                    InterventionAction::SkipTask => InterventionMessage {
+                        intervention_type: "skip".to_string(),
+                        message: "Let's move on to a different task".to_string(),
+                        suggestion: Some("Task skipped".to_string()),
                     },
                 };
 
@@ -392,9 +408,9 @@ async fn handle_client_message(
         ClientMessage::RequestHint { hint_level } => {
             if let Some(task) = current_task {
                 let hint_level_enum = match hint_level.as_deref() {
-                    Some("subtle") => HintLevel::Subtle,
-                    Some("strong") => HintLevel::Strong,
-                    _ => HintLevel::Mild,
+                    Some("subtle") => HintLevel::Confirmation,
+                    Some("strong") => HintLevel::Worked,
+                    _ => HintLevel::Partial,
                 };
 
                 let hint_text = adaptation_service
@@ -440,33 +456,40 @@ struct SessionInfo {
 async fn get_session_info(state: &AppState, session_id: Uuid) -> Result<SessionInfo, Box<dyn std::error::Error + Send + Sync>> {
     let session_id_bytes = session_id.as_bytes();
     
-    let row = sqlx::query!(
-        "SELECT learner_id, topology_type FROM sessions WHERE id = $1 AND status = 'active'",
-        session_id_bytes
+    // Use a raw query with proper binding
+    let mut conn = state.db_pool.acquire().await?;
+    let row = sqlx::query(
+        "SELECT learner_id, topology_type FROM sessions WHERE id = ? AND status = 'active'"
     )
-    .fetch_one(&state.db_pool)
+    .bind(session_id_bytes)
+    .fetch_one(&mut *conn)
     .await?;
-
-    let learner_id = Uuid::from_bytes(row.learner_id.try_into().unwrap_or_default());
+    
+    let learner_id_bytes: Vec<u8> = row.get::<Vec<u8>, _>("learner_id");
+    let learner_id = Uuid::from_bytes(learner_id_bytes.try_into().unwrap_or_default());
+    let topology_type: String = row.get::<String, _>("topology_type");
 
     Ok(SessionInfo {
         learner_id,
-        topology_type: row.topology_type,
+        topology_type,
     })
 }
 
 async fn get_session_topology(state: &AppState, session_id: Uuid) -> Result<graph_learning_core::Topology, Box<dyn std::error::Error + Send + Sync>> {
     let session_id_bytes = session_id.as_bytes();
     
-    let row = sqlx::query!(
-        "SELECT topology_data FROM sessions WHERE id = $1",
-        session_id_bytes
+    // Use a raw query with proper binding
+    let mut conn = state.db_pool.acquire().await?;
+    let row = sqlx::query(
+        "SELECT topology_data FROM sessions WHERE id = ?"
     )
-    .fetch_one(&state.db_pool)
+    .bind(session_id_bytes)
+    .fetch_one(&mut *conn)
     .await?;
-
-    let topology: graph_learning_core::Topology = serde_json::from_str(&row.topology_data)
-        .unwrap_or_else(|_| graph_learning_core::Topology::alphabet_topology());
+    
+    let topology_data: String = row.get::<String, _>("topology_data");
+    let topology: graph_learning_core::Topology = serde_json::from_str(&topology_data)
+        .unwrap_or_else(|_| graph_learning_core::Topology::alphabet());
 
     Ok(topology)
 }

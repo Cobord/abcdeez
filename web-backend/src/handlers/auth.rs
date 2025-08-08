@@ -1,19 +1,20 @@
-use axum::{extract::State, http::StatusCode, Json};
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
+use axum::{extract::State, http::StatusCode, Json};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{encode, EncodingKey, Header};
+use sqlx::Row;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
-    models::{user::{User, CreateUserRequest, LoginRequest, TokenResponse}},
-    state::AppState,
+    models::user::{CreateUserRequest, LoginRequest, TokenResponse, User},
     services::audit::AuditService,
+    state::AppState,
 };
 
 pub async fn register(
@@ -22,27 +23,34 @@ pub async fn register(
 ) -> AppResult<(StatusCode, Json<User>)> {
     // Validate input
     if req.username.len() < 3 {
-        return Err(AppError::ValidationError("Username must be at least 3 characters".to_string()));
+        return Err(AppError::ValidationError(
+            "Username must be at least 3 characters".to_string(),
+        ));
     }
     if req.password.len() < 8 {
-        return Err(AppError::ValidationError("Password must be at least 8 characters".to_string()));
+        return Err(AppError::ValidationError(
+            "Password must be at least 8 characters".to_string(),
+        ));
     }
     if !req.email.contains('@') {
-        return Err(AppError::ValidationError("Invalid email format".to_string()));
+        return Err(AppError::ValidationError(
+            "Invalid email format".to_string(),
+        ));
     }
 
     // Check if user already exists
-    let existing = sqlx::query!(
-        "SELECT id FROM users WHERE username = $1 OR email = $2",
-        req.username,
-        req.email
-    )
-    .fetch_optional(&state.db_pool)
-    .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let existing = sqlx::query("SELECT id FROM users WHERE username = ? OR email = ?")
+        .bind(&req.username)
+        .bind(&req.email)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
 
     if existing.is_some() {
-        return Err(AppError::ConflictError("Username or email already exists".to_string()));
+        return Err(AppError::ConflictError(
+            "Username or email already exists".to_string(),
+        ));
     }
 
     // Hash password
@@ -58,20 +66,20 @@ pub async fn register(
     let user_id_bytes = user_id.as_bytes();
     let now = Utc::now();
 
-    sqlx::query!(
-        "INSERT INTO users (id, username, email, password_hash, created_at, updated_at, metadata) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7)",
-        user_id_bytes,
-        req.username,
-        req.email,
-        password_hash,
-        now,
-        now,
-        serde_json::json!({}).to_string()
+    sqlx::query(
+        "INSERT INTO users (id, username, email, password_hash, created_at, updated_at, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
-    .execute(&state.db_pool)
+    .bind(&user_id_bytes)
+    .bind(&req.username)
+    .bind(&req.email)
+    .bind(&password_hash)
+    .bind(now)
+    .bind(now)
+    .bind(serde_json::json!({}).to_string())
+    .execute(&mut *conn)
     .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    .map_err(|e| AppError::DatabaseError(e))?;
 
     let user = User {
         id: user_id,
@@ -96,7 +104,9 @@ pub async fn register(
         })),
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok((StatusCode::CREATED, Json(user)))
 }
@@ -106,29 +116,29 @@ pub async fn login(
     Json(req): Json<LoginRequest>,
 ) -> AppResult<Json<TokenResponse>> {
     // Get user from database
-    let user_row = sqlx::query!(
-        "SELECT id, username, email, password_hash, created_at, updated_at, metadata 
-         FROM users WHERE username = $1",
-        req.username
+    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let user_row = sqlx::query(
+        "SELECT id, username, email, password_hash, created_at, updated_at, metadata
+         FROM users WHERE username = ?"
     )
-    .fetch_optional(&state.db_pool)
+    .bind(&req.username)
+    .fetch_optional(&mut *conn)
     .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    .map_err(|e| AppError::DatabaseError(e))?;
 
     let user_row = user_row.ok_or(AppError::Unauthorized)?;
 
     // Verify password
-    let parsed_hash = PasswordHash::new(&user_row.password_hash)
-        .map_err(|_| AppError::InternalServerError)?;
-    
+    let password_hash: String = user_row.get::<String, _>("password_hash");
+    let parsed_hash = PasswordHash::new(&password_hash).map_err(|_| AppError::InternalServerError)?;
+
     let argon2 = Argon2::default();
     argon2
         .verify_password(req.password.as_bytes(), &parsed_hash)
         .map_err(|_| AppError::Unauthorized)?;
 
-    let user_id = Uuid::from_bytes(
-        user_row.id.try_into().unwrap_or_default()
-    );
+    let user_id_bytes: Vec<u8> = user_row.get::<Vec<u8>, _>("id");
+    let user_id = Uuid::from_bytes(user_id_bytes.try_into().map_err(|_| AppError::InternalServerError)?);
 
     // Generate tokens
     let now = Utc::now();
@@ -164,24 +174,25 @@ pub async fn login(
     // Store refresh token in Redis
     let refresh_key = format!("refresh_token:{}", user_id);
     let mut conn = state.redis_conn.clone();
-    redis::cmd("SETEX")
+    crate::cache::cmd("SETEX")
         .arg(&refresh_key)
         .arg(30 * 24 * 3600) // 30 days TTL
         .arg(&refresh_token)
-        .query_async(&mut conn)
+        .query_async::<()>(&mut conn)
         .await
         .ok();
 
     // Update last active timestamp
     let user_id_bytes = user_id.as_bytes();
-    sqlx::query!(
-        "UPDATE users SET updated_at = $1 WHERE id = $2",
-        now,
-        user_id_bytes
-    )
-    .execute(&state.db_pool)
-    .await
-    .ok();
+    let mut conn_update = state.db_pool.acquire().await.ok();
+    if let Some(mut conn) = conn_update {
+        sqlx::query("UPDATE users SET updated_at = ? WHERE id = ?")
+            .bind(now)
+            .bind(user_id_bytes)
+            .execute(&mut *conn)
+            .await
+            .ok();
+    }
 
     // Log audit event
     AuditService::log_event(
@@ -193,7 +204,9 @@ pub async fn login(
         None,
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok(Json(TokenResponse {
         access_token,
@@ -209,7 +222,9 @@ pub async fn refresh(
 ) -> AppResult<Json<TokenResponse>> {
     let refresh_token = req["refresh_token"]
         .as_str()
-        .ok_or(AppError::ValidationError("refresh_token required".to_string()))?;
+        .ok_or(AppError::ValidationError(
+            "refresh_token required".to_string(),
+        ))?;
 
     // Decode refresh token to get user info
     let token_data = jsonwebtoken::decode::<Claims>(
@@ -224,13 +239,13 @@ pub async fn refresh(
     // Verify refresh token exists in Redis
     let refresh_key = format!("refresh_token:{}", user_id);
     let mut conn = state.redis_conn.clone();
-    let stored_token: Option<String> = redis::cmd("GET")
+    let stored_token: Option<String> = crate::cache::cmd("GET")
         .arg(&refresh_key)
-        .query_async(&mut conn)
+        .query_async::<String>(&mut conn)
         .await
         .ok();
 
-    if stored_token.as_ref() != Some(refresh_token) {
+    if stored_token.as_ref() != Some(&refresh_token.to_string()) {
         return Err(AppError::Unauthorized);
     }
 
@@ -268,7 +283,7 @@ pub async fn logout(
     // Remove refresh token from Redis
     let refresh_key = format!("refresh_token:{}", user_id);
     let mut conn = state.redis_conn.clone();
-    redis::cmd("DEL")
+    crate::cache::cmd("DEL")
         .arg(&refresh_key)
         .query_async::<()>(&mut conn)
         .await
@@ -284,7 +299,9 @@ pub async fn logout(
         None,
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -297,25 +314,28 @@ pub async fn me(
     let user_id_bytes = user_id.as_bytes();
 
     // Get user from database
-    let user_row = sqlx::query!(
-        "SELECT id, username, email, password_hash, created_at, updated_at, metadata 
-         FROM users WHERE id = $1",
-        user_id_bytes
+    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let user_row = sqlx::query(
+        "SELECT id, username, email, password_hash, created_at, updated_at, metadata
+         FROM users WHERE id = ?"
     )
-    .fetch_optional(&state.db_pool)
+    .bind(user_id_bytes)
+    .fetch_optional(&mut *conn)
     .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    .map_err(|e| AppError::DatabaseError(e))?;
 
     let user_row = user_row.ok_or(AppError::NotFound("User not found".to_string()))?;
 
     let user = User {
         id: user_id,
-        username: user_row.username,
-        email: user_row.email,
-        password_hash: user_row.password_hash,
-        created_at: user_row.created_at,
-        updated_at: user_row.updated_at,
-        metadata: user_row.metadata.and_then(|s| serde_json::from_str(&s).ok()),
+        username: user_row.get("username"),
+        email: user_row.get("email"),
+        password_hash: user_row.get("password_hash"),
+        created_at: user_row.get("created_at"),
+        updated_at: user_row.get("updated_at"),
+        metadata: user_row
+            .get::<Option<String>, _>("metadata")
+            .and_then(|s| serde_json::from_str(&s).ok()),
     };
 
     Ok(Json(user))

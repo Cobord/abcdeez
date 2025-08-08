@@ -387,14 +387,16 @@ impl StrategyAnalysis {
     pub fn analyze(response_times: &[f64], distances: &[usize]) -> Self {
         let correlation = Self::calculate_correlation(response_times, distances);
         
-        let strategy_classification = if correlation > 0.8 {
+        // Use Cohen's effect size conventions for correlation thresholds:
+        // r > 0.7: Strong correlation (r² > 0.49) - serial scanning
+        // r < 0.3: Weak correlation (r² < 0.09) - direct access
+        // 0.3 ≤ r ≤ 0.7: Mixed evidence - hybrid strategy
+        let strategy_classification = if correlation > 0.7 {
             StrategyType::SerialScan
         } else if correlation < 0.3 {
             StrategyType::DirectAccess
-        } else if correlation < 0.8 && correlation > 0.3 {
-            StrategyType::Hybrid
         } else {
-            StrategyType::Mixed((correlation * 100.0) as i32)
+            StrategyType::Hybrid
         };
 
         let transition_point = Self::find_strategy_transition(response_times, distances);
@@ -463,6 +465,7 @@ impl StrategyAnalysis {
             }
         }
 
+        // Use Cohen's medium effect size as threshold
         if max_change > 0.3 {
             transition_idx
         } else {

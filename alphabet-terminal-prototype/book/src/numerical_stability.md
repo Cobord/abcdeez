@@ -39,15 +39,19 @@ Common in exponential calculations:
 let prob = exp(700.0);  // Overflow!
 let tiny = exp(-700.0); // Underflow to 0
 
-// Better: Work in log space
+// Better: Work in log space with machine epsilon-based thresholds
 let log_prob = 700.0;
 let log_tiny = -700.0;
 
+// Derive thresholds from machine limits
+const MAX_EXP: f64 = 709.78; // ln(f64::MAX)
+const MIN_EXP: f64 = -708.39; // ln(f64::MIN_POSITIVE)
+
 // When you need actual probability:
-let safe_prob = if log_prob > 100.0 {
-    1.0  // Effectively 1
-} else if log_prob < -100.0 {
-    0.0  // Effectively 0
+let safe_prob = if log_prob > MIN_EXP.ln() {
+    1.0  // Would overflow, cap at 1
+} else if log_prob < MAX_EXP.ln() {
+    0.0  // Would underflow, set to 0
 } else {
     log_prob.exp()
 };
@@ -138,13 +142,16 @@ impl ExGaussianModel {
         let exp_arg = (lambda / 2.0) * 
             (2.0 * self.params.mu + lambda * self.params.sigma.powi(2) - 2.0 * x);
         
-        // Prevent overflow/underflow
-        if exp_arg < -50.0 {
-            return 0.0;  // exp(-50) ≈ 0
+        // Prevent overflow/underflow using machine-derived limits
+        const LN_MIN: f64 = -708.39; // ln(f64::MIN_POSITIVE)
+        const LN_MAX: f64 = 709.78;  // ln(f64::MAX)
+        
+        if exp_arg < LN_MIN {
+            return 0.0;  // Would underflow
         }
-        if exp_arg > 50.0 {
-            // Would overflow, cap at large value
-            return 1e10;
+        if exp_arg > LN_MAX {
+            // Would overflow, return max reasonable PDF value
+            return 1.0 / (self.params.sigma * (2.0 * PI).sqrt());
         }
         
         // Compute erfc with special handling at extremes
@@ -186,12 +193,16 @@ fn stable_kl_divergence(p: &[f64], q: &[f64]) -> f64 {
     
     for (pi, qi) in p.iter().zip(q.iter()) {
         // Skip if pi is effectively 0 (contributes 0 to KL)
-        if *pi < 1e-10 {
+        // Use machine epsilon-based threshold
+        let epsilon = f64::EPSILON;
+        let threshold = epsilon.sqrt(); // sqrt(epsilon) is commonly used
+        
+        if *pi < threshold {
             continue;
         }
         
         // Handle qi = 0 (infinite KL)
-        if *qi < 1e-10 {
+        if *qi < threshold {
             return f64::INFINITY;
         }
         

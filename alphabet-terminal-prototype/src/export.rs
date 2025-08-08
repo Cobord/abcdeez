@@ -270,12 +270,15 @@ impl LearnerDataExport {
         };
         
         // Classify strategy based on correlation
+        // Using Cohen's effect size conventions:
+        // r > 0.7: Strong correlation (r² > 0.49) - serial scanning
+        // r < 0.3: Weak correlation (r² < 0.09) - direct access
         if correlation > 0.7 {
             Some(crate::statistics::StrategyType::SerialScan)
         } else if correlation < 0.3 {
             Some(crate::statistics::StrategyType::DirectIndex)
         } else {
-            Some(crate::statistics::StrategyType::Mixed((correlation * 100.0) as i32))
+            Some(crate::statistics::StrategyType::Hybrid)
         }
     }
     

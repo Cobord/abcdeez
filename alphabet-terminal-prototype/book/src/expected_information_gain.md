@@ -177,6 +177,77 @@ pub fn rank_tasks_by_eig(&self, tasks: Vec<Task>) -> Vec<(Task, f64)> {
 }
 ```
 
+## Convergence Diagnostics
+
+### Determining Sample Size
+
+The number of Monte Carlo samples should be determined dynamically:
+
+```rust
+pub fn adaptive_monte_carlo_eig(&self, task: &Task) -> (f64, usize) {
+    const MIN_SAMPLES: usize = 100;
+    const MAX_SAMPLES: usize = 10000;
+    const RELATIVE_ERROR_THRESHOLD: f64 = 0.01; // 1% relative error
+    
+    let mut samples = Vec::new();
+    let mut running_mean = 0.0;
+    let mut running_var = 0.0;
+    
+    for i in 0..MAX_SAMPLES {
+        // Generate sample
+        let kl = self.compute_single_sample_eig(task);
+        samples.push(kl);
+        
+        // Update statistics
+        let delta = kl - running_mean;
+        running_mean += delta / (i + 1) as f64;
+        running_var += delta * (kl - running_mean);
+        
+        // Check convergence after minimum samples
+        if i >= MIN_SAMPLES {
+            let std_error = (running_var / (i * (i + 1)) as f64).sqrt();
+            let relative_error = std_error / running_mean.abs().max(1e-10);
+            
+            if relative_error < RELATIVE_ERROR_THRESHOLD {
+                return (running_mean, i + 1);
+            }
+        }
+    }
+    
+    // Warning: did not converge
+    eprintln!("Warning: Monte Carlo EIG did not converge after {} samples", MAX_SAMPLES);
+    (running_mean, MAX_SAMPLES)
+}
+```
+
+### Effective Sample Size
+
+Account for correlation between samples:
+
+```rust
+pub fn effective_sample_size(samples: &[f64]) -> f64 {
+    let n = samples.len() as f64;
+    let mean = samples.iter().sum::<f64>() / n;
+    
+    // Compute autocorrelation at lag 1
+    let mut c0 = 0.0;
+    let mut c1 = 0.0;
+    
+    for i in 0..samples.len() {
+        c0 += (samples[i] - mean).powi(2);
+        if i > 0 {
+            c1 += (samples[i] - mean) * (samples[i-1] - mean);
+        }
+    }
+    
+    let autocorr = c1 / c0;
+    
+    // ESS = n / (1 + 2 * sum of autocorrelations)
+    // For AR(1) approximation:
+    n / (1.0 + 2.0 * autocorr / (1.0 - autocorr))
+}
+```
+
 ## Computational Optimizations
 
 ### Caching Sampled Models

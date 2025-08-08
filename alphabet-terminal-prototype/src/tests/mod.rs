@@ -10,3 +10,6 @@ pub mod statistics_tests;
 
 #[cfg(test)]
 pub mod integration_tests;
+
+#[cfg(test)]
+pub mod mathematical_tests;

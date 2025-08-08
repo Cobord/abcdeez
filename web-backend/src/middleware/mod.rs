@@ -1,6 +1,6 @@
 use axum::{
     extract::{Request, State},
-    http::{header, StatusCode},
+    http::header,
     middleware::Next,
     response::Response,
 };
@@ -11,12 +11,12 @@ use uuid::Uuid;
 
 use crate::{error::AppError, state::AppState};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: Uuid,        // User ID
+    pub sub: Uuid, // User ID
     pub username: String,
-    pub exp: i64,         // Expiration time
-    pub iat: i64,         // Issued at
+    pub exp: i64, // Expiration time
+    pub iat: i64, // Issued at
 }
 
 pub async fn auth_middleware(
@@ -60,7 +60,45 @@ pub async fn rate_limit(
     request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
-    // TODO: Implement actual rate limiting with Redis
-    // For now, just pass through
+    // Simple in-memory rate limiting using the cache (replaces Redis)
+    let limit = state.config.rate_limit_requests as i64;
+    let window = state.config.rate_limit_window_seconds;
+
+    // Identify the client (use auth header if present, otherwise path)
+    let client_id = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("anon:{}", request.uri().path()));
+
+    let key = format!("rate_limit:{}", client_id);
+
+    // Increment counter with TTL
+    let mut conn = state.cache_conn.clone();
+    let current: Option<String> = crate::cache::cmd("GET")
+        .arg(key.clone())
+        .query_async::<String>(&mut conn)
+        .await
+        .ok();
+
+    let mut count = current
+        .as_deref()
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+
+    count += 1;
+
+    let _ = crate::cache::cmd("SETEX")
+        .arg(key.clone())
+        .arg(window)
+        .arg(count.to_string())
+        .query_async::<String>(&mut conn)
+        .await;
+
+    if count > limit {
+        return Err(AppError::RateLimitExceeded);
+    }
+
     Ok(next.run(request).await)
 }

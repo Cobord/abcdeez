@@ -134,11 +134,51 @@ fn test_performance_over_time() {
 
 #[test]
 fn test_strategy_tracking() {
-    let topo = Topology::alphabet();
-    let learner = LearnerModel::new("test".to_string(), &topo);
+    // This test should verify that the system can track strategy changes
+    // Currently the LearnerModel doesn't have explicit strategy tracking,
+    // but we can test related functionality
     
-    // Just verify learner was created successfully
-    assert_eq!(learner.learner_id, "test");
+    let topo = Topology::alphabet();
+    let mut learner = LearnerModel::new("test".to_string(), &topo);
+    
+    // Simulate a pattern that suggests serial scanning strategy:
+    // Successive items should be easier (higher success rate)
+    let mut successor_correct = 0;
+    let mut non_successor_correct = 0;
+    
+    // Practice successor tasks (should improve if using serial strategy)
+    for _ in 0..10 {
+        learner.update_operation_proficiency(&OperationType::Successor, true);
+        successor_correct += 1;
+    }
+    
+    // Practice non-adjacent tasks (harder with serial strategy)
+    for _ in 0..10 {
+        learner.update_operation_proficiency(&OperationType::KJump(3), false);
+    }
+    
+    // Check proficiencies reflect the pattern
+    let successor_prof = learner.operation_proficiencies
+        .get("Successor")
+        .map(|p| p.theta)
+        .unwrap_or(0.0);
+        
+    let kjump_prof = learner.operation_proficiencies
+        .get("KJump_3")
+        .map(|p| p.theta)
+        .unwrap_or(0.0);
+    
+    // With serial strategy, successor should have higher proficiency
+    assert!(successor_prof > kjump_prof,
+            "Serial strategy should show higher successor proficiency ({}) than k-jump ({})",
+            successor_prof, kjump_prof);
+    
+    // Verify practice counts
+    let successor_count = learner.operation_proficiencies
+        .get("Successor")
+        .map(|p| p.practice_count)
+        .unwrap_or(0);
+    assert_eq!(successor_count, 10, "Should have 10 successor practice trials");
 }
 
 #[test]
@@ -205,9 +245,46 @@ fn test_embedding_updates() {
 #[test]
 fn test_response_pattern_tracking() {
     let topo = Topology::alphabet();
-    let learner = LearnerModel::new("test".to_string(), &topo);
+    let mut learner = LearnerModel::new("test".to_string(), &topo);
     
-    // Just verify basic structure
-    assert!(!learner.node_embeddings.is_empty());
-    assert!(!learner.memory_strengths.is_empty());
+    // Track response patterns across multiple items
+    let test_sequence = vec!["A", "B", "C", "D", "E"];
+    let mut response_pattern = Vec::new();
+    
+    // First pass: all correct
+    for item in &test_sequence {
+        learner.update_memory_strength(item, true);
+        response_pattern.push(true);
+    }
+    
+    // Check that all items have strengthened memory
+    for i in 0..5 {
+        let node_id = format!("node_{}", i);
+        let strength = learner.memory_strengths
+            .get(&node_id)
+            .map(|m| m.strength)
+            .unwrap_or(0.0);
+        assert!(strength > 0.5, 
+                "Memory strength for {} should be > 0.5 after correct response, got {}",
+                node_id, strength);
+    }
+    
+    // Second pass: errors on specific items
+    learner.update_memory_strength("B", false);
+    learner.update_memory_strength("D", false);
+    
+    // Verify that errors reduced strength for those specific items
+    let b_strength = learner.memory_strengths.get("node_1")
+        .map(|m| m.strength).unwrap_or(0.5);
+    let d_strength = learner.memory_strengths.get("node_3")
+        .map(|m| m.strength).unwrap_or(0.5);
+    let a_strength = learner.memory_strengths.get("node_0")
+        .map(|m| m.strength).unwrap_or(0.5);
+    
+    assert!(b_strength < a_strength, 
+            "B (with error) should have lower strength {} than A (no error) {}",
+            b_strength, a_strength);
+    assert!(d_strength < a_strength,
+            "D (with error) should have lower strength {} than A (no error) {}",
+            d_strength, a_strength);
 }

@@ -191,9 +191,26 @@ impl DistanceEffectAnalyzer {
     }
     
     fn infer_strategy(&self, correlation: f64) -> StrategyType {
-        if correlation > 0.7 {
+        // Threshold justification based on Cohen's effect size conventions:
+        // r = 0.1: small effect
+        // r = 0.3: medium effect  
+        // r = 0.5: large effect
+        //
+        // We use stricter thresholds for confident classification:
+        // r > 0.7: Strong positive correlation (r² > 0.49)
+        //          Distance explains >49% of RT variance
+        //          Clear evidence of serial scanning
+        // r < 0.3: Weak correlation (r² < 0.09)
+        //          Distance explains <9% of RT variance  
+        //          Indicates direct access without scanning
+        // 0.3 ≤ r ≤ 0.7: Mixed evidence, likely hybrid strategy
+        
+        const STRONG_CORRELATION: f64 = 0.7;
+        const WEAK_CORRELATION: f64 = 0.3;
+        
+        if correlation > STRONG_CORRELATION {
             StrategyType::SerialScan
-        } else if correlation < 0.3 {
+        } else if correlation < WEAK_CORRELATION {
             StrategyType::DirectAccess
         } else {
             StrategyType::Hybrid

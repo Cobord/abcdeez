@@ -519,7 +519,7 @@ impl InterventionSystem {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InterventionAction {
     ProvideHint(String),
     ProvideWorkedExample(String),

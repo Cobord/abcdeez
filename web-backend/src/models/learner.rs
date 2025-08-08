@@ -2,8 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
+use graph_learning_core::LearnerModel;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Learner {
     pub id: Uuid,
     pub user_id: Option<Uuid>,
@@ -12,6 +13,28 @@ pub struct Learner {
     pub last_active: Option<DateTime<Utc>>,
     pub total_practice_time_seconds: i64,
     pub metadata: Option<serde_json::Value>,
+    // Integration with core learning model
+    pub learning_model: LearnerModel,
+}
+
+impl Learner {
+    pub fn new(
+        id: Uuid, 
+        user_id: Option<Uuid>, 
+        display_name: Option<String>,
+        learning_model: LearnerModel
+    ) -> Self {
+        Self {
+            id,
+            user_id,
+            display_name,
+            created_at: Utc::now(),
+            last_active: Some(Utc::now()),
+            total_practice_time_seconds: 0,
+            metadata: None,
+            learning_model,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

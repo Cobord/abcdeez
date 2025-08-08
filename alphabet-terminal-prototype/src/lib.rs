@@ -1,4 +1,5 @@
 // Re-export all core modules for use as a library
+pub mod error;
 pub mod topology;
 pub mod learner;
 pub mod tasks;
@@ -27,6 +28,7 @@ pub mod ui;
 mod tests;
 
 // Re-export commonly used types at the root level
+pub use error::{Error, Result};
 pub use topology::{Topology, TopologyType, Node, Edge};
 pub use learner::{LearnerModel, LearnerMetrics, OperationType};
 pub use tasks::{Task, TaskType, TaskGenerator, TaskSession};

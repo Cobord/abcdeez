@@ -151,9 +151,27 @@ pub struct GoodnessOfFit {
 
 impl GoodnessOfFit {
     pub fn chi_square_test(&self) -> TestResult {
+        // Check assumptions first
+        let min_expected = self.expected.iter().cloned().fold(f64::INFINITY, f64::min);
+        
+        if min_expected < 5.0 {
+            // Use Fisher's exact test or other alternative
+            return self.fishers_exact_test();
+        }
+        
+        // Check for small sample size
+        let total_n: f64 = self.observed.iter().sum();
+        if total_n < 20.0 {
+            eprintln!("Warning: Small sample size ({}) for chi-square test", total_n);
+        }
+        
         let statistic: f64 = self.observed.iter()
             .zip(self.expected.iter())
-            .map(|(o, e)| (o - e).powi(2) / e)
+            .map(|(o, e)| {
+                // Yates' continuity correction for 2x2 tables
+                let correction = if self.observed.len() == 2 { 0.5 } else { 0.0 };
+                ((o - e).abs() - correction).powi(2) / e
+            })
             .sum();
         
         let df = self.observed.len() - 1;

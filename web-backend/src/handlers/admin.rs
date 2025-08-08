@@ -1,17 +1,18 @@
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    Json, Extension,
+    Extension, Json,
 };
-use std::{sync::Arc, collections::HashMap};
-use uuid::Uuid;
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
+use std::{collections::HashMap, sync::Arc};
+use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
+    services::{audit::AuditService, AnalyticsService, LearnerService},
     state::AppState,
-    services::{AnalyticsService, LearnerService, audit::AuditService},
 };
 
 #[derive(Debug, Deserialize)]
@@ -86,20 +87,25 @@ pub async fn dashboard(
 ) -> AppResult<Json<SystemStatus>> {
     // TODO: Add admin permission check
     // For now, any authenticated user can access admin endpoints
-    
+
     // Get database statistics
     let db_stats = get_database_status(&state.db_pool).await?;
-    
+
     // Get Redis status
     let redis_stats = get_redis_status(&state).await?;
-    
+
     // Get active sessions count
-    let active_sessions = sqlx::query_scalar!(
-        "SELECT COUNT(*) FROM sessions WHERE status = 'active'"
-    )
-    .fetch_one(&state.db_pool)
-    .await
-    .unwrap_or(0) as usize;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+    let active_sessions: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE status = 'active'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap_or(0);
+    let active_sessions = active_sessions as usize;
 
     let system_status = SystemStatus {
         timestamp: chrono::Utc::now(),
@@ -108,9 +114,9 @@ pub async fn dashboard(
         database: db_stats,
         redis: redis_stats,
         active_sessions,
-        active_websockets: 0, // Would be tracked in application state
+        active_websockets: 0,  // Would be tracked in application state
         memory_usage_mb: None, // Would need system monitoring
-        request_rate: 120.0, // Would be calculated from metrics
+        request_rate: 120.0,   // Would be calculated from metrics
     };
 
     // Log admin access
@@ -123,7 +129,9 @@ pub async fn dashboard(
         None,
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok(Json(system_status))
 }
@@ -134,40 +142,53 @@ pub async fn list_users(
     claims: Extension<Claims>,
     Query(params): Query<HashMap<String, String>>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let limit = params.get("limit")
+    let limit = params
+        .get("limit")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(50);
-    let offset = params.get("offset")
+    let offset = params
+        .get("offset")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(0);
 
-    let users = sqlx::query!(
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+    let users = sqlx::query(
         "SELECT id, username, email, created_at, updated_at, metadata
-         FROM users 
-         ORDER BY created_at DESC 
-         LIMIT $1 OFFSET $2",
-        limit,
-        offset
+         FROM users
+         ORDER BY created_at DESC
+         LIMIT ? OFFSET ?",
     )
-    .fetch_all(&state.db_pool)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&mut *conn)
     .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    .map_err(|e| AppError::DatabaseError(e))?;
 
-    let total_count = sqlx::query_scalar!("SELECT COUNT(*) FROM users")
-        .fetch_one(&state.db_pool)
+    let total_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(&mut *conn)
         .await
         .unwrap_or(0);
 
     let user_data: Vec<serde_json::Value> = users
         .into_iter()
         .map(|user| {
+            let id_bytes: Vec<u8> = user.get::<Vec<u8>, _>("id");
+            let id = Uuid::from_bytes(id_bytes.try_into().unwrap_or_default());
+            let metadata_json = user
+                .get::<Option<String>, _>("metadata")
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
+
             serde_json::json!({
-                "id": Uuid::from_bytes(user.id.try_into().unwrap_or_default()),
-                "username": user.username,
-                "email": user.email,
-                "created_at": user.created_at,
-                "updated_at": user.updated_at,
-                "metadata": user.metadata.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                "id": id,
+                "username": user.get::<String, _>("username"),
+                "email": user.get::<String, _>("email"),
+                "created_at": user.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+                "updated_at": user.get::<chrono::DateTime<chrono::Utc>, _>("updated_at"),
+                "metadata": metadata_json,
             })
         })
         .collect();
@@ -186,7 +207,9 @@ pub async fn list_users(
         })),
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok(Json(serde_json::json!({
         "users": user_data,
@@ -205,15 +228,22 @@ pub async fn list_learners(
     claims: Extension<Claims>,
     Query(params): Query<HashMap<String, String>>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let limit = params.get("limit")
+    let limit = params
+        .get("limit")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(50);
-    let offset = params.get("offset")
+    let offset = params
+        .get("offset")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(0);
 
-    let learners = sqlx::query!(
-        "SELECT l.id, l.user_id, l.display_name, l.created_at, l.last_active, 
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+    let learners = sqlx::query(
+        "SELECT l.id, l.user_id, l.display_name, l.created_at, l.last_active,
                 l.total_practice_time_seconds, l.metadata,
                 u.username,
                 COUNT(s.id) as session_count,
@@ -222,37 +252,40 @@ pub async fn list_learners(
          LEFT JOIN users u ON l.user_id = u.id
          LEFT JOIN sessions s ON l.id = s.learner_id
          LEFT JOIN responses r ON s.id = r.session_id
-         GROUP BY l.id, l.user_id, l.display_name, l.created_at, l.last_active, 
+         GROUP BY l.id, l.user_id, l.display_name, l.created_at, l.last_active,
                   l.total_practice_time_seconds, l.metadata, u.username
-         ORDER BY l.created_at DESC 
-         LIMIT $1 OFFSET $2",
-        limit,
-        offset
+         ORDER BY l.created_at DESC
+         LIMIT ? OFFSET ?",
     )
-    .fetch_all(&state.db_pool)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&mut *conn)
     .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    .map_err(|e| AppError::DatabaseError(e))?;
 
     let learner_data: Vec<serde_json::Value> = learners
         .into_iter()
         .map(|learner| {
+            let id_bytes: Vec<u8> = learner.get::<Vec<u8>, _>("id");
+            let user_id_bytes: Option<Vec<u8>> = learner.get::<Option<Vec<u8>>, _>("user_id");
             serde_json::json!({
-                "id": Uuid::from_bytes(learner.id.try_into().unwrap_or_default()),
-                "user_id": learner.user_id.map(|bytes| Uuid::from_bytes(bytes.try_into().unwrap_or_default())),
-                "username": learner.username,
-                "display_name": learner.display_name,
-                "created_at": learner.created_at,
-                "last_active": learner.last_active,
-                "total_practice_time_seconds": learner.total_practice_time_seconds,
-                "session_count": learner.session_count.unwrap_or(0),
-                "response_count": learner.response_count.unwrap_or(0),
-                "metadata": learner.metadata.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                "id": Uuid::from_bytes(id_bytes.try_into().unwrap_or_default()),
+                "user_id": user_id_bytes.map(|bytes| Uuid::from_bytes(bytes.try_into().unwrap_or_default())),
+                "username": learner.get::<Option<String>, _>("username"),
+                "display_name": learner.get::<String, _>("display_name"),
+                "created_at": learner.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+                "last_active": learner.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_active"),
+                "total_practice_time_seconds": learner.get::<i32, _>("total_practice_time_seconds"),
+                "session_count": learner.get::<Option<i64>, _>("session_count").unwrap_or(0),
+                "response_count": learner.get::<Option<i64>, _>("response_count").unwrap_or(0),
+                "metadata": learner.get::<Option<String>, _>("metadata")
+                    .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
             })
         })
         .collect();
 
-    let total_count = sqlx::query_scalar!("SELECT COUNT(*) FROM learners")
-        .fetch_one(&state.db_pool)
+    let total_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM learners")
+        .fetch_one(&mut *conn)
         .await
         .unwrap_or(0);
 
@@ -275,8 +308,8 @@ pub async fn audit_trail(
 ) -> AppResult<Json<serde_json::Value>> {
     let audit_records = AuditService::get_audit_trail(
         &state.db_pool,
-        params.resource_type,
-        params.resource_id,
+        params.resource_type.clone(),
+        params.resource_id.clone(),
         params.user_id,
         params.limit,
     )
@@ -301,7 +334,9 @@ pub async fn audit_trail(
         })),
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok(Json(serde_json::json!({
         "audit_records": audit_records,
@@ -323,28 +358,33 @@ pub async fn list_jobs(
     Query(params): Query<JobQuery>,
 ) -> AppResult<Json<Vec<JobStatus>>> {
     let limit = params.limit.unwrap_or(50);
-    
+
     let mut query = "SELECT id, job_type, status, created_at, started_at, completed_at, error_message, retry_count FROM job_queue".to_string();
     let mut conditions = Vec::new();
-    
+
     if let Some(status) = &params.status {
         conditions.push(format!("status = '{}'", status));
     }
-    
+
     if let Some(job_type) = &params.job_type {
         conditions.push(format!("job_type = '{}'", job_type));
     }
-    
+
     if !conditions.is_empty() {
         query.push_str(&format!(" WHERE {}", conditions.join(" AND ")));
     }
-    
+
     query.push_str(&format!(" ORDER BY created_at DESC LIMIT {}", limit));
 
-    let rows = sqlx::query(&query)
-        .fetch_all(&state.db_pool)
+    let mut conn = state
+        .db_pool
+        .acquire()
         .await
-        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+        .map_err(|e| AppError::DatabaseError(e))?;
+    let rows = sqlx::query(&query)
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
 
     let jobs: Vec<JobStatus> = rows
         .into_iter()
@@ -372,22 +412,27 @@ pub async fn trigger_job(
     let job_type = request["job_type"]
         .as_str()
         .ok_or(AppError::ValidationError("job_type required".to_string()))?;
-    
+
     let payload = request["payload"].clone();
 
     // Create job in queue
     let job_id = Uuid::new_v4();
     let job_id_bytes = job_id.as_bytes();
 
-    sqlx::query!(
-        "INSERT INTO job_queue (id, job_type, payload, status) VALUES ($1, $2, $3, 'pending')",
-        job_id_bytes,
-        job_type,
-        payload.to_string()
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+    sqlx::query(
+        "INSERT INTO job_queue (id, job_type, payload, status) VALUES (?, ?, ?, 'pending')",
     )
-    .execute(&state.db_pool)
+    .bind(job_id_bytes)
+    .bind(&job_type)
+    .bind(payload.to_string())
+    .execute(&mut *conn)
     .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    .map_err(|e| AppError::DatabaseError(e))?;
 
     // Log job creation
     AuditService::log_event(
@@ -402,7 +447,9 @@ pub async fn trigger_job(
         })),
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok(Json(serde_json::json!({
         "job_id": job_id,
@@ -427,14 +474,14 @@ pub async fn update_config(
     ];
 
     let mut updated_keys = Vec::new();
-    
+
     for key in allowed_keys {
         if let Some(value) = config.get(key) {
             // Store configuration in Redis or database
             let config_key = format!("config:{}", key);
             let mut conn = state.redis_conn.clone();
-            
-            if redis::cmd("SET")
+
+            if crate::cache::cmd("SET")
                 .arg(&config_key)
                 .arg(value.to_string())
                 .query_async::<()>(&mut conn)
@@ -459,7 +506,9 @@ pub async fn update_config(
         })),
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok(Json(serde_json::json!({
         "updated_keys": updated_keys,
@@ -470,10 +519,8 @@ pub async fn update_config(
 // Helper functions
 async fn get_database_status(db: &sqlx::PgPool) -> AppResult<DatabaseStatus> {
     // Test database connection
-    let connected = sqlx::query("SELECT 1")
-        .fetch_one(db)
-        .await
-        .is_ok();
+    let mut conn = db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let connected = sqlx::query("SELECT 1").fetch_one(&mut *conn).await.is_ok();
 
     // Get pool information (simplified)
     let pool_size = 20; // From configuration
@@ -483,22 +530,22 @@ async fn get_database_status(db: &sqlx::PgPool) -> AppResult<DatabaseStatus> {
         connected,
         pool_size,
         active_connections,
-        total_queries: None, // Would need query statistics
+        total_queries: None,     // Would need query statistics
         avg_query_time_ms: None, // Would need performance monitoring
     })
 }
 
 async fn get_redis_status(state: &AppState) -> AppResult<RedisStatus> {
     let mut conn = state.redis_conn.clone();
-    let connected = redis::cmd("PING")
+    let connected = crate::cache::cmd("PING")
         .query_async::<String>(&mut conn)
         .await
         .is_ok();
 
     Ok(RedisStatus {
         connected,
-        memory_usage_mb: None, // Would need Redis INFO command parsing
+        memory_usage_mb: None,   // Would need Redis INFO command parsing
         total_connections: None, // Would need Redis INFO command parsing
-        cache_hit_rate: None, // Would need hit/miss statistics tracking
+        cache_hit_rate: None,    // Would need hit/miss statistics tracking
     })
 }

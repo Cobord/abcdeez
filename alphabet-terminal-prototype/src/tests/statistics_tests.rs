@@ -140,14 +140,16 @@ fn test_strategy_classification_direct() {
 
 #[test]
 fn test_strategy_classification_hybrid() {
-    // Hybrid: some correlation but not strong
-    let response_times = vec![1000.0, 1200.0, 1100.0, 1400.0, 1300.0];
-    let distances = vec![1, 2, 3, 4, 5];
+    // Hybrid: some correlation but not strong (between 0.3 and 0.7)
+    // Create data with moderate correlation (~0.5) by adding noise
+    let response_times = vec![1000.0, 1400.0, 1200.0, 1100.0, 1500.0, 1300.0, 1600.0, 1200.0];
+    let distances = vec![1, 2, 2, 3, 4, 3, 5, 4];
     
     let analysis = StrategyAnalysis::analyze(&response_times, &distances);
     
-    assert!(analysis.correlation > 0.3 && analysis.correlation < 0.8,
-            "Hybrid strategy should have moderate correlation: {}", 
+    // With the noisy pattern, correlation should be moderate
+    assert!(analysis.correlation > 0.3 && analysis.correlation < 0.7,
+            "Hybrid strategy should have moderate correlation (0.3 < r < 0.7): {}", 
             analysis.correlation);
     assert_eq!(analysis.strategy_classification, StrategyType::Hybrid,
             "Should classify as hybrid strategy");
@@ -155,23 +157,52 @@ fn test_strategy_classification_hybrid() {
 
 #[test]
 fn test_response_time_distribution_fitting() {
-    // Generate synthetic data from known distribution
-    let _true_params = ExGaussianParams {
-        mu: 500.0,
-        sigma: 100.0,
-        tau: 200.0,
-    };
+    // Test with data that should produce known Ex-Gaussian parameters
+    // Using a simple case where we know the approximate expected values
     
-    // Note: In a real test, we'd generate samples from the distribution
-    // For now, just test the fitting infrastructure exists
-    let data = vec![400.0, 500.0, 600.0, 700.0, 800.0, 900.0];
+    // Generate data with clear Ex-Gaussian characteristics:
+    // - Most values clustered around 500-600 (Gaussian component)
+    // - Some values with long tail up to 1200+ (Exponential component)
+    let data = vec![
+        450.0, 480.0, 500.0, 510.0, 520.0, 530.0, 540.0, 550.0,  // Gaussian cluster
+        560.0, 570.0, 580.0, 590.0, 600.0, 610.0, 620.0, 630.0,
+        640.0, 680.0, 720.0, 780.0,  // Start of tail
+        850.0, 920.0, 1050.0, 1200.0, // Exponential tail
+    ];
     
     let fitted_params = ResponseTimeDistribution::fit_ex_gaussian(&data);
     
-    // Check that fitted parameters are reasonable
-    assert!(fitted_params.mu > 0.0, "Fitted mu should be positive");
-    assert!(fitted_params.sigma > 0.0, "Fitted sigma should be positive");
-    assert!(fitted_params.tau > 0.0, "Fitted tau should be positive");
+    // For this data, we expect:
+    // - mu around 500-550 (center of Gaussian component)
+    // - sigma around 50-100 (spread of Gaussian)
+    // - tau around 100-200 (exponential decay rate)
+    
+    // Verify parameters are in reasonable ranges
+    assert!(fitted_params.mu > 400.0 && fitted_params.mu < 700.0, 
+            "Fitted mu {} should be in range [400, 700]", fitted_params.mu);
+    assert!(fitted_params.sigma > 10.0 && fitted_params.sigma < 200.0, 
+            "Fitted sigma {} should be in range [10, 200]", fitted_params.sigma);
+    assert!(fitted_params.tau > 50.0 && fitted_params.tau < 400.0, 
+            "Fitted tau {} should be in range [50, 400]", fitted_params.tau);
+    
+    // Verify the model can evaluate its own PDF/CDF without errors
+    let model = ExGaussianModel::new(fitted_params.clone());
+    for &x in &data {
+        let pdf = model.pdf(x);
+        assert!(pdf >= 0.0 && pdf.is_finite(), 
+                "PDF at {} should be non-negative and finite: {}", x, pdf);
+        
+        let cdf = model.cdf(x);
+        assert!(cdf >= 0.0 && cdf <= 1.0, 
+                "CDF at {} should be in [0,1]: {}", x, cdf);
+    }
+    
+    // Verify mean calculation matches expected formula
+    let expected_mean = fitted_params.mu + fitted_params.tau;
+    let calculated_mean = model.mean();
+    assert!((calculated_mean - expected_mean).abs() < 0.001,
+            "Mean calculation incorrect: expected {}, got {}", 
+            expected_mean, calculated_mean);
 }
 
 #[test]
@@ -190,27 +221,74 @@ fn test_rt_outlier_detection() {
 
 #[test]
 fn test_goodness_of_fit() {
-    let params = ExGaussianParams {
+    // Test that the model can recognize data from its own distribution
+    let true_params = ExGaussianParams {
         mu: 1000.0,
         sigma: 100.0,
         tau: 150.0,
     };
-    let model = ExGaussianModel::new(params);
+    let model = ExGaussianModel::new(true_params.clone());
     
-    // Generate perfect data from model
-    let data: Vec<f64> = (0..100)
-        .map(|i| 800.0 + i as f64 * 5.0)
-        .collect();
+    // Generate plausible Ex-Gaussian data
+    // (In production, we'd sample from the actual distribution)
+    let mean = true_params.mu + true_params.tau;
+    let std = (true_params.sigma.powi(2) + true_params.tau.powi(2)).sqrt();
     
-    // Compute goodness of fit (simplified)
+    // Create data that follows Ex-Gaussian shape:
+    // Most points near the mode, with exponential tail
+    let mut data = Vec::new();
+    
+    // Add points from the main body (Gaussian-like)
+    for i in 0..30 {
+        let x = true_params.mu + (i as f64 - 15.0) * 10.0;
+        data.push(x);
+    }
+    
+    // Add points from the tail (exponential-like)
+    for i in 0..10 {
+        let x = mean + (i as f64) * true_params.tau * 0.5;
+        data.push(x);
+    }
+    
+    // Compute log likelihood
     let log_likelihood: f64 = data.iter()
-        .map(|&x| model.pdf(x).ln())
-        .filter(|&ll| ll.is_finite())
+        .map(|&x| {
+            let pdf = model.pdf(x);
+            if pdf > 0.0 {
+                pdf.ln()
+            } else {
+                -1000.0  // Penalty for zero probability
+            }
+        })
         .sum();
     
-    // Log likelihood should be finite and reasonable
-    assert!(log_likelihood.is_finite(), "Log likelihood should be finite");
-    assert!(log_likelihood < 0.0, "Log likelihood should typically be negative");
+    // For data from the model's distribution, log likelihood should be reasonable
+    let avg_log_likelihood = log_likelihood / data.len() as f64;
+    
+    // Average log likelihood should be better than random uniform
+    // For Ex-Gaussian, typical values are around -6 to -8
+    assert!(avg_log_likelihood > -20.0 && avg_log_likelihood < 0.0,
+            "Average log likelihood {} should be in reasonable range", avg_log_likelihood);
+    
+    // Test against clearly wrong distribution
+    let wrong_params = ExGaussianParams {
+        mu: 0.0,  // Very different parameters
+        sigma: 10.0,
+        tau: 5.0,
+    };
+    let wrong_model = ExGaussianModel::new(wrong_params);
+    
+    let wrong_log_likelihood: f64 = data.iter()
+        .map(|&x| {
+            let pdf = wrong_model.pdf(x);
+            if pdf > 0.0 { pdf.ln() } else { -1000.0 }
+        })
+        .sum();
+    
+    // Correct model should have much better likelihood than wrong model
+    assert!(log_likelihood > wrong_log_likelihood + 100.0,
+            "Correct model likelihood {} should be much better than wrong model {}",
+            log_likelihood, wrong_log_likelihood);
 }
 
 #[test]

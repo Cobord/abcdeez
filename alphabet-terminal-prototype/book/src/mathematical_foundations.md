@@ -122,11 +122,16 @@ impl GaussianPosterior {
 KL divergence measures the "distance" between distributions:
 
 ```rust
-// KL divergence from Q to P
+// KL divergence from P to Q (discrete)
 D_KL(P || Q) = Σ p_i * log(p_i / q_i)
 
-// For Gaussians:
-D_KL(N₁ || N₂) = 0.5 * [log(σ₂²/σ₁²) + (σ₁² + (μ₁-μ₂)²)/σ₂² - 1]
+// For Gaussians N₁ ~ N(μ₁, σ₁²) and N₂ ~ N(μ₂, σ₂²):
+D_KL(N₁ || N₂) = 0.5 * [log(σ₂²/σ₁²) + σ₁²/σ₂² + (μ₁-μ₂)²/σ₂² - 1]
+
+// Breaking down the terms:
+// - log(σ₂²/σ₁²): variance ratio penalty
+// - σ₁²/σ₂²: trace term (spread difference)
+// - (μ₁-μ₂)²/σ₂²: normalized squared distance between means
 ```
 
 ### Mutual Information

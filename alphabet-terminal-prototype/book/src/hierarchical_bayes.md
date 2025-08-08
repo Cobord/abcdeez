@@ -276,27 +276,64 @@ Individual estimates are "shrunk" toward population mean:
 
 ```rust
 impl HierarchicalBayesianModel {
-    pub fn shrinkage_estimates(&self) -> HashMap<String, f64> {
+    pub fn shrinkage_estimates(&self) -> HashMap<String, ShrunkEstimate> {
         let mut shrunk = HashMap::new();
         
         for (id, params) in &self.individual_models {
             let n_obs = self.get_n_observations(id);
             
-            // Shrinkage factor
-            let tau2 = self.hyperparameters.sigma_theta.powi(2);
+            // Use empirical Bayes or full Bayesian approach
+            // Population variance is estimated, not known
+            let tau2_estimate = self.estimate_population_variance();
+            let tau2_se = self.population_variance_std_error();
+            
+            // Within-subject variance
             let sigma2 = self.within_subject_variance(id);
-            let shrinkage = tau2 / (tau2 + sigma2 / n_obs as f64);
             
-            // Shrunk estimate
+            // Shrinkage factor with uncertainty
+            let shrinkage_mean = tau2_estimate / (tau2_estimate + sigma2 / n_obs as f64);
+            
+            // Propagate uncertainty through shrinkage calculation
+            let shrinkage_var = self.delta_method_variance(
+                tau2_estimate, tau2_se, sigma2, n_obs
+            );
+            
+            // Shrunk estimate with uncertainty
             let raw = params.ability;
-            let shrunk_ability = shrinkage * raw + 
-                               (1.0 - shrinkage) * self.hyperparameters.mu_theta;
+            let shrunk_ability = shrinkage_mean * raw + 
+                               (1.0 - shrinkage_mean) * self.hyperparameters.mu_theta;
             
-            shrunk.insert(id.clone(), shrunk_ability);
+            // Standard error of shrunk estimate
+            let shrunk_se = (
+                shrinkage_var * raw.powi(2) +
+                shrinkage_mean.powi(2) * self.individual_variance(id) +
+                (1.0 - shrinkage_mean).powi(2) * self.population_mean_variance()
+            ).sqrt();
+            
+            shrunk.insert(id.clone(), ShrunkEstimate {
+                value: shrunk_ability,
+                std_error: shrunk_se,
+                shrinkage_factor: shrinkage_mean,
+                effective_sample_size: n_obs as f64 * shrinkage_mean,
+            });
         }
         
         shrunk
     }
+    
+    fn delta_method_variance(&self, tau2: f64, tau2_se: f64, sigma2: f64, n: usize) -> f64 {
+        // Delta method for variance of g(tau2) = tau2/(tau2 + sigma2/n)
+        let denominator = tau2 + sigma2 / n as f64;
+        let derivative = (sigma2 / n as f64) / denominator.powi(2);
+        derivative.powi(2) * tau2_se.powi(2)
+    }
+}
+
+pub struct ShrunkEstimate {
+    pub value: f64,
+    pub std_error: f64,
+    pub shrinkage_factor: f64,
+    pub effective_sample_size: f64,
 }
 ```
 

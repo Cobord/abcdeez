@@ -15,17 +15,19 @@ The Ex-Gaussian elegantly captures these properties as the convolution of:
 
 ## Mathematical Definition
 
-The Ex-Gaussian PDF is:
+The Ex-Gaussian PDF is correctly expressed using the complementary error function:
 
 ```
-f(x; μ, σ, τ) = (1/τ) * exp((μ/τ) + (σ²/2τ²) - (x/τ)) * Φ((x - μ - σ²/τ)/σ)
+f(x; μ, σ, τ) = (1/(2τ)) * exp((μ - x)/τ + σ²/(2τ²)) * erfc((μ + σ²/τ - x)/(σ√2))
 ```
 
-Alternatively, using the complementary error function:
+Or equivalently with rate parameter λ = 1/τ:
 
 ```
-f(x; μ, σ, τ) = (λ/2) * exp(λ/2 * (2μ + λσ² - 2x)) * erfc((μ + λσ² - x)/(σ√2))
+f(x; μ, σ, λ) = (λ/2) * exp(λ(μ - x + λσ²/2)) * erfc((μ + λσ² - x)/(σ√2))
 ```
+
+**Important**: The factor is 1/(2τ) or λ/2, not 1/τ, when using erfc. This ensures the distribution integrates to 1.
 
 Where:
 - `μ`: Mean of Gaussian component

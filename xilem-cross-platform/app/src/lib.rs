@@ -4,35 +4,32 @@
 // On Windows platform, don't show a console when opening the app.
 #![windows_subsystem = "windows"]
 
-mod models;
 mod api;
 mod components;
+mod models;
 mod screens;
 
+use chrono::{DateTime, Utc};
+use std::sync::Arc;
+use std::time::Instant;
+use uuid::Uuid;
 use xilem::{
     view::{flex, Axis},
     EventLoopBuilder, WidgetView, Xilem,
 };
-use std::sync::Arc;
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
-use std::time::Instant;
 
 use graph_learning_core::{
-    prelude::*,
-    AdaptiveScheduler,
-    TaskSession,
-    TaskGenerator,
-    tasks::TaskResponse as CoreTaskResponse,
-    LearnerMetrics,
-    hints::{InterventionSystem, InterventionAction, HintLevel, StruggleLevel},
     export::LearnerDataExport,
-    statistics::{SessionAnalyzer, StrategyType, ExGaussianParameters},
+    hints::{HintLevel, InterventionAction, InterventionSystem, StruggleLevel},
+    prelude::*,
+    statistics::{ExGaussianParameters, SessionAnalyzer, StrategyType},
+    tasks::TaskResponse as CoreTaskResponse,
+    AdaptiveScheduler, LearnerMetrics, TaskGenerator, TaskSession,
 };
 
-use models::*;
 use api::{ApiClient, MockApiClient};
 use components::*;
+use models::*;
 use screens::*;
 
 // Application screens
@@ -51,13 +48,13 @@ pub struct AppData {
     pub current_screen: Screen,
     pub error_message: Option<String>,
     pub success_message: Option<String>,
-    
+
     // Authentication
     pub current_user: Option<User>,
     pub username_input: String,
     pub password_input: String,
     pub email_input: String,
-    
+
     // Core library integration
     pub current_learner: Option<Learner>,
     pub current_session: Option<Session>,
@@ -66,7 +63,7 @@ pub struct AppData {
     pub adaptive_scheduler: Option<AdaptiveScheduler>,
     pub task_session: Option<TaskSession>,
     pub task_generator: Option<TaskGenerator>,
-    
+
     // Training state
     pub current_task: Option<UITask>,
     pub task_start_time: Option<Instant>,
@@ -76,26 +73,26 @@ pub struct AppData {
     pub last_response_correct: bool,
     pub current_hint: Option<String>,
     pub hint_level: HintLevel,
-    
+
     // Intervention system
     pub intervention_system: Option<InterventionSystem>,
     pub struggle_level: StruggleLevel,
-    
+
     // Performance metrics
     pub current_metrics: PerformanceMetrics,
     pub session_responses: Vec<CoreTaskResponse>,
-    
+
     // Settings
     pub use_adaptive_scheduling: bool,
     pub enable_hints: bool,
     pub difficulty_level: f64,
-    
+
     // Export
     pub export_data: Option<ExportData>,
-    
+
     // API client (using mock for now)
     pub api_client: Arc<MockApiClient>,
-    
+
     // Runtime for async operations
     pub runtime: Arc<tokio::runtime::Runtime>,
 }
@@ -103,7 +100,7 @@ pub struct AppData {
 impl Default for AppData {
     fn default() -> Self {
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        
+
         Self {
             current_screen: Screen::Welcome,
             error_message: None,
@@ -143,27 +140,21 @@ impl Default for AppData {
 
 // Main app logic
 fn app_logic(data: &mut AppData) -> impl WidgetView<AppData> {
-    use xilem::AnyWidgetView;
-    
     // Clear old messages after some time (in a real app, use a timer)
     if data.error_message.is_some() || data.success_message.is_some() {
         // Messages will auto-clear after being displayed
     }
-    
-    // Box the screen content to unify types
-    let screen_content: Box<AnyWidgetView<AppData>> = match data.current_screen {
-        Screen::Welcome => Box::new(welcome_screen(data)),
-        Screen::DomainSelection => Box::new(domain_selection_screen(data)),
-        Screen::Training => Box::new(training_screen(data)),
-        Screen::Dashboard => Box::new(dashboard_screen(data)),
-        Screen::Settings => Box::new(settings_screen(data)),
-    };
-    
+
+    // Render all possible screens as Option views; only the active one will be Some(...)
     flex((
         nav_bar(&format!("{:?}", data.current_screen)),
         error_message(data.error_message.clone()),
         success_message(data.success_message.clone()),
-        screen_content,
+        (data.current_screen == Screen::Welcome).then(|| welcome_screen(data)),
+        (data.current_screen == Screen::DomainSelection).then(|| domain_selection_screen(data)),
+        (data.current_screen == Screen::Training).then(|| training_screen(data)),
+        (data.current_screen == Screen::Dashboard).then(|| dashboard_screen(data)),
+        (data.current_screen == Screen::Settings).then(|| settings_screen(data)),
     ))
     .direction(Axis::Vertical)
 }
@@ -174,11 +165,11 @@ impl AppData {
         let username = self.username_input.clone();
         let password = self.password_input.clone();
         let api = self.api_client.clone();
-        
-        let result = self.runtime.block_on(async {
-            api.login(username, password).await
-        });
-        
+
+        let result = self
+            .runtime
+            .block_on(async { api.login(username, password).await });
+
         match result {
             Ok(user) => {
                 self.current_user = Some(user);
@@ -193,15 +184,15 @@ impl AppData {
             }
         }
     }
-    
+
     pub fn create_learner(&mut self) {
         // Create topology based on selected domain
         let topology = self.create_topology_for_domain();
-        
+
         // Create learner model using the core library
         let learner_id = Uuid::new_v4().to_string();
         let core_model = LearnerModel::new(learner_id.clone(), &topology);
-        
+
         self.current_learner = Some(Learner {
             id: learner_id,
             user_id: self.current_user.as_ref().map(|u| u.id.clone()),
@@ -210,12 +201,12 @@ impl AppData {
             core_model,
             metadata: None,
         });
-        
+
         self.topology = Some(topology);
         self.success_message = Some("Learner profile created!".to_string());
         self.error_message = None;
     }
-    
+
     fn create_topology_for_domain(&self) -> Topology {
         match self.selected_domain {
             Domain::Alphabet => {
@@ -239,8 +230,13 @@ impl AppData {
             Domain::Music => {
                 // Create music theory topology (partial order for scales/chords)
                 let notes = vec![
-                    "C".to_string(), "D".to_string(), "E".to_string(),
-                    "F".to_string(), "G".to_string(), "A".to_string(), "B".to_string(),
+                    "C".to_string(),
+                    "D".to_string(),
+                    "E".to_string(),
+                    "F".to_string(),
+                    "G".to_string(),
+                    "A".to_string(),
+                    "B".to_string(),
                 ];
                 Topology::new_linear(notes)
             }
@@ -256,13 +252,13 @@ impl AppData {
             }
         }
     }
-    
+
     pub fn start_session(&mut self) {
         if let Some(learner) = &mut self.current_learner {
             if let Some(topology) = &self.topology {
                 // Create task generator
                 let task_generator = TaskGenerator::new(topology.clone());
-                
+
                 // Create adaptive scheduler if enabled
                 if self.use_adaptive_scheduling {
                     let scheduler = AdaptiveScheduler::new_with_eig(
@@ -272,13 +268,13 @@ impl AppData {
                     );
                     self.adaptive_scheduler = Some(scheduler);
                 }
-                
+
                 // Create task session
                 let task_session = TaskSession::new(topology.clone());
-                
+
                 // Create intervention system for hints and adaptive difficulty
                 let intervention_system = InterventionSystem::new(topology.clone());
-                
+
                 // Create UI session
                 let session = Session {
                     id: Uuid::new_v4().to_string(),
@@ -291,7 +287,7 @@ impl AppData {
                     summary: None,
                     responses: Vec::new(),
                 };
-                
+
                 self.current_session = Some(session);
                 self.task_generator = Some(task_generator);
                 self.task_session = Some(task_session);
@@ -307,7 +303,7 @@ impl AppData {
             self.error_message = Some("Please create a learner profile first".to_string());
         }
     }
-    
+
     pub fn generate_next_task(&mut self) {
         // Generate task using adaptive scheduler or random generator
         let task = if self.use_adaptive_scheduling {
@@ -323,7 +319,7 @@ impl AppData {
         } else {
             return;
         };
-        
+
         // Convert to UI task
         let ui_task = UITask::from_core_task(task);
         self.current_task = Some(ui_task);
@@ -332,26 +328,31 @@ impl AppData {
         self.selected_answer_index = None;
         self.show_feedback = false;
     }
-    
+
     pub fn submit_answer(&mut self, answer_index: usize) {
         if let Some(ui_task) = &self.current_task {
             if let Some(start_time) = self.task_start_time {
                 let response_time_ms = start_time.elapsed().as_millis() as u128;
-                
+
                 // Get the selected answer
-                let answer = ui_task.display_options
+                let answer = ui_task
+                    .display_options
                     .get(answer_index)
                     .cloned()
                     .unwrap_or_default();
-                
+
                 // Check if correct
                 let correct = answer == ui_task.core_task.correct_answer;
-                
+
                 // Process response with intervention system
                 if let Some(intervention_system) = &mut self.intervention_system {
-                    intervention_system.process_response(&ui_task.core_task, correct, response_time_ms as u64);
+                    intervention_system.process_response(
+                        &ui_task.core_task,
+                        correct,
+                        response_time_ms as u64,
+                    );
                 }
-                
+
                 // Create task response
                 let response = CoreTaskResponse {
                     task: ui_task.core_task.clone(),
@@ -360,7 +361,7 @@ impl AppData {
                     response_time_ms,
                     timestamp: Utc::now(),
                 };
-                
+
                 // Update learner model and adaptive scheduler
                 if let Some(scheduler) = &mut self.adaptive_scheduler {
                     scheduler.update_model(&ui_task.core_task, correct, response_time_ms);
@@ -370,26 +371,29 @@ impl AppData {
                     }
                 } else if let Some(learner) = &mut self.current_learner {
                     // Update learner model directly if no scheduler
-                    learner.core_model.update_operation_proficiency(&ui_task.core_task.operation, correct);
+                    learner
+                        .core_model
+                        .update_operation_proficiency(&ui_task.core_task.operation, correct);
                 }
-                
+
                 // Update metrics
-                self.current_metrics.update(correct, response_time_ms as i32);
-                
+                self.current_metrics
+                    .update(correct, response_time_ms as i32);
+
                 // Update learner metrics from core model
                 if let Some(learner) = &self.current_learner {
                     let core_metrics = LearnerMetrics::from_model(&learner.core_model);
                     self.current_metrics.update_from_core_metrics(&core_metrics);
                 }
-                
+
                 // Store response
                 self.session_responses.push(response);
-                
+
                 // Update session
                 if let Some(session) = &mut self.current_session {
                     session.responses = self.session_responses.clone();
                 }
-                
+
                 // Show feedback
                 self.last_response_correct = correct;
                 self.show_feedback = true;
@@ -399,21 +403,27 @@ impl AppData {
             }
         }
     }
-    
+
     pub fn continue_to_next_task(&mut self) {
         self.generate_next_task();
     }
-    
+
     pub fn request_hint(&mut self) {
-        if let (Some(ui_task), Some(intervention_system)) = (&self.current_task, &mut self.intervention_system) {
+        if let (Some(ui_task), Some(intervention_system)) =
+            (&self.current_task, &mut self.intervention_system)
+        {
             if self.enable_hints {
-                let elapsed_ms = self.task_start_time
+                let elapsed_ms = self
+                    .task_start_time
                     .map(|start| start.elapsed().as_millis() as u64)
                     .unwrap_or(0);
-                    
-                if let Some(action) = intervention_system.check_intervention_needed(&ui_task.core_task, elapsed_ms) {
+
+                if let Some(action) =
+                    intervention_system.check_intervention_needed(&ui_task.core_task, elapsed_ms)
+                {
                     match action {
-                        InterventionAction::ProvideHint(hint) | InterventionAction::ProvideWorkedExample(hint) => {
+                        InterventionAction::ProvideHint(hint)
+                        | InterventionAction::ProvideWorkedExample(hint) => {
                             self.current_hint = Some(hint);
                         }
                         _ => {}
@@ -422,40 +432,49 @@ impl AppData {
             }
         }
     }
-    
+
     pub fn check_struggle_and_provide_help(&mut self) {
-        if let (Some(ui_task), Some(intervention_system)) = (&self.current_task, &mut self.intervention_system) {
-            let elapsed_ms = self.task_start_time
+        if let (Some(ui_task), Some(intervention_system)) =
+            (&self.current_task, &mut self.intervention_system)
+        {
+            let elapsed_ms = self
+                .task_start_time
                 .map(|start| start.elapsed().as_millis() as u64)
                 .unwrap_or(0);
-                
-            if let Some(action) = intervention_system.check_intervention_needed(&ui_task.core_task, elapsed_ms) {
+
+            if let Some(action) =
+                intervention_system.check_intervention_needed(&ui_task.core_task, elapsed_ms)
+            {
                 match action {
-                    InterventionAction::ProvideHint(hint) | InterventionAction::ProvideWorkedExample(hint) => {
+                    InterventionAction::ProvideHint(hint)
+                    | InterventionAction::ProvideWorkedExample(hint) => {
                         self.current_hint = Some(hint);
                     }
                     InterventionAction::SuggestBreak => {
-                        self.success_message = Some("Consider taking a short break to refresh your mind.".to_string());
+                        self.success_message =
+                            Some("Consider taking a short break to refresh your mind.".to_string());
                     }
                     InterventionAction::IncreaseDifficulty => {
                         self.difficulty_level = (self.difficulty_level + 0.1).min(1.0);
-                        self.success_message = Some("Great progress! Increasing difficulty.".to_string());
+                        self.success_message =
+                            Some("Great progress! Increasing difficulty.".to_string());
                     }
                     InterventionAction::DecreaseDifficulty => {
                         self.difficulty_level = (self.difficulty_level - 0.1).max(0.1);
-                        self.success_message = Some("Adjusting difficulty to help you learn better.".to_string());
+                        self.success_message =
+                            Some("Adjusting difficulty to help you learn better.".to_string());
                     }
                     _ => {}
                 }
             }
         }
     }
-    
+
     pub fn end_session(&mut self) {
         if let Some(session) = &mut self.current_session {
             session.end_time = Some(Utc::now());
             session.status = "completed".to_string();
-            
+
             // Calculate session summary
             let total_responses = self.session_responses.len();
             let correct_responses = self.session_responses.iter().filter(|r| r.correct).count();
@@ -464,12 +483,13 @@ impl AppData {
             } else {
                 0.0
             };
-            
+
             // Get final learner metrics
-            let learner_metrics = self.current_learner
+            let learner_metrics = self
+                .current_learner
                 .as_ref()
                 .map(|l| LearnerMetrics::from_model(&l.core_model));
-            
+
             session.summary = Some(serde_json::json!({
                 "total_responses": total_responses,
                 "correct_responses": correct_responses,
@@ -477,34 +497,37 @@ impl AppData {
                 "metrics": self.current_metrics,
                 "learner_metrics": learner_metrics,
             }));
-            
+
             self.current_screen = Screen::Dashboard;
             self.success_message = Some("Session completed!".to_string());
         }
     }
-    
+
     pub fn export_current_data(&mut self) {
         if let (Some(learner), Some(task_session)) = (&self.current_learner, &self.task_session) {
             // Create comprehensive export using the core library
             let comprehensive_export = LearnerDataExport::from_learner_model(
                 &learner.core_model,
-                vec![task_session.clone()],
+                vec![], // TODO: include TaskSession when Clone or export API allows borrowing
                 Some("xilem-ui-session".to_string()),
             );
-            
+
             // Also create UI-specific export
             let ui_export = ExportData {
                 learner: learner.clone(),
-                sessions: self.current_session.as_ref().map_or(vec![], |s| vec![s.clone()]),
+                sessions: self
+                    .current_session
+                    .as_ref()
+                    .map_or(vec![], |s| vec![s.clone()]),
                 metrics: self.current_metrics.clone(),
                 export_time: Utc::now(),
             };
-            
+
             self.export_data = Some(ui_export);
-            
+
             // You could save the comprehensive export to a file here
             // let json = comprehensive_export.to_json().unwrap_or_default();
-            
+
             self.success_message = Some("Comprehensive data export ready! Includes performance trajectories, error patterns, and model parameters.".to_string());
         } else {
             self.error_message = Some("No data to export".to_string());
@@ -515,8 +538,7 @@ impl AppData {
 /// Entry point for the app
 pub fn run(event_loop: EventLoopBuilder) {
     let data = AppData::default();
-    
-    let app = Xilem::new_simple(data, app_logic, xilem::WindowOptions::new("Adaptive Learning System - Alphabet Terminal"));
-    app.run_in(event_loop)
-        .unwrap();
+
+    let app = Xilem::new(data, app_logic);
+    app.run_in(event_loop).unwrap();
 }

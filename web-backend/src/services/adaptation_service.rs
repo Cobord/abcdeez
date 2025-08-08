@@ -3,7 +3,7 @@ use anyhow::Result;
 use uuid::Uuid;
 
 use graph_learning_core::{
-    Task, TaskGenerator, AdaptiveScheduler, 
+    Task, AdaptiveScheduler, BayesianLearnerModel,
     hints::{InterventionSystem, InterventionAction, StruggleLevel, HintLevel},
     Topology, TopologyType
 };
@@ -24,33 +24,33 @@ impl AdaptationService {
         // Get the current learner model
         let learner_model = self.learner_service.get_learner_model(learner_id).await?;
 
-        // Create task generator for the topology
-        let mut task_generator = TaskGenerator::new(topology.clone());
+        // Create adaptive scheduler to select optimal task using Expected Information Gain
+        let mut scheduler = AdaptiveScheduler::new(learner_model, topology.clone());
 
-        // Create adaptive scheduler to select optimal task
-        let scheduler = AdaptiveScheduler::new();
+        // Select the next task adaptively based on learner's current state
+        let task = scheduler.select_next_task();
 
-        // Generate candidate tasks and select the one with highest Expected Information Gain
-        let candidates = task_generator.generate_candidates(10); // Generate 10 candidate tasks
-        let mut best_task = None;
-        let mut best_eig = f64::NEG_INFINITY;
-
-        for task in candidates {
-            let eig = self.calculate_eig(&learner_model, &task).await?;
-            if eig > best_eig {
-                best_eig = eig;
-                best_task = Some(task);
-            }
-        }
-
-        best_task.ok_or_else(|| AppError::InternalServerError.into())
+        Ok(task)
     }
 
-    pub async fn calculate_eig(&self, learner_model: &graph_learning_core::LearnerModel, task: &Task) -> Result<f64> {
+    pub async fn calculate_eig(&self, learner_id: Uuid, topology: &Topology, task: &Task) -> Result<f64> {
+        // Use sophisticated Bayesian EIG calculation instead of simple heuristics
+        let bayesian_model = self.learner_service
+            .get_bayesian_model(learner_id, topology)
+            .await?;
+        
+        // Calculate true Expected Information Gain using Monte Carlo simulation
+        let eig = bayesian_model.calculate_eig(task);
+        
+        Ok(eig)
+    }
+
+    /// Enhanced EIG calculation using Bayesian model (legacy method for compatibility)
+    pub async fn calculate_eig_legacy(&self, learner_model: &graph_learning_core::LearnerModel, task: &Task) -> Result<f64> {
         // Calculate Expected Information Gain for this task
         // This is based on the uncertainty reduction we'd get from observing the response
         
-        let current_uncertainty = self.calculate_model_uncertainty(learner_model);
+        let _current_uncertainty = self.calculate_model_uncertainty(learner_model);
         let predicted_accuracy = self.predict_task_accuracy(learner_model, task);
         
         // EIG = Expected reduction in uncertainty
@@ -67,8 +67,9 @@ impl AdaptationService {
     pub async fn should_intervene(&self, learner_id: Uuid, session_id: Uuid, elapsed_ms: u64, recent_errors: usize) -> Result<Option<InterventionAction>> {
         let learner_model = self.learner_service.get_learner_model(learner_id).await?;
         
-        // Create intervention system
-        let intervention_system = InterventionSystem::new();
+        // Create intervention system with default topology
+        let topology = Topology::alphabet();
+        let _intervention_system = InterventionSystem::new(topology);
         
         // Determine struggle level based on time and recent errors
         let struggle_level = if elapsed_ms > 30000 { // 30 seconds
@@ -76,7 +77,7 @@ impl AdaptationService {
                 0..=1 => StruggleLevel::None,
                 2..=3 => StruggleLevel::Mild,
                 4..=6 => StruggleLevel::Moderate,
-                _ => StruggleLevel::High,
+                _ => StruggleLevel::Severe,
             }
         } else if elapsed_ms > 15000 { // 15 seconds
             match recent_errors {
@@ -93,19 +94,19 @@ impl AdaptationService {
             StruggleLevel::None => false,
             StruggleLevel::Mild => elapsed_ms > 20000,
             StruggleLevel::Moderate => elapsed_ms > 15000,
-            StruggleLevel::High => elapsed_ms > 10000,
+            StruggleLevel::Severe => elapsed_ms > 10000,
         };
 
         if should_intervene {
             // Determine intervention type
             let intervention = if recent_errors > 3 {
-                InterventionAction::ProvideHint(HintLevel::Strong)
+                InterventionAction::ProvideHint("Strong hint".to_string())
             } else if recent_errors > 1 {
-                InterventionAction::ProvideHint(HintLevel::Mild)
+                InterventionAction::ProvideHint("Mild hint".to_string())
             } else if elapsed_ms > 25000 {
-                InterventionAction::ProvideHint(HintLevel::Mild)
+                InterventionAction::ProvideHint("Mild hint".to_string())
             } else {
-                InterventionAction::ReduceDifficulty
+                InterventionAction::DecreaseDifficulty
             };
 
             // Log intervention to database
@@ -130,9 +131,9 @@ impl AdaptationService {
         let current_difficulty = 0.5; // This would be stored/retrieved from learner state
 
         let new_difficulty = if success_rate > target_success_rate + 0.1 {
-            (current_difficulty + 0.05).min(1.0) // Increase difficulty
+            (current_difficulty + 0.05_f64).min(1.0) // Increase difficulty
         } else if success_rate < target_success_rate - 0.1 {
-            (current_difficulty - 0.05).max(0.1) // Decrease difficulty
+            (current_difficulty - 0.05_f64).max(0.1) // Decrease difficulty
         } else {
             current_difficulty // Keep same difficulty
         };
@@ -145,9 +146,10 @@ impl AdaptationService {
         
         // Generate contextual hint based on learner's specific weaknesses
         let hint = match hint_level {
-            HintLevel::Subtle => self.generate_subtle_hint(task, &learner_model),
-            HintLevel::Mild => self.generate_mild_hint(task, &learner_model),
-            HintLevel::Strong => self.generate_strong_hint(task, &learner_model),
+            HintLevel::Confirmation => self.generate_subtle_hint(task, &learner_model),
+            HintLevel::Partial => self.generate_mild_hint(task, &learner_model),
+            HintLevel::Scaffold => self.generate_mild_hint(task, &learner_model),
+            HintLevel::Worked => self.generate_strong_hint(task, &learner_model),
         };
 
         Ok(hint)
@@ -166,13 +168,11 @@ impl AdaptationService {
 
     fn predict_task_accuracy(&self, model: &graph_learning_core::LearnerModel, task: &Task) -> f64 {
         // Predict probability of correct response for this task
-        let difficulty = task.difficulty.unwrap_or(0.5);
+        let difficulty = task.difficulty;
         
-        if let Some(operation_type) = &task.operation_type {
-            model.get_probability_correct(operation_type, difficulty)
-        } else {
-            0.5 // Default prediction
-        }
+        // Use the operation field from task
+        let operation_type = &task.operation;
+        model.get_probability_correct(operation_type, difficulty)
     }
 
     fn calculate_uncertainty_reduction_if_correct(&self, _model: &graph_learning_core::LearnerModel, _task: &Task) -> f64 {
@@ -188,14 +188,14 @@ impl AdaptationService {
     }
 
     fn generate_subtle_hint(&self, task: &Task, _model: &graph_learning_core::LearnerModel) -> String {
-        match task.task_type {
-            graph_learning_core::TaskType::Successor => {
+        match &task.task_type {
+            graph_learning_core::TaskType::Successor { .. } => {
                 "Think about what comes next in the sequence.".to_string()
             },
-            graph_learning_core::TaskType::Predecessor => {
+            graph_learning_core::TaskType::Predecessor { .. } => {
                 "Consider what comes before in the sequence.".to_string()
             },
-            graph_learning_core::TaskType::PairwiseOrder => {
+            graph_learning_core::TaskType::PairwiseOrder { .. } => {
                 "Which one comes first in order?".to_string()
             },
             _ => "Take your time and think step by step.".to_string(),
@@ -203,18 +203,18 @@ impl AdaptationService {
     }
 
     fn generate_mild_hint(&self, task: &Task, _model: &graph_learning_core::LearnerModel) -> String {
-        match task.task_type {
-            graph_learning_core::TaskType::Successor => {
+        match &task.task_type {
+            graph_learning_core::TaskType::Successor { .. } => {
                 format!("If the sequence is ...{}, what comes after {}?", 
                     task.prompt.chars().take(3).collect::<String>(),
                     task.prompt.chars().last().unwrap_or('?'))
             },
-            graph_learning_core::TaskType::Predecessor => {
+            graph_learning_core::TaskType::Predecessor { .. } => {
                 format!("If the sequence is {}..., what comes before {}?", 
                     task.prompt.chars().take(3).collect::<String>(),
                     task.prompt.chars().next().unwrap_or('?'))
             },
-            graph_learning_core::TaskType::PairwiseOrder => {
+            graph_learning_core::TaskType::PairwiseOrder { .. } => {
                 "Try saying both options out loud to hear which comes first.".to_string()
             },
             _ => "Break the problem into smaller parts.".to_string(),
@@ -241,7 +241,7 @@ impl AdaptationService {
                 "hint",
                 serde_json::json!({ "hint_level": format!("{:?}", level) })
             ),
-            InterventionAction::ReduceDifficulty => (
+            InterventionAction::DecreaseDifficulty => (
                 "difficulty_change",
                 serde_json::json!({ "action": "reduce" })
             ),
@@ -249,19 +249,31 @@ impl AdaptationService {
                 "break_suggestion",
                 serde_json::json!({ "reason": "extended_session" })
             ),
+            InterventionAction::ProvideWorkedExample(example) => (
+                "worked_example",
+                serde_json::json!({ "example": example })
+            ),
+            InterventionAction::IncreaseDifficulty => (
+                "difficulty_change", 
+                serde_json::json!({ "action": "increase" })
+            ),
+            InterventionAction::SkipTask => (
+                "skip_task",
+                serde_json::json!({ "action": "skip" })
+            ),
         };
 
-        sqlx::query!(
+        sqlx::query(
             "INSERT INTO interventions (id, session_id, intervention_type, details) 
-             VALUES ($1, $2, $3, $4)",
-            intervention_id_bytes,
-            session_id_bytes,
-            intervention_type,
-            details.to_string()
+             VALUES (?, ?, ?, ?)"
         )
-        .execute(&**self.learner_service.db)
+        .bind(intervention_id_bytes)
+        .bind(session_id_bytes)
+        .bind(intervention_type)
+        .bind(details.to_string())
+        .execute(self.learner_service.db.as_ref())
         .await
-        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+        .map_err(|e| AppError::DatabaseError(e))?;
 
         Ok(())
     }

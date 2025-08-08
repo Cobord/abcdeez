@@ -272,15 +272,35 @@ impl StatisticalValidator {
         
         let grand_total: f64 = row_totals.iter().sum();
         
-        // Calculate expected frequencies and chi-squared statistic
+        // Calculate expected frequencies and check assumptions
         let mut chi_squared = 0.0;
+        let mut min_expected = f64::INFINITY;
+        let mut expected_frequencies = vec![vec![0.0; cols]; rows];
+        
         for i in 0..rows {
             for j in 0..cols {
                 let expected = (row_totals[i] * col_totals[j]) / grand_total;
+                expected_frequencies[i][j] = expected;
+                min_expected = min_expected.min(expected);
                 if expected > 0.0 {
                     chi_squared += (observed[i][j] - expected).powi(2) / expected;
                 }
             }
+        }
+        
+        // Check assumptions: all expected frequencies should be >= 5
+        if min_expected < 5.0 {
+            eprintln!("Warning: Chi-square test assumption violated (expected < 5). Consider Fisher's exact test.");
+            // For 2x2 tables, we could implement Fisher's exact test
+            if rows == 2 && cols == 2 {
+                // Fall back to Fisher's exact test for 2x2 tables
+                return self.fishers_exact_test_2x2(&observed);
+            }
+        }
+        
+        // Check sample size
+        if grand_total < 20.0 {
+            eprintln!("Warning: Small sample size ({}) for chi-square test", grand_total);
         }
         
         // Degrees of freedom
@@ -476,6 +496,99 @@ impl StatisticalValidator {
             std_accuracy: (&fold_results).std_dev(),
             fold_results,
             confusion_matrix,
+        }
+    }
+    
+    /// Fisher's exact test for 2x2 contingency tables
+    fn fishers_exact_test_2x2(&self, observed: &Vec<Vec<f64>>) -> HypothesisTestResult {
+        // For 2x2 table [[a, b], [c, d]]
+        let a = observed[0][0] as i32;
+        let b = observed[0][1] as i32;
+        let c = observed[1][0] as i32;
+        let d = observed[1][1] as i32;
+        
+        let n = a + b + c + d;
+        let row1_total = a + b;
+        let row2_total = c + d;
+        let col1_total = a + c;
+        let col2_total = b + d;
+        
+        // Calculate hypergeometric probability for observed table
+        let p_observed = self.hypergeometric_prob(a, b, c, d);
+        
+        // Calculate two-tailed p-value
+        let mut p_value = 0.0;
+        
+        // Sum probabilities of all tables as extreme or more extreme
+        for a_i in 0..=row1_total.min(col1_total) {
+            let b_i = row1_total - a_i;
+            let c_i = col1_total - a_i;
+            let d_i = row2_total - c_i;
+            
+            if b_i >= 0 && c_i >= 0 && d_i >= 0 {
+                let p_i = self.hypergeometric_prob(a_i, b_i, c_i, d_i);
+                if p_i <= p_observed + 1e-10 {  // Small epsilon for numerical stability
+                    p_value += p_i;
+                }
+            }
+        }
+        
+        // Odds ratio as effect size
+        let odds_ratio = if b > 0 && c > 0 {
+            (a as f64 * d as f64) / (b as f64 * c as f64)
+        } else {
+            f64::INFINITY
+        };
+        
+        HypothesisTestResult {
+            test_name: "Fisher's Exact Test".to_string(),
+            statistic: odds_ratio,
+            p_value,
+            significant: p_value < self.confidence_level,
+            effect_size: odds_ratio.ln(),  // Log odds ratio
+            confidence_interval: (0.0, 0.0),  // Would need more computation
+            power: 0.0,  // Not applicable for exact test
+        }
+    }
+    
+    /// Hypergeometric probability for Fisher's exact test
+    fn hypergeometric_prob(&self, a: i32, b: i32, c: i32, d: i32) -> f64 {
+        let n = a + b + c + d;
+        
+        // log(P) = log(C(a+b, a)) + log(C(c+d, c)) - log(C(n, a+c))
+        let log_p = self.log_binomial_coefficient(a + b, a) +
+                   self.log_binomial_coefficient(c + d, c) -
+                   self.log_binomial_coefficient(n, a + c);
+        
+        log_p.exp()
+    }
+    
+    /// Log binomial coefficient using Stirling's approximation for large values
+    fn log_binomial_coefficient(&self, n: i32, k: i32) -> f64 {
+        if k < 0 || k > n {
+            return f64::NEG_INFINITY;
+        }
+        if k == 0 || k == n {
+            return 0.0;
+        }
+        
+        // Use logarithm of factorials
+        self.log_factorial(n) - self.log_factorial(k) - self.log_factorial(n - k)
+    }
+    
+    /// Log factorial using Stirling's approximation for large n
+    fn log_factorial(&self, n: i32) -> f64 {
+        if n <= 0 {
+            return 0.0;
+        }
+        
+        if n < 20 {
+            // Direct computation for small n
+            (1..=n).map(|i| (i as f64).ln()).sum()
+        } else {
+            // Stirling's approximation: ln(n!) ≈ n*ln(n) - n + 0.5*ln(2πn)
+            let n_f = n as f64;
+            n_f * n_f.ln() - n_f + 0.5 * (2.0 * std::f64::consts::PI * n_f).ln()
         }
     }
 }

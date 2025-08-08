@@ -1,15 +1,20 @@
-use axum::{extract::{Path, State}, http::StatusCode, Json, Extension};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Extension, Json,
+};
+use sqlx::Row;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use graph_learning_core::{Topology, TopologyType};
 use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
-    models::{learner::{Learner, CreateLearnerRequest, UpdateLearnerRequest, LearnerStats}},
+    models::learner::{CreateLearnerRequest, Learner, LearnerStats, UpdateLearnerRequest},
+    services::{audit::AuditService, LearnerService},
     state::AppState,
-    services::{LearnerService, audit::AuditService},
 };
+use graph_learning_core::{Topology, TopologyType};
 
 pub async fn create(
     State(state): State<Arc<AppState>>,
@@ -17,21 +22,18 @@ pub async fn create(
     Json(req): Json<CreateLearnerRequest>,
 ) -> AppResult<(StatusCode, Json<Learner>)> {
     // Default to alphabet topology if not specified
-    let topology = Topology::alphabet_topology();
-    
+    let _topology = Topology::alphabet();
+
     // Use the authenticated user's ID if no user_id provided
     let user_id = req.user_id.or(Some(claims.sub));
-    
+
     // Create learner using the service
-    let learner_service = LearnerService::new(
-        state.db_pool.clone(),
-        state.redis_conn.clone(),
-    );
-    
+    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+
     let learner = learner_service
-        .create_learner(user_id, req.display_name, &topology)
+        .create_learner(user_id, req.display_name.clone())
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_| AppError::InternalServerError)?;
 
     // Convert to the API model format
     let api_learner = Learner {
@@ -42,6 +44,7 @@ pub async fn create(
         last_active: learner.last_active,
         total_practice_time_seconds: learner.total_practice_time_seconds,
         metadata: learner.metadata,
+        learning_model: learner.learning_model,
     };
 
     // Log audit event
@@ -56,7 +59,9 @@ pub async fn create(
         })),
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok((StatusCode::CREATED, Json(api_learner)))
 }
@@ -66,11 +71,8 @@ pub async fn get(
     claims: Extension<Claims>,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Learner>> {
-    let learner_service = LearnerService::new(
-        state.db_pool.clone(),
-        state.redis_conn.clone(),
-    );
-    
+    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+
     let learner = learner_service
         .get_learner(id)
         .await
@@ -92,6 +94,7 @@ pub async fn get(
         last_active: learner.last_active,
         total_practice_time_seconds: learner.total_practice_time_seconds,
         metadata: learner.metadata,
+        learning_model: learner.learning_model,
     };
 
     Ok(Json(api_learner))
@@ -104,11 +107,8 @@ pub async fn update(
     Json(req): Json<UpdateLearnerRequest>,
 ) -> AppResult<Json<Learner>> {
     // First get the existing learner to check permissions
-    let learner_service = LearnerService::new(
-        state.db_pool.clone(),
-        state.redis_conn.clone(),
-    );
-    
+    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+
     let learner = learner_service
         .get_learner(id)
         .await
@@ -124,20 +124,21 @@ pub async fn update(
     // Update in database
     let learner_bytes = id.as_bytes();
     let now = chrono::Utc::now();
-    
-    sqlx::query!(
-        "UPDATE learners SET display_name = COALESCE($1, display_name), 
-                           metadata = COALESCE($2, metadata),
-                           last_active = $3
-         WHERE id = $4",
-        req.display_name,
-        req.metadata.map(|m| m.to_string()),
-        now,
-        learner_bytes
+
+    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    sqlx::query(
+        "UPDATE learners SET display_name = COALESCE(?, display_name),
+                           metadata = COALESCE(?, metadata),
+                           last_active = ?
+         WHERE id = ?"
     )
-    .execute(&state.db_pool)
+    .bind(req.display_name.clone())
+    .bind(req.metadata.clone().map(|m| m.to_string()))
+    .bind(now)
+    .bind(learner_bytes)
+    .execute(&mut *conn)
     .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    .map_err(|e| AppError::DatabaseError(e))?;
 
     // Get updated learner
     let updated_learner = learner_service
@@ -153,6 +154,7 @@ pub async fn update(
         last_active: updated_learner.last_active,
         total_practice_time_seconds: updated_learner.total_practice_time_seconds,
         metadata: updated_learner.metadata,
+        learning_model: updated_learner.learning_model,
     };
 
     // Log audit event
@@ -168,7 +170,9 @@ pub async fn update(
         })),
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok(Json(api_learner))
 }
@@ -179,11 +183,8 @@ pub async fn stats(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<LearnerStats>> {
     // Check permissions first
-    let learner_service = LearnerService::new(
-        state.db_pool.clone(),
-        state.redis_conn.clone(),
-    );
-    
+    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+
     let learner = learner_service
         .get_learner(id)
         .await
@@ -197,61 +198,65 @@ pub async fn stats(
 
     // Get statistics from database
     let learner_bytes = id.as_bytes();
-    
+
     // Get session count
-    let session_stats = sqlx::query!(
-        "SELECT COUNT(*) as total_sessions FROM sessions WHERE learner_id = $1",
-        learner_bytes
+    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let session_stats = sqlx::query(
+        "SELECT COUNT(*) as total_sessions FROM sessions WHERE learner_id = ?"
     )
-    .fetch_one(&state.db_pool)
+    .bind(learner_bytes)
+    .fetch_one(&mut *conn)
     .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    .map_err(|e| AppError::DatabaseError(e))?;
 
     // Get response statistics
-    let response_stats = sqlx::query!(
-        "SELECT 
+    let response_stats = sqlx::query(
+        "SELECT
             COUNT(*) as total_tasks,
             AVG(CASE WHEN correct THEN 1.0 ELSE 0.0 END) as accuracy
          FROM responses r
          JOIN sessions s ON r.session_id = s.id
-         WHERE s.learner_id = $1",
-        learner_bytes
+         WHERE s.learner_id = ?"
     )
-    .fetch_one(&state.db_pool)
+    .bind(learner_bytes)
+    .fetch_one(&mut *conn)
     .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    .map_err(|e| AppError::DatabaseError(e))?;
 
     // Get learning curve (daily accuracy over last 30 days)
-    let learning_curve_data = sqlx::query!(
-        "SELECT 
+    let learning_curve_data = sqlx::query(
+        "SELECT
             DATE(r.timestamp) as date,
             AVG(CASE WHEN r.correct THEN 1.0 ELSE 0.0 END) as daily_accuracy
          FROM responses r
          JOIN sessions s ON r.session_id = s.id
-         WHERE s.learner_id = $1 
-           AND r.timestamp > $2
+         WHERE s.learner_id = ?
+           AND r.timestamp > ?
          GROUP BY DATE(r.timestamp)
-         ORDER BY date",
-        learner_bytes,
-        chrono::Utc::now() - chrono::Duration::days(30)
+         ORDER BY date"
     )
-    .fetch_all(&state.db_pool)
+    .bind(learner_bytes)
+    .bind(chrono::Utc::now() - chrono::Duration::days(30))
+    .fetch_all(&mut *conn)
     .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    .map_err(|e| AppError::DatabaseError(e))?;
 
     let learning_curve = learning_curve_data
         .into_iter()
         .map(|row| {
-            let date = row.date.and_hms_opt(12, 0, 0).unwrap().and_utc();
-            let accuracy = row.daily_accuracy.unwrap_or(0.0);
-            (date, accuracy)
+            let date_str: String = row.get("date");
+            let date = chrono::NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")
+                .unwrap_or_else(|_| chrono::Utc::now().date_naive())
+                .and_hms_opt(12, 0, 0).unwrap().and_utc();
+            let accuracy: Option<f64> = row.get("daily_accuracy");
+            (date, accuracy.unwrap_or(0.0))
         })
         .collect();
 
     let stats = LearnerStats {
-        total_sessions: session_stats.total_sessions.unwrap_or(0),
-        total_tasks_completed: response_stats.total_tasks.unwrap_or(0),
-        overall_accuracy: response_stats.accuracy.unwrap_or(0.0),
+        total_sessions: session_stats.get::<i64, _>("total_sessions"),
+        total_tasks_completed: response_stats.get::<i64, _>("total_tasks"),
+        overall_accuracy: response_stats.get::<Option<f64>, _>("accuracy").unwrap_or(0.0),
         total_practice_time_seconds: learner.total_practice_time_seconds,
         last_active: learner.last_active,
         preferred_difficulty: 0.5, // TODO: Calculate from learner model
@@ -267,11 +272,8 @@ pub async fn export(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
     // Check permissions first
-    let learner_service = LearnerService::new(
-        state.db_pool.clone(),
-        state.redis_conn.clone(),
-    );
-    
+    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+
     let learner = learner_service
         .get_learner(id)
         .await
@@ -283,11 +285,28 @@ pub async fn export(
         }
     }
 
-    // Export data using the service
-    let export_data = learner_service
-        .export_learner_data(id)
+    // Export complete learner data using the service
+    let export_data = match learner_service
+        .export_learner_data(id, None) // No experiment_id for now
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+    {
+        Ok(export) => {
+            // Convert to JSON for the API response
+            serde_json::to_value(&export)
+                .map_err(|_| AppError::InternalServerError)?
+        }
+        Err(_) => {
+            // Fallback to basic export structure if full export fails
+            serde_json::json!({
+                "learner_id": id,
+                "display_name": learner.display_name,
+                "created_at": learner.created_at,
+                "total_practice_time_seconds": learner.total_practice_time_seconds,
+                "export_timestamp": chrono::Utc::now(),
+                "note": "Full export functionality failed, providing basic data"
+            })
+        }
+    };
 
     // Log audit event for GDPR compliance
     AuditService::log_event(
@@ -299,7 +318,9 @@ pub async fn export(
         None,
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok(Json(export_data))
 }
@@ -310,11 +331,8 @@ pub async fn delete(
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     // Check permissions first
-    let learner_service = LearnerService::new(
-        state.db_pool.clone(),
-        state.redis_conn.clone(),
-    );
-    
+    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+
     let learner = learner_service
         .get_learner(id)
         .await
@@ -342,7 +360,9 @@ pub async fn delete(
         None,
         None,
         None,
-    ).await.ok();
+    )
+    .await
+    .ok();
 
     Ok(StatusCode::NO_CONTENT)
 }

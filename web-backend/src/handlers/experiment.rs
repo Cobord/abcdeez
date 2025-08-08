@@ -28,7 +28,7 @@ pub async fn get(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Experiment>> {
     // TODO: Get experiment details
-    Err(AppError::NotFound)
+    Err(AppError::NotFound("Experiment not found".to_string()))
 }
 
 pub async fn join(
