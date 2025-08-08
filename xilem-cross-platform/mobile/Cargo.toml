@@ -12,7 +12,7 @@ name = "xilem_example_mobile"
 crate-type = ["staticlib", "cdylib", "lib"]
 
 [dependencies]
-xilem_example_app = { path = "../app" }
+graph_learning_app = { path = "../app" }
 winit.workspace = true
 pollster = "0.3.0"
 

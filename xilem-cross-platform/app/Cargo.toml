@@ -1,5 +1,5 @@
 [package]
-name = "xilem_example_app"
+name = "graph_learning_app"
 edition.workspace = true
 
 [dependencies]
@@ -8,3 +8,14 @@ winit = { version = "0.30.12", features = ["android-native-activity"] }
 # iOS support is not released yet, requires 1daf711
 masonry = "0.3.0"
 xilem = "0.3.0"
+
+# Additional dependencies for the learning app
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"

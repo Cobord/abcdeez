@@ -7,6 +7,12 @@ mod demo;
 mod statistics;
 mod bayesian;
 mod extended_tasks;
+mod music;
+mod export;
+mod navigation;
+mod boundaries;
+mod prediction;
+mod hints;
 
 use std::env;
 use std::io;

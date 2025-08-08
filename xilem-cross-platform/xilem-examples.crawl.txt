@@ -1,0 +1,2807 @@
+<file name="xilem-examples/state_machine.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! A state machine to detect whether the button was pressed an even or an odd number of times.
+
+use winit::error::EventLoopError;
+use xilem::core::one_of::{OneOf, OneOf3};
+use xilem::style::Style as _;
+use xilem::view::{button, flex, label, prose, sized_box, spinner};
+use xilem::{EventLoop, WidgetView, WindowOptions, Xilem};
+
+/// The state of the entire application.
+///
+/// This is owned by Xilem, used to construct the view tree, and updated by event handlers.
+struct StateMachine {
+    state: IsEven,
+    /// The history of which transitions were taken in this run.
+    history: String,
+}
+
+#[derive(Copy, Clone, Debug)]
+enum IsEven {
+    Initial,
+    Odd,
+    Even,
+    Halt,
+    Success,
+}
+
+fn state_machine(app_data: &mut StateMachine) -> impl WidgetView<StateMachine> + use<> {
+    match app_data.state {
+        // The first time we use `OneOf` in a conditional statement, we need
+        // to specify the number of `OneOf` variants used - 3 in this case.
+        // This works around a rustc inference issue.
+        IsEven::Initial | IsEven::Even => OneOf3::A(flex((
+            sequence_button("1", IsEven::Odd),
+            sequence_button("_", IsEven::Success),
+        ))),
+        // Subsequent branches can instead use the overarching `OneOf` type,
+        // meaning that they don't need to change if additional branches are added.
+        IsEven::Odd => OneOf::B(flex((
+            sequence_button("1", IsEven::Even),
+            sequence_button("_", IsEven::Halt),
+        ))),
+        // These branches can use the same variant of `OneOf`, because
+        // they both have the same view type (`Label`).
+        IsEven::Halt => OneOf::C(label("Failure! Tally total was odd.")),
+        IsEven::Success => OneOf::C(label("Success! Tally total was even.")),
+    }
+}
+
+/// A button component which transitions to a specified `target_state`
+/// and appends its value to the history when pressed.
+fn sequence_button(value: &'static str, target_state: IsEven) -> impl WidgetView<StateMachine> {
+    button(value, move |app_data: &mut StateMachine| {
+        app_data.state = target_state;
+        app_data.history.push_str(value);
+    })
+}
+
+fn app_logic(app_data: &mut StateMachine) -> impl WidgetView<StateMachine> + use<> {
+    flex((
+        button("Reset", |app_data: &mut StateMachine| {
+            app_data.history.clear();
+            app_data.state = IsEven::Initial;
+        }),
+        prose(&*app_data.history),
+        label(format!("Current state: {:?}", app_data.state)),
+        // TODO: Make `spinner` not need a `sized_box` to appear.
+        sized_box(spinner()).height(40.).width(40.),
+        state_machine(app_data),
+        // TODO: When we have a canvas widget, visualise the entire state machine here.
+    ))
+    .padding(15.0)
+}
+
+fn main() -> Result<(), EventLoopError> {
+    let app_data = StateMachine {
+        state: IsEven::Initial,
+        history: String::new(),
+    };
+    let app = Xilem::new_simple(app_data, app_logic, WindowOptions::new("Centered Flex"));
+    app.run_in(EventLoop::with_user_event())?;
+    Ok(())
+}
+</file>
+<file name="xilem-examples/memoization.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! You can use memoization to avoid allocations.
+
+use std::sync::Arc;
+
+use xilem::core::{frozen, memoize};
+use xilem::view::{button, flex};
+use xilem::{AnyWidgetView, EventLoop, WidgetView, WindowOptions, Xilem};
+
+// There are currently two ways to do memoization
+
+struct AppState {
+    count: i32,
+    increase_button: MemoizedArcView<i32>,
+}
+
+#[derive(Default)]
+struct MemoizedArcView<D> {
+    data: D,
+    // When TAITs are stabilized this can be a non-erased concrete type
+    view: Option<Arc<AnyWidgetView<AppState>>>,
+}
+
+// The following is an example to do memoization with an Arc
+fn increase_button(state: &mut AppState) -> Arc<AnyWidgetView<AppState>> {
+    if state.count != state.increase_button.data || state.increase_button.view.is_none() {
+        let view = Arc::new(button(
+            format!("current count is {}", state.count),
+            |state: &mut AppState| {
+                state.count += 1;
+            },
+        ));
+        state.increase_button.data = state.count;
+        state.increase_button.view = Some(view.clone());
+        view
+    } else {
+        state.increase_button.view.as_ref().unwrap().clone()
+    }
+}
+
+// This is the alternative with Memoize
+// Note how this requires a closure that returns the memoized view, while Arc does not
+fn decrease_button(state: &AppState) -> impl WidgetView<AppState> + use<> {
+    memoize(state.count, |count| {
+        button(
+            format!("decrease the count: {count}"),
+            |data: &mut AppState| data.count -= 1,
+        )
+    })
+}
+
+fn reset_button() -> impl WidgetView<AppState> {
+    // The contents of this view never changes, so we use `frozen` to avoid unnecessary rebuilds.
+    // This is a special case of memoization for when the view doesn't depend on any data.
+    frozen(|| button("reset", |data: &mut AppState| data.count = 0))
+}
+
+fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
+    flex((
+        increase_button(state),
+        decrease_button(state),
+        reset_button(),
+    ))
+}
+
+fn main() {
+    let data = AppState {
+        count: 0,
+        increase_button: MemoizedArcView::default(),
+    };
+
+    let app = Xilem::new_simple(data, app_logic, WindowOptions::new("Memoization"));
+    app.run_in(EventLoop::with_user_event()).unwrap();
+}
+</file>
+<file name="xilem-examples/external_event_loop.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! Shows driving a Xilem application from a pre-existing Winit event loop.
+//! Currently, this supports running as its own window alongside an existing application, or
+//! accessing raw events from winit.
+//! Support for more custom embeddings would be welcome, but needs more design work
+
+use masonry::properties::types::{CrossAxisAlignment, MainAxisAlignment};
+use masonry::theme::default_property_set;
+use masonry_winit::app::{AppDriver, MasonryUserEvent};
+use winit::application::ApplicationHandler;
+use winit::error::EventLoopError;
+use winit::event::ElementState;
+use winit::keyboard::{KeyCode, PhysicalKey};
+use xilem::view::{Label, button, flex_row, label, sized_box};
+use xilem::{EventLoop, WidgetView, WindowOptions, Xilem};
+
+/// A component to make a bigger than usual button
+fn big_button(
+    label: impl Into<Label>,
+    callback: impl Fn(&mut i32) + Send + Sync + 'static,
+) -> impl WidgetView<i32> {
+    sized_box(button(label, callback)).width(40.).height(40.)
+}
+
+fn app_logic(data: &mut i32) -> impl WidgetView<i32> + use<> {
+    flex_row((
+        big_button("-", |data| {
+            *data -= 1;
+        }),
+        label(format!("count: {data}")).text_size(32.),
+        big_button("+", |data| {
+            *data += 1;
+        }),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Center)
+    .main_axis_alignment(MainAxisAlignment::Center)
+}
+
+/// An application not managed by Xilem, but which wishes to embed Xilem.
+struct ExternalApp {
+    masonry_state: masonry_winit::app::MasonryState<'static>,
+    app_driver: Box<dyn AppDriver>,
+}
+
+impl ApplicationHandler<MasonryUserEvent> for ExternalApp {
+    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.masonry_state
+            .handle_resumed(event_loop, &mut *self.app_driver);
+    }
+
+    fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.masonry_state.handle_suspended(event_loop);
+    }
+
+    fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.masonry_state.handle_about_to_wait(event_loop);
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        window_id: winit::window::WindowId,
+        event: winit::event::WindowEvent,
+    ) {
+        self.masonry_state.handle_window_event(
+            event_loop,
+            window_id,
+            event,
+            self.app_driver.as_mut(),
+        );
+    }
+
+    fn user_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        event: MasonryUserEvent,
+    ) {
+        self.masonry_state
+            .handle_user_event(event_loop, event, self.app_driver.as_mut());
+    }
+
+    fn device_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        device_id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
+        // Handle the escape key to exit the app outside of masonry/xilem
+        if let winit::event::DeviceEvent::Key(key) = &event {
+            if key.state == ElementState::Pressed
+                && key.physical_key == PhysicalKey::Code(KeyCode::Escape)
+            {
+                event_loop.exit();
+                return;
+            }
+        }
+
+        self.masonry_state.handle_device_event(
+            event_loop,
+            device_id,
+            event,
+            self.app_driver.as_mut(),
+        );
+    }
+
+    fn new_events(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        cause: winit::event::StartCause,
+    ) {
+        self.masonry_state.handle_new_events(event_loop, cause);
+    }
+
+    fn exiting(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.masonry_state.handle_exiting(event_loop);
+    }
+
+    fn memory_warning(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.masonry_state.handle_memory_warning(event_loop);
+    }
+}
+
+fn main() -> Result<(), EventLoopError> {
+    let window_size = winit::dpi::LogicalSize::new(800.0, 800.0);
+    let window_options = WindowOptions::new("External event loop").with_min_inner_size(window_size);
+
+    let xilem = Xilem::new_simple(0, app_logic, window_options);
+
+    let event_loop = EventLoop::with_user_event().build().unwrap();
+    let proxy = event_loop.create_proxy();
+    let (driver, windows) =
+        xilem.into_driver_and_windows(move |event| proxy.send_event(event).map_err(|err| err.0));
+    let masonry_state = masonry_winit::app::MasonryState::new(
+        event_loop.create_proxy(),
+        windows,
+        default_property_set(),
+    );
+
+    let mut app = ExternalApp {
+        masonry_state,
+        app_driver: Box::new(driver),
+    };
+    event_loop.run_app(&mut app)
+}
+</file>
+<file name="xilem-examples/virtual_cats.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! An example demonstrating the use of virtual scrolling with Async web requests in Xilem
+//!
+//! Uses the same dataset as the `http_cats` example.
+
+#![expect(clippy::missing_assert_message, reason = "Deferred: Noisy")]
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use masonry::core::ArcStr;
+use masonry::properties::types::UnitPoint;
+use masonry::properties::{LineBreaking, Padding};
+use vello::peniko::{Blob, Image};
+use winit::dpi::LogicalSize;
+use winit::error::EventLoopError;
+use xilem::core::fork;
+use xilem::style::Style as _;
+use xilem::view::{
+    ObjectFit, ZStackExt, flex, image, prose, sized_box, spinner, virtual_scroll, zstack,
+};
+use xilem::{EventLoop, EventLoopBuilder, TextAlign, WidgetView, WindowOptions, Xilem, palette};
+use xilem_core::one_of::Either;
+
+/// The main state of the application.
+struct VirtualCats {
+    statuses: Vec<Status>,
+}
+
+#[derive(Debug)]
+struct Status {
+    code: u32,
+    message: ArcStr,
+    image: ImageState,
+}
+
+#[derive(Debug)]
+/// The state of the download of an image from a URL
+enum ImageState {
+    Pending,
+    // Error(?),
+    Available(Image),
+}
+
+impl VirtualCats {
+    fn virtual_item(&mut self, idx: i64) -> impl WidgetView<Self> + use<> {
+        let index: usize = idx.try_into().expect("VirtualScroll bounds set correctly.");
+        let item = self
+            .statuses
+            .get_mut(index)
+            .expect("VirtualScroll bounds set correctly.");
+        let img = match &item.image {
+            ImageState::Pending => None,
+            ImageState::Available(image) => Some(image),
+        };
+        let task = if img.is_none() {
+            // Capturing the code is valid here, because this will never change for this view.
+            let code = item.code;
+            // If the cat is not loaded yet, we create a task to load it.
+            // N.B. If we wanted to batch requests, the lifecycle unfortunately gets a
+            // lot more complicated currently.
+            // Note that if this item scrolls offscreen, the ongoing load will be cancelled.
+            Some(xilem::view::task_raw(
+                move |proxy| {
+                    async move {
+                        let url = format!("https://http.cat/{code}");
+                        // Add an artificial delay to show how variable sizes work
+                        tokio::time::sleep(Duration::from_millis(300)).await;
+                        let result = image_from_url(&url).await;
+                        match result {
+                            // We choose not to handle the case where the event loop has ended
+                            Ok(image) => drop(proxy.message(image)),
+                            // TODO: Report in the frontend
+                            Err(err) => {
+                                tracing::warn!(
+                                    "Loading image for HTTP status code {code} from {url} failed: {err:?}"
+                                );
+                            }
+                        }
+                    }
+                },
+                move |state: &mut Self, image| {
+                    if let Some(status) = state.statuses.iter_mut().find(|it| it.code == code) {
+                        status.image = ImageState::Available(image);
+                    } else {
+                        unreachable!("We never remove items from `statuses`")
+                    }
+                },
+            ))
+        } else {
+            None
+        };
+        let img = if let Some(img) = img {
+            let attribution = sized_box(
+                sized_box(
+                    prose("Copyright ©️ https://http.cat")
+                        .line_break_mode(LineBreaking::Clip)
+                        .text_alignment(TextAlign::End),
+                )
+                .padding(4.)
+                .corner_radius(4.)
+                .background_color(palette::css::BLACK.multiply_alpha(0.5)),
+            )
+            .padding(Padding {
+                left: 0.,
+                right: 42.,
+                top: 30.,
+                bottom: 0.,
+            });
+            Either::A(zstack((
+                image(img).fit(ObjectFit::FitWidth),
+                attribution.alignment(UnitPoint::TOP_RIGHT),
+            )))
+        } else {
+            Either::B(sized_box(spinner()).width(80.).height(80.))
+        };
+        fork(flex((prose(item.message.clone()), img)), task)
+    }
+
+    fn view(&mut self) -> impl WidgetView<Self> + use<> {
+        sized_box(virtual_scroll(
+            0..self.statuses.len() as i64,
+            Self::virtual_item,
+        ))
+        .padding(Padding::horizontal(10.0))
+    }
+}
+
+/// Load a [`vello::peniko::Image`] from the given url.
+async fn image_from_url(url: &str) -> anyhow::Result<Image> {
+    let response = reqwest::get(url).await?;
+    let bytes = response.bytes().await?;
+    let image = image::load_from_memory(&bytes)?.into_rgba8();
+    let width = image.width();
+    let height = image.height();
+    let data = image.into_vec();
+    Ok(Image::new(
+        Blob::new(Arc::new(data)),
+        vello::peniko::ImageFormat::Rgba8,
+        width,
+        height,
+    ))
+}
+
+fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
+    let data = VirtualCats {
+        statuses: Status::parse_file(),
+    };
+
+    let app = Xilem::new_simple(
+        data,
+        VirtualCats::view,
+        WindowOptions::new("Virtualised HTTP cats")
+            .with_min_inner_size(LogicalSize::new(200., 200.)),
+    );
+
+    app.run_in(event_loop)
+}
+
+impl Status {
+    /// Parse the supported HTTP cats.
+    fn parse_file() -> Vec<Self> {
+        let mut lines = STATUS_CODES_CSV.lines();
+        let first_line = lines.next();
+        assert_eq!(first_line, Some("code,message"));
+        lines.flat_map(Self::parse_single).collect()
+    }
+
+    fn parse_single(line: &'static str) -> Option<Self> {
+        let (code, message) = line.split_once(',')?;
+        Some(Self {
+            code: code.parse().ok()?,
+            message: format!("{}:", message.trim()).into(),
+            image: ImageState::Pending,
+        })
+    }
+}
+
+/// The status codes supported by <https://http.cat>, used under the MIT license.
+/// Full details can be found in `xilem/resources/data/http_cats_status/README.md` from
+/// the workspace root.
+const STATUS_CODES_CSV: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/resources/data/http_cats_status/status.csv",
+));
+
+// TODO: This example doesn't support Android because the virtual scroll component doesn't have gesture support.
+fn main() -> Result<(), EventLoopError> {
+    run(EventLoop::with_user_event())
+}
+</file>
+<file name="xilem-examples/variable_clock.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! This example uses variable fonts in a touch sensitive digital clock.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use time::error::IndeterminateOffset;
+use time::macros::format_description;
+use time::{OffsetDateTime, UtcOffset};
+use winit::error::EventLoopError;
+use xilem::core::fork;
+use xilem::style::Style as _;
+use xilem::view::{
+    FlexExt, FlexSpacer, button, flex, flex_row, inline_prose, label, portal, prose, sized_box,
+    task, variable_label,
+};
+use xilem::{
+    Blob, EventLoop, EventLoopBuilder, FontWeight, WidgetView, WindowOptions, Xilem, palette,
+};
+
+/// The state of the application, owned by Xilem and updated by the callbacks below.
+struct Clocks {
+    /// The font [weight](FontWeight) used for the values.
+    weight: f32,
+    /// The current UTC offset on this machine.
+    local_offset: Result<UtcOffset, IndeterminateOffset>,
+    /// The current time.
+    now_utc: OffsetDateTime,
+}
+
+/// A possible timezone, with an offset from UTC.
+struct TimeZone {
+    /// An approximate region which this offset applies to.
+    region: &'static str,
+    /// The offset from UTC
+    offset: UtcOffset,
+}
+
+fn app_logic(data: &mut Clocks) -> impl WidgetView<Clocks> + use<> {
+    let view = flex((
+        // HACK: We add a spacer at the top for Android. See https://github.com/rust-windowing/winit/issues/2308
+        FlexSpacer::Fixed(40.),
+        local_time(data),
+        controls(),
+        portal(flex(
+            // TODO: When we get responsive layouts, move this into a two-column view on desktop.
+            TIMEZONES.iter().map(|it| it.view(data)).collect::<Vec<_>>(),
+        ))
+        .flex(1.),
+    ))
+    .padding(10.0);
+    fork(
+        view,
+        task(
+            |proxy| async move {
+                // TODO: Synchronise with the actual "second" interval. This is expected to show the wrong second
+                // ~50% of the time.
+                let mut interval = tokio::time::interval(Duration::from_secs(1));
+                loop {
+                    interval.tick().await;
+                    let Ok(()) = proxy.message(()) else {
+                        break;
+                    };
+                }
+            },
+            |data: &mut Clocks, ()| data.now_utc = OffsetDateTime::now_utc(),
+        ),
+    )
+}
+
+/// Shows the current system time on a best-effort basis.
+// TODO: Maybe make this have a larger font size?
+fn local_time(data: &mut Clocks) -> impl WidgetView<Clocks> + use<> {
+    let (error_view, offset) = if let Ok(offset) = data.local_offset {
+        (None, offset)
+    } else {
+        (
+            Some(
+                prose("Could not determine local UTC offset, using UTC")
+                    .text_color(palette::css::ORANGE_RED),
+            ),
+            UtcOffset::UTC,
+        )
+    };
+
+    flex((
+        TimeZone {
+            region: "Here",
+            offset,
+        }
+        .view(data),
+        error_view,
+    ))
+}
+
+/// Controls for the variable font weight.
+fn controls() -> impl WidgetView<Clocks> {
+    flex_row((
+        button("Increase", |data: &mut Clocks| {
+            data.weight = (data.weight + 100.).clamp(1., 1000.);
+        }),
+        button("Decrease", |data: &mut Clocks| {
+            data.weight = (data.weight - 100.).clamp(1., 1000.);
+        }),
+        button("Minimum", |data: &mut Clocks| {
+            data.weight = 1.;
+        }),
+        button("Maximum", |data: &mut Clocks| {
+            data.weight = 1000.;
+        }),
+    ))
+}
+
+impl TimeZone {
+    /// Display this timezone as a row, designed to be shown in a list of time zones.
+    fn view(&self, data: &mut Clocks) -> impl WidgetView<Clocks> + use<> {
+        let date_time_in_self = data.now_utc.to_offset(self.offset);
+        sized_box(flex((
+            flex_row((
+                inline_prose(self.region),
+                FlexSpacer::Flex(1.),
+                label(format!("UTC{}", self.offset)).color(
+                    if data.local_offset.is_ok_and(|it| it == self.offset) {
+                        // TODO: Consider accessibility here.
+                        palette::css::ORANGE
+                    } else {
+                        masonry::theme::TEXT_COLOR
+                    },
+                ),
+            ))
+            .must_fill_major_axis(true)
+            .flex(1.),
+            flex_row((
+                variable_label(
+                    date_time_in_self
+                        .format(format_description!("[hour repr:24]:[minute]:[second]"))
+                        .unwrap()
+                        .to_string(),
+                )
+                .text_size(48.)
+                // Use the roboto flex we have just loaded.
+                .font("Roboto Flex")
+                .target_weight(data.weight, 400.),
+                FlexSpacer::Flex(1.0),
+                (data.local_now().date() != date_time_in_self.date()).then(|| {
+                    label(
+                        date_time_in_self
+                            .format(format_description!("([day] [month repr:short])"))
+                            .unwrap(),
+                    )
+                }),
+            )),
+        )))
+        .expand_width()
+        .height(72.)
+    }
+}
+
+impl Clocks {
+    fn local_now(&self) -> OffsetDateTime {
+        match self.local_offset {
+            Ok(offset) => self.now_utc.to_offset(offset),
+            Err(_) => self.now_utc,
+        }
+    }
+}
+
+/// A subset of [Roboto Flex](https://fonts.google.com/specimen/Roboto+Flex), used under the OFL.
+/// This is a variable font, and so can have its axes be animated.
+/// The version in the repository supports the numbers 0-9 and `:`, to this examples use of
+/// it for clocks.
+/// Full details can be found in `xilem/resources/fonts/roboto_flex/README` from
+/// the workspace root.
+const ROBOTO_FLEX: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/resources/fonts/roboto_flex/",
+    // The full font file is *not* included in this repository, due to size constraints.
+    // If you download the full font, you can use it by moving it into the roboto_flex folder,
+    // then swapping which of the following two lines is commented out:
+    // "RobotoFlex-VariableFont_GRAD,XOPQ,XTRA,YOPQ,YTAS,YTDE,YTFI,YTLC,YTUC,opsz,slnt,wdth,wght.ttf",
+    "RobotoFlex-Subset.ttf"
+));
+
+fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
+    let data = Clocks {
+        weight: FontWeight::BLACK.value(),
+        // TODO: We can't get this on Android, because
+        local_offset: UtcOffset::current_local_offset(),
+        now_utc: OffsetDateTime::now_utc(),
+    };
+
+    // Load Roboto Flex so that it can be used at runtime.
+    let app = Xilem::new_simple(data, app_logic, WindowOptions::new("Clocks"))
+        .with_font(Blob::new(Arc::new(ROBOTO_FLEX)));
+
+    app.run_in(event_loop)?;
+    Ok(())
+}
+
+/// A shorthand for creating a [`TimeZone`].
+const fn tz(region: &'static str, offset: i8) -> TimeZone {
+    TimeZone {
+        region,
+        offset: match UtcOffset::from_hms(offset, 0, 0) {
+            Ok(it) => it,
+            Err(_) => {
+                panic!("Component out of range.");
+            }
+        },
+    }
+}
+
+/// A static list of timezones to display. All regions selected do not observe daylight savings time.
+///
+/// The timezones were determined on 2024-08-14.
+const TIMEZONES: &[TimeZone] = &[
+    tz("Hawaii", -10),
+    tz("Pitcairn Islands", -8),
+    tz("Arizona", -7),
+    tz("Saskatchewan", -6),
+    tz("Peru", -5),
+    tz("Barbados", -4),
+    tz("Martinique", -4),
+    tz("Uruguay", -3),
+    tz("Iceland", 0),
+    tz("Tunisia", 1),
+    tz("Mozambique", 2),
+    tz("Qatar", 3),
+    tz("Azerbaijan", 4),
+    tz("Pakistan", 5),
+    tz("Bangladesh", 6),
+    tz("Thailand", 7),
+    tz("Singapore", 8),
+    tz("Japan", 9),
+    tz("Queensland", 10),
+    tz("Tonga", 13),
+];
+
+// Boilerplate code: Identical across all applications which support Android
+
+#[expect(clippy::allow_attributes, reason = "No way to specify the condition")]
+#[allow(dead_code, reason = "False positive: needed in not-_android version")]
+// This is treated as dead code by the Android version of the example, but is actually live
+// This hackery is required because Cargo doesn't care to support this use case, of one
+// example which works across Android and desktop
+fn main() -> Result<(), EventLoopError> {
+    run(EventLoop::with_user_event())
+}
+#[cfg(target_os = "android")]
+// Safety: We are following `android_activity`'s docs here
+#[expect(
+    unsafe_code,
+    reason = "We believe that there are no other declarations using this name in the compiled objects here"
+)]
+#[unsafe(no_mangle)]
+fn android_main(app: winit::platform::android::activity::AndroidApp) {
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+
+    let mut event_loop = EventLoop::with_user_event();
+    event_loop.with_android_app(app);
+
+    run(event_loop).expect("Can create app");
+}
+</file>
+<file name="xilem-examples/emoji_picker.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! A simple emoji picker.
+
+use winit::error::EventLoopError;
+use xilem::core::map_state;
+use xilem::style::Style as _;
+use xilem::view::{
+    Axis, FlexExt, FlexSpacer, GridExt, button, flex, flex_row, grid, label, prose, sized_box,
+};
+use xilem::{
+    Color, EventLoop, EventLoopBuilder, TextAlign, WidgetView, WindowOptions, Xilem, palette,
+};
+
+fn app_logic(data: &mut EmojiPagination) -> impl WidgetView<EmojiPagination> + use<> {
+    flex((
+        FlexSpacer::Fixed(50.), // Padding because of the info bar on Android
+        flex_row((
+            // TODO: Expose that this is a "zoom out" button accessibly
+            button("🔍-", |data: &mut EmojiPagination| {
+                data.size = (data.size + 1).min(5);
+            }),
+            // TODO: Expose that this is a "zoom in" button accessibly
+            button("🔍+", |data: &mut EmojiPagination| {
+                data.size = (data.size - 1).max(2);
+            }),
+        )),
+        picker(data).flex(1.0),
+        map_state(
+            paginate(
+                data.start_index,
+                (data.size * data.size) as usize,
+                data.emoji.len(),
+            ),
+            |state: &mut EmojiPagination| &mut state.start_index,
+        ),
+        data.last_selected
+            .map(|idx| label(format!("Selected: {}", data.emoji[idx].display)).text_size(40.)),
+        FlexSpacer::Fixed(10.),
+    ))
+    .direction(Axis::Vertical)
+    .must_fill_major_axis(true)
+}
+
+fn picker(data: &mut EmojiPagination) -> impl WidgetView<EmojiPagination> + use<> {
+    let mut grid_items = vec![];
+    'outer: for y in 0..data.size as usize {
+        let row_idx = data.start_index + y * data.size as usize;
+        for x in 0..data.size as usize {
+            let idx = row_idx + x;
+            let emoji = data.emoji.get(idx);
+            let Some(emoji) = emoji else {
+                // There are no more emoji, no point still looping
+                break 'outer;
+            };
+            let view = flex((
+                // TODO: Expose that this button corresponds to the label below for accessibility?
+                sized_box(button(
+                    label(emoji.display).text_size(200.0 / data.size as f32),
+                    move |data: &mut EmojiPagination| {
+                        data.last_selected = Some(idx);
+                    },
+                ))
+                .expand_width(),
+                sized_box(
+                    prose(emoji.name)
+                        .text_alignment(TextAlign::Center)
+                        .text_color(if data.last_selected.is_some_and(|it| it == idx) {
+                            // TODO: Ensure this selection indicator color is accessible
+                            // TODO: Expose selected state to accessibility tree
+                            palette::css::BLUE
+                        } else {
+                            Color::WHITE
+                        }),
+                )
+                .expand_width(),
+            ))
+            .must_fill_major_axis(true);
+            grid_items.push(view.grid_pos(x.try_into().unwrap(), y.try_into().unwrap()));
+        }
+    }
+
+    grid(
+        grid_items,
+        data.size.try_into().unwrap(),
+        data.size.try_into().unwrap(),
+    )
+    .spacing(10.0)
+    .padding(20.0)
+}
+
+fn paginate(
+    current_start: usize,
+    count_per_page: usize,
+    max_count: usize,
+) -> impl WidgetView<usize> {
+    let current_end = (current_start + count_per_page).min(max_count);
+    let percentage_start = (current_start * 100) / max_count;
+    let percentage_end = (current_end * 100) / max_count;
+
+    flex_row((
+        // TODO: Expose that this is a previous page button to accessibility
+        button(label("⬅️").text_size(24.0), move |data| {
+            *data = current_start.saturating_sub(count_per_page);
+        })
+        .disabled(current_start == 0),
+        label(format!("{percentage_start}% - {percentage_end}%")),
+        button(label("➡️").text_size(24.0), move |data| {
+            let new_idx = current_start + count_per_page;
+            if new_idx < max_count {
+                *data = new_idx;
+            }
+        })
+        .disabled(current_end == max_count),
+    ))
+}
+
+struct EmojiPagination {
+    size: u32,
+    last_selected: Option<usize>,
+    start_index: usize,
+    emoji: Vec<EmojiInfo>,
+}
+
+fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
+    let emoji = EmojiInfo::parse_file();
+    let data = EmojiPagination {
+        size: 4,
+        last_selected: None,
+        start_index: 0,
+        emoji,
+    };
+
+    let app = Xilem::new_simple(data, app_logic, WindowOptions::new("Emoji picker"));
+    app.run_in(event_loop)
+}
+
+struct EmojiInfo {
+    name: &'static str,
+    display: &'static str,
+}
+
+impl EmojiInfo {
+    /// Parse the supported emoji's information.
+    fn parse_file() -> Vec<Self> {
+        let mut lines = EMOJI_NAMES_CSV.lines();
+        let first_line = lines.next();
+        assert_eq!(
+            first_line,
+            Some("display,name"),
+            "Probably wrong CSV-like file"
+        );
+        lines.flat_map(Self::parse_single).collect()
+    }
+
+    fn parse_single(line: &'static str) -> Option<Self> {
+        let (display, name) = line.split_once(',')?;
+        Some(Self { display, name })
+    }
+}
+
+/// A subset of emoji data from <https://github.com/iamcal/emoji-data>, used under the MIT license.
+/// Full details can be found in `xilem/resources/data/emoji_names/README.md` from
+/// the workspace root.
+const EMOJI_NAMES_CSV: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/resources/data/emoji_names/emoji.csv",
+));
+
+// Boilerplate code: Identical across all applications which support Android
+
+#[expect(clippy::allow_attributes, reason = "No way to specify the condition")]
+#[allow(dead_code, reason = "False positive: needed in not-_android version")]
+// This is treated as dead code by the Android version of the example, but is actually live
+// This hackery is required because Cargo doesn't care to support this use case, of one
+// example which works across Android and desktop
+fn main() -> Result<(), EventLoopError> {
+    run(EventLoop::with_user_event())
+}
+#[cfg(target_os = "android")]
+// Safety: We are following `android_activity`'s docs here
+#[expect(
+    unsafe_code,
+    reason = "We believe that there are no other declarations using this name in the compiled objects here"
+)]
+#[unsafe(no_mangle)]
+fn android_main(app: winit::platform::android::activity::AndroidApp) {
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+
+    let mut event_loop = EventLoop::with_user_event();
+    event_loop.with_android_app(app);
+
+    run(event_loop).expect("Can create app");
+}
+</file>
+<file name="xilem-examples/lists.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! Displaying a variable length list is achieved using a [Vec] `FlexSequence`.
+
+use winit::error::EventLoopError;
+use xilem::view::{Axis, MainAxisAlignment, button, flex, prose};
+use xilem::{EventLoop, WidgetView, WindowOptions, Xilem};
+
+#[derive(Default)]
+struct AppState {
+    count: usize,
+}
+
+fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
+    // A vector (Vec) of views can be used as part of a `flex`'s children, allowing collections of dynamic length to be displayed.
+    let list = (0..state.count)
+        .map(|n| prose(format!("item #{n}")))
+        .collect::<Vec<_>>();
+
+    flex((
+        // Even when a `Vec` is used for the children, other widgets can be included by putting them in a
+        // tuple of children alongside the vector.
+        button("more", |appstate: &mut AppState| appstate.count += 1),
+        list,
+    ))
+    .direction(Axis::Vertical) // Top to Bottom
+    // We can control alignment of the elements in the flexbox
+    .main_axis_alignment(MainAxisAlignment::Start) // Aligned to the left
+}
+
+fn main() -> Result<(), EventLoopError> {
+    let app = Xilem::new_simple(AppState::default(), app_logic, WindowOptions::new("Lists"));
+    app.run_in(EventLoop::with_user_event())?;
+    Ok(())
+}
+</file>
+<file name="xilem-examples/transforms.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! The transform for all views can be modified similar to CSS transforms.
+
+use std::f64::consts::{PI, TAU};
+
+use winit::error::EventLoopError;
+use xilem::style::Style as _;
+use xilem::view::{GridExt as _, button, grid, label, sized_box, transformed};
+use xilem::{Affine, Color, EventLoop, Vec2, WidgetView, WindowOptions, Xilem};
+
+struct TransformsGame {
+    rotation: f64,
+    translation: Vec2,
+    scale: f64,
+}
+
+impl TransformsGame {
+    fn view(&mut self) -> impl WidgetView<Self> + use<> {
+        let rotation_correct = (self.rotation % TAU).abs() < 0.001;
+        let scale_correct = self.scale >= 0.99 && self.scale <= 1.01;
+        let translation_correct = self.translation.x == 0.0 && self.translation.y == 0.0;
+        let everything_correct = rotation_correct && scale_correct && translation_correct;
+
+        let status = if everything_correct {
+            label("Great success!")
+                .color(Color::new([0.0, 0.0, 1.0, 1.0]))
+                .text_size(30.0)
+        } else {
+            let rotation_mark = if rotation_correct { "✓" } else { "⨯" };
+            let scale_mark = if scale_correct { "✓" } else { "⨯" };
+            let translation_mark = if translation_correct { "✓" } else { "⨯" };
+            label(format!(
+                "rotation: {rotation_mark}\nscale: {scale_mark}\ntranslation: {translation_mark}"
+            ))
+        };
+
+        let bg_color = if everything_correct {
+            [0.0, 1.0, 0.0, 1.0]
+        } else {
+            [1.0, 0.0, 0.0, 0.2]
+        };
+
+        let status = sized_box(status).background_color(Color::new(bg_color));
+        // Every view can be transformed similar as with CSS transforms in the web.
+        // Currently only 2D transforms are supported.
+        // Note that the order of the transformations is relevant.
+        let transformed_status = transformed(
+            // In an actual app, you wouldn't use both `transformed` and `.transform`.
+            // This is here to validate that Xilem's support for nested `Transformed`
+            // values works as expected.
+            status.transform(Affine::translate(self.translation)),
+        )
+        .rotate(self.rotation)
+        .scale(self.scale);
+
+        let controls = (
+            button("↶", |this: &mut Self| {
+                this.rotation -= PI * 0.125;
+            })
+            .grid_pos(0, 0),
+            button("↑", |this: &mut Self| {
+                this.translation.y -= 10.0;
+            })
+            .grid_pos(1, 0),
+            button("↷", |this: &mut Self| {
+                this.rotation += PI * 0.125;
+            })
+            .grid_pos(2, 0),
+            button("←", |this: &mut Self| {
+                this.translation.x -= 10.0;
+            })
+            .grid_pos(0, 1),
+            button("→", |this: &mut Self| {
+                this.translation.x += 10.0;
+            })
+            .grid_pos(2, 1),
+            button("-", |this: &mut Self| {
+                // 2 ^ (1/3) for 3 clicks to reach the target.
+                this.scale /= 1.2599210498948732;
+            })
+            .grid_pos(0, 2),
+            button("↓", |this: &mut Self| {
+                this.translation.y += 10.0;
+            })
+            .grid_pos(1, 2),
+            button("+", |this: &mut Self| {
+                this.scale *= 1.2599210498948732;
+            })
+            .grid_pos(2, 2),
+        );
+
+        grid((controls, transformed_status.grid_pos(1, 1)), 3, 3)
+    }
+}
+
+fn main() -> Result<(), EventLoopError> {
+    let app = Xilem::new_simple(
+        TransformsGame {
+            rotation: PI * 0.25,
+            translation: Vec2::new(20.0, 30.0),
+            scale: 2.0,
+        },
+        TransformsGame::view,
+        WindowOptions::new("Transforms"),
+    );
+    app.run_in(EventLoop::with_user_event())?;
+    Ok(())
+}
+</file>
+<file name="xilem-examples/components.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! Modularizing state can be done with `lens` which allows using modular components.
+
+use winit::error::EventLoopError;
+use xilem::core::lens;
+use xilem::view::{MainAxisAlignment, button, flex, flex_row, label};
+use xilem::{EventLoop, WidgetView, WindowOptions, Xilem};
+
+#[derive(Default)]
+struct AppState {
+    modularized_count: i32,
+    global_count: i32,
+}
+
+fn modular_counter(count: &mut i32) -> impl WidgetView<i32> + use<> {
+    flex((
+        label(format!("modularized count: {count}")),
+        button("+", |count| *count += 1),
+        button("-", |count| *count -= 1),
+    ))
+}
+
+fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
+    flex_row((
+        lens(modular_counter, |state: &mut AppState| {
+            &mut state.modularized_count
+        }),
+        button(
+            format!("clicked {} times", state.global_count),
+            |state: &mut AppState| state.global_count += 1,
+        ),
+    ))
+    .main_axis_alignment(MainAxisAlignment::Center)
+}
+
+fn main() -> Result<(), EventLoopError> {
+    let app = Xilem::new_simple(
+        AppState::default(),
+        app_logic,
+        WindowOptions::new("Components"),
+    );
+    app.run_in(EventLoop::with_user_event())?;
+    Ok(())
+}
+</file>
+<file name="xilem-examples/flex.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! Flex properties can be set in Xilem.
+
+use masonry::properties::types::{CrossAxisAlignment, MainAxisAlignment};
+use winit::error::EventLoopError;
+use xilem::view::{FlexExt as _, FlexSpacer, Label, button, flex_row, label, sized_box};
+use xilem::{EventLoop, WidgetView, WindowOptions, Xilem};
+
+/// A component to make a bigger than usual button
+fn big_button(
+    label: impl Into<Label>,
+    callback: impl Fn(&mut i32) + Send + Sync + 'static,
+) -> impl WidgetView<i32> {
+    sized_box(button(label, callback)).width(40.).height(40.)
+}
+
+fn app_logic(data: &mut i32) -> impl WidgetView<i32> + use<> {
+    flex_row((
+        FlexSpacer::Fixed(30.0),
+        big_button("-", |data| {
+            *data -= 1;
+        }),
+        FlexSpacer::Flex(1.0),
+        label(format!("count: {data}")).text_size(32.).flex(5.0),
+        FlexSpacer::Flex(1.0),
+        big_button("+", |data| {
+            *data += 1;
+        }),
+        FlexSpacer::Fixed(30.0),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Center)
+    .main_axis_alignment(MainAxisAlignment::Center)
+}
+
+fn main() -> Result<(), EventLoopError> {
+    let app = Xilem::new_simple(0, app_logic, WindowOptions::new("Centered Flex"));
+    app.run_in(EventLoop::with_user_event())?;
+    Ok(())
+}
+</file>
+<file name="xilem-examples/elm.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! Xilem supports several patterns for creating modular components.
+//! You can also emulate the elm architecture for a subset of your app.
+//! Though usually it's more idiomatic to modularize state with `map_state` and update state directly within event callbacks, as seen in the `components` example.
+
+use masonry::properties::types::{CrossAxisAlignment, MainAxisAlignment};
+use xilem::core::{MessageResult, map_action};
+use xilem::view::{button, flex, flex_row, label};
+use xilem::winit::dpi::LogicalSize;
+use xilem::winit::error::EventLoopError;
+use xilem::{EventLoop, WidgetView, WindowOptions, Xilem};
+use xilem_core::{lens, map_message};
+
+#[derive(Default)]
+struct AppState {
+    map_message_count: i32,
+    map_action_count: i32,
+}
+
+enum CountMessage {
+    Increment,
+    Decrement,
+}
+
+// `map_action()` is basically how elm works, i.e. provide a message that the parent view has to handle to update the state.
+// In this case the parent adjusts the count that is given to this view according to the message
+fn elm_counter<T: 'static>(count: i32) -> impl WidgetView<T, CountMessage> {
+    flex((
+        label(format!("elm count: {count}")),
+        button("+", |_| CountMessage::Increment),
+        button("-", |_| CountMessage::Decrement),
+    ))
+}
+
+/// A View Action type recording how the counter changed in [`map_message_counter`].
+enum CounterChanged {
+    Changed,
+    Reset,
+    Nop,
+}
+
+// `map_message` is the most flexible but also most verbose way to modularize the views by action.
+// It's very similar to `map_action`, but it also allows to change the `MessageResult` for the parent view
+fn map_message_counter(count: i32) -> impl WidgetView<i32, CounterChanged> {
+    flex_row((
+        flex((
+            label(format!("map_message count: {count}")),
+            button("+", |count| {
+                *count += 1;
+                CounterChanged::Changed
+            }),
+            button("-", |count| {
+                *count -= 1;
+                CounterChanged::Changed
+            }),
+        )),
+        flex((
+            button("reset all", |_| CounterChanged::Reset),
+            button("do nothing (and don't rebuild the view tree)", |_| {
+                CounterChanged::Nop
+            }),
+        )),
+    ))
+}
+
+fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
+    flex_row((
+        map_action(
+            elm_counter(state.map_action_count),
+            |state: &mut AppState, message| match message {
+                CountMessage::Increment => state.map_action_count += 1,
+                CountMessage::Decrement => state.map_action_count -= 1,
+            },
+        ),
+        map_message(
+            lens(
+                |count| map_message_counter(*count),
+                |state: &mut AppState| &mut state.map_message_count,
+            ),
+            |state: &mut AppState, message| {
+                match message {
+                    MessageResult::Action(CounterChanged::Reset) => {
+                        state.map_message_count = 0;
+                        state.map_action_count = 0;
+                        MessageResult::Action(())
+                    }
+                    MessageResult::Action(CounterChanged::Nop) => MessageResult::Nop, // nothing changed, don't rebuild view tree
+                    message_result => message_result.map(|_| ()), // just convert the result to `MessageResult<()>`
+                }
+            },
+        ),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Center)
+    .main_axis_alignment(MainAxisAlignment::Center)
+}
+
+fn main() -> Result<(), EventLoopError> {
+    let app = Xilem::new_simple(
+        AppState::default(),
+        app_logic,
+        WindowOptions::new("Elm").with_min_inner_size(LogicalSize::new(600., 800.)),
+    );
+    app.run_in(EventLoop::with_user_event())?;
+    Ok(())
+}
+</file>
+<file name="xilem-examples/mason.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! A playground used in the development for new Xilem Masonry features.
+
+// On Windows platform, don't show a console when opening the app.
+#![windows_subsystem = "windows"]
+
+use std::time::Duration;
+
+use winit::error::EventLoopError;
+use xilem::core::{Resource, fork, provides, run_once, with_context, without_elements};
+use xilem::style::Style as _;
+use xilem::tokio::time;
+use xilem::view::{
+    Axis, FlexExt as _, FlexSpacer, PointerButton, button, button_any_pointer, checkbox, flex,
+    flex_row, label, prose, task, text_input,
+};
+use xilem::{
+    EventLoop, EventLoopBuilder, FontWeight, InsertNewline, TextAlign, WidgetView, WindowOptions,
+    Xilem, palette,
+};
+
+const LOREM: &str = r"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi cursus mi sed euismod euismod. Orci varius natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Nullam placerat efficitur tellus at semper. Morbi ac risus magna. Donec ut cursus ex. Etiam quis posuere tellus. Mauris posuere dui et turpis mollis, vitae luctus tellus consectetur. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur eu facilisis nisl.
+
+Phasellus in viverra dolor, vitae facilisis est. Maecenas malesuada massa vel ultricies feugiat. Vivamus venenatis et nibh nec pharetra. Phasellus vestibulum elit enim, nec scelerisque orci faucibus id. Vivamus consequat purus sit amet orci egestas, non iaculis massa porttitor. Vestibulum ut eros leo. In fermentum convallis magna in finibus. Donec justo leo, maximus ac laoreet id, volutpat ut elit. Mauris sed leo non neque laoreet faucibus. Aliquam orci arcu, faucibus in molestie eget, ornare non dui. Donec volutpat nulla in fringilla elementum. Aliquam vitae ante egestas ligula tempus vestibulum sit amet sed ante. ";
+
+#[derive(Debug)]
+struct SomeContext(u32);
+impl Resource for SomeContext {}
+
+/// A test for using resources.
+///
+/// Requires the `SomeContext` resource to be [provided](provides).
+fn env_using() -> impl WidgetView<AppData> + use<> {
+    with_context(|context: &mut SomeContext, _: &mut AppData| {
+        button(format!("Context: {}", context.0), |_: &mut AppData| {
+            tracing::warn!("Does nothing");
+        })
+    })
+}
+
+fn app_logic(data: &mut AppData) -> impl WidgetView<AppData> + use<> {
+    // here's some logic, deriving state for the view from our state
+    let count = data.count;
+    let button_label = if count == 1 {
+        "clicked 1 time".to_string()
+    } else {
+        format!("clicked {count} times")
+    };
+
+    // The actual UI Code starts here
+
+    let axis = if data.active {
+        Axis::Horizontal
+    } else {
+        Axis::Vertical
+    };
+
+    let flex_sequence = (0..count)
+        .map(|x| {
+            (
+                button(format!("+{x}"), move |data: &mut AppData| data.count += x),
+                if data.active {
+                    FlexSpacer::Flex(x as f64)
+                } else {
+                    FlexSpacer::Fixed((count - x) as f64)
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let fizz_buzz_flex_sequence = [(3, "Fizz"), (5, "Buzz")].map(|c| {
+        if data.count.abs() % c.0 == 0 {
+            button(c.1, move |data: &mut AppData| {
+                data.count += 1;
+            })
+            .into_any_flex()
+        } else {
+            FlexSpacer::Fixed(10.0 * c.0 as f64).into_any_flex()
+        }
+    });
+
+    provides(
+        |_: &mut AppData| SomeContext(120),
+        fork(
+            flex((
+                env_using(),
+                flex_row((
+                    label("Label").color(palette::css::REBECCA_PURPLE),
+                    label("Bold Label").weight(FontWeight::BOLD),
+                    // TODO masonry doesn't allow setting disabled manually anymore?
+                    // label("Disabled label").disabled(),
+                )),
+                flex(
+                    text_input(
+                        data.text_input_contents.clone(),
+                        |data: &mut AppData, new_value| {
+                            data.text_input_contents = new_value;
+                        },
+                    )
+                    .insert_newline(InsertNewline::OnEnter),
+                )
+                // Manually adding a direction is equivalent to using flex_row
+                .direction(Axis::Horizontal),
+                prose(LOREM)
+                    .text_alignment(TextAlign::Center)
+                    .text_size(18.),
+                button_any_pointer(button_label, |data: &mut AppData, button| match button {
+                    None => {
+                        // Usually this is a touch.
+                    }
+                    Some(PointerButton::Primary) => data.count += 1,
+                    Some(PointerButton::Secondary) => data.count -= 1,
+                    Some(PointerButton::Auxiliary) => data.count *= 2,
+                    _ => (),
+                }),
+                checkbox("Check me", data.active, |data: &mut AppData, checked| {
+                    data.active = checked;
+                }),
+                toggleable(data),
+                env_using(),
+                button("Decrement", |data: &mut AppData| data.count -= 1),
+                button("Reset", |data: &mut AppData| data.count = 0),
+                flex((fizz_buzz_flex_sequence, flex_sequence)).direction(axis),
+            ))
+            .padding(8.0),
+            // The following `task` view only exists whilst the example is in the "active" state, so
+            // the updates it performs will only be running whilst we are in that state.
+            data.active.then(|| {
+                task(
+                    |proxy| async move {
+                        let mut interval = time::interval(Duration::from_secs(1));
+                        loop {
+                            interval.tick().await;
+                            let Ok(()) = proxy.message(()) else {
+                                break;
+                            };
+                        }
+                    },
+                    |data: &mut AppData, ()| {
+                        data.count += 1;
+                    },
+                )
+            }),
+        ),
+    )
+}
+
+fn toggleable(data: &mut AppData) -> impl WidgetView<AppData> + use<> {
+    if data.active {
+        provides(
+            |_| SomeContext(777),
+            flex_row((
+                button("Deactivate", |data: &mut AppData| {
+                    data.active = false;
+                }),
+                button("Unlimited Power", |data: &mut AppData| {
+                    data.count = -1_000_000;
+                }),
+                without_elements(run_once(|| {
+                    tracing::warn!("The pathway to unlimited power has been revealed");
+                })),
+                env_using(),
+            )),
+        )
+        .boxed()
+    } else {
+        button("Activate", |data: &mut AppData| data.active = true).boxed()
+    }
+}
+
+struct AppData {
+    text_input_contents: String,
+    count: i32,
+    active: bool,
+}
+
+fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
+    let data = AppData {
+        count: 0,
+        text_input_contents: "Not quite a placeholder".into(),
+        active: false,
+    };
+
+    Xilem::new_simple(data, app_logic, WindowOptions::new("mason")).run_in(event_loop)
+}
+
+// Boilerplate code: Identical across all applications which support Android
+
+#[expect(clippy::allow_attributes, reason = "No way to specify the condition")]
+#[allow(dead_code, reason = "False positive: needed in not-_android version")]
+// This is treated as dead code by the Android version of the example, but is actually live
+// This hackery is required because Cargo doesn't care to support this use case, of one
+// example which works across Android and desktop
+fn main() -> Result<(), EventLoopError> {
+    run(EventLoop::with_user_event())
+}
+#[cfg(target_os = "android")]
+// Safety: We are following `android_activity`'s docs here
+#[expect(
+    unsafe_code,
+    reason = "We believe that there are no other declarations using this name in the compiled objects here"
+)]
+#[unsafe(no_mangle)]
+fn android_main(app: winit::platform::android::activity::AndroidApp) {
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+
+    let mut event_loop = EventLoop::with_user_event();
+    event_loop.with_android_app(app);
+
+    run(event_loop).expect("Can create app");
+}
+</file>
+<file name="xilem-examples/to_do_mvc.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! A to-do-list app, loosely inspired by todomvc.
+
+// On Windows platform, don't show a console when opening the app.
+#![windows_subsystem = "windows"]
+
+use winit::error::EventLoopError;
+use xilem::style::Style as _;
+use xilem::view::{Axis, button, checkbox, flex, flex_row, text_input};
+use xilem::{EventLoop, EventLoopBuilder, InsertNewline, WidgetView, WindowOptions, Xilem};
+
+struct Task {
+    description: String,
+    done: bool,
+}
+
+struct TaskList {
+    next_task: String,
+    tasks: Vec<Task>,
+}
+
+impl TaskList {
+    fn add_task(&mut self) {
+        if self.next_task.is_empty() {
+            return;
+        }
+        self.tasks.push(Task {
+            description: std::mem::take(&mut self.next_task),
+            done: false,
+        });
+    }
+}
+
+fn app_logic(task_list: &mut TaskList) -> impl WidgetView<TaskList> + use<> {
+    let input_box = text_input(
+        task_list.next_task.clone(),
+        |task_list: &mut TaskList, new_value| {
+            task_list.next_task = new_value;
+        },
+    )
+    .insert_newline(InsertNewline::OnShiftEnter)
+    .on_enter(|task_list: &mut TaskList, _| {
+        task_list.add_task();
+    });
+    let first_line = flex((
+        input_box,
+        button("Add task".to_string(), |task_list: &mut TaskList| {
+            task_list.add_task();
+        }),
+    ))
+    .direction(Axis::Vertical);
+
+    let tasks = task_list
+        .tasks
+        .iter()
+        .enumerate()
+        .map(|(i, task)| {
+            let checkbox = checkbox(
+                task.description.clone(),
+                task.done,
+                move |data: &mut TaskList, checked| {
+                    data.tasks[i].done = checked;
+                },
+            );
+            let delete_button = button("Delete", move |data: &mut TaskList| {
+                data.tasks.remove(i);
+            });
+            flex_row((checkbox, delete_button))
+        })
+        .collect::<Vec<_>>();
+
+    flex((first_line, tasks)).padding(50.)
+}
+
+fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
+    let data = TaskList {
+        // Add a placeholder task for Android, whilst the
+        next_task: "My Next Task".into(),
+        tasks: vec![
+            Task {
+                description: "Buy milk".into(),
+                done: false,
+            },
+            Task {
+                description: "Buy eggs".into(),
+                done: true,
+            },
+            Task {
+                description: "Buy bread".into(),
+                done: false,
+            },
+        ],
+    };
+
+    let app = Xilem::new_simple(data, app_logic, WindowOptions::new("To Do MVC"));
+    app.run_in(event_loop)
+}
+
+// Boilerplate code: Identical across all applications which support Android
+
+#[expect(clippy::allow_attributes, reason = "No way to specify the condition")]
+#[allow(dead_code, reason = "False positive: needed in not-_android version")]
+// This is treated as dead code by the Android version of the example, but is actually live
+// This hackery is required because Cargo doesn't care to support this use case, of one
+// example which works across Android and desktop
+fn main() -> Result<(), EventLoopError> {
+    run(EventLoop::with_user_event())
+}
+#[cfg(target_os = "android")]
+// Safety: We are following `android_activity`'s docs here
+#[expect(
+    unsafe_code,
+    reason = "We believe that there are no other declarations using this name in the compiled objects here"
+)]
+#[unsafe(no_mangle)]
+fn android_main(app: winit::platform::android::activity::AndroidApp) {
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+
+    let mut event_loop = EventLoop::with_user_event();
+    event_loop.with_android_app(app);
+
+    run(event_loop).expect("Can create app");
+}
+</file>
+<file name="xilem-examples/multiple_windows.rs">// Copyright 2025 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! An example of an app with multiple windows.
+
+// On Windows platform, don't show a console when opening the app.
+#![windows_subsystem = "windows"]
+
+use std::collections::{BTreeMap, HashMap};
+
+use winit::error::EventLoopError;
+use xilem::view::{button, flex, label, text_input};
+use xilem::{
+    AnyWidgetView, AppState, EventLoop, EventLoopBuilder, WidgetView, WindowId, WindowOptions,
+    Xilem,
+};
+
+struct State {
+    new_counter_name: String,
+    counters: HashMap<WindowId, Counter>,
+    running: bool,
+    main_window_id: WindowId,
+}
+
+struct Counter {
+    name: String,
+    value: isize,
+}
+
+impl AppState for State {
+    fn keep_running(&self) -> bool {
+        self.running
+    }
+}
+
+fn app_logic(
+    state: &mut State,
+) -> impl Iterator<Item = (WindowId, WindowOptions<State>, Box<AnyWidgetView<State>>)> + use<> {
+    std::iter::once((
+        state.main_window_id,
+        WindowOptions::new("Multiple windows").on_close(|state: &mut State| {
+            state.running = false;
+        }),
+        flex((
+            label(format!(
+                "{:#?}",
+                state
+                    .counters
+                    .values()
+                    .map(|counter| (&counter.name, counter.value))
+                    .collect::<BTreeMap<_, _>>()
+            )),
+            text_input(
+                state.new_counter_name.clone(),
+                |state: &mut State, new_name| {
+                    state.new_counter_name = new_name;
+                },
+            ),
+            button("Add".to_string(), |state: &mut State| {
+                if state
+                    .counters
+                    .values()
+                    .any(|counter| counter.name == state.new_counter_name)
+                {
+                    // TODO: show error if name already exists
+                    return;
+                }
+                let name = std::mem::take(&mut state.new_counter_name);
+                state
+                    .counters
+                    .insert(WindowId::next(), Counter { name, value: 0 });
+            }),
+        ))
+        .boxed(),
+    ))
+    .chain(
+        state
+            .counters
+            .iter()
+            .map(|(window_id, Counter { name, value })| {
+                let window_id = *window_id;
+                (
+                    window_id,
+                    WindowOptions::new(name).on_close(move |state: &mut State| {
+                        state.counters.remove(&window_id);
+                    }),
+                    flex((
+                        label(format!("count: {value}")),
+                        button("+".to_string(), move |state: &mut State| {
+                            state.counters.get_mut(&window_id).unwrap().value += 1;
+                        }),
+                        button("-".to_string(), move |state: &mut State| {
+                            state.counters.get_mut(&window_id).unwrap().value -= 1;
+                        }),
+                    ))
+                    .boxed(),
+                )
+            }),
+    )
+    .collect::<Vec<_>>()
+    .into_iter()
+}
+
+fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
+    let data = State {
+        new_counter_name: String::new(),
+        counters: HashMap::new(),
+        running: true,
+        main_window_id: WindowId::next(),
+    };
+    let app = Xilem::new(data, app_logic);
+    app.run_in(event_loop)
+}
+
+fn main() -> Result<(), EventLoopError> {
+    run(EventLoop::with_user_event())
+}
+</file>
+<file name="xilem-examples/http_cats.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! An example demonstrating the use of Async web requests in Xilem to access the <https://http.cat/> API.
+//! This also demonstrates image loading.
+
+#![expect(clippy::missing_assert_message, reason = "Deferred: Noisy")]
+
+use std::sync::Arc;
+
+use masonry::properties::types::UnitPoint;
+use masonry::properties::{LineBreaking, Padding};
+use tokio::sync::mpsc::UnboundedSender;
+use vello::peniko::{Blob, Image};
+use winit::dpi::LogicalSize;
+use winit::error::EventLoopError;
+use xilem::core::fork;
+use xilem::core::one_of::OneOf3;
+use xilem::style::Style as _;
+use xilem::view::{
+    FlexSpacer, ZStackExt, button, flex, flex_row, image, inline_prose, portal, prose, sized_box,
+    spinner, split, worker, zstack,
+};
+use xilem::{EventLoop, EventLoopBuilder, TextAlign, WidgetView, WindowOptions, Xilem, palette};
+
+/// The main state of the application.
+struct HttpCats {
+    statuses: Vec<Status>,
+    // The currently active (http status) code.
+    selected_code: Option<u32>,
+    /// Send a status code to download the image for it.
+    download_sender: Option<UnboundedSender<u32>>,
+}
+
+#[derive(Debug)]
+struct Status {
+    code: u32,
+    message: &'static str,
+    image: ImageState,
+}
+
+#[derive(Debug)]
+/// The state of the download of an image from a URL
+enum ImageState {
+    NotRequested,
+    Pending,
+    // Error,
+    Available(Image),
+}
+
+impl HttpCats {
+    fn view(&mut self) -> impl WidgetView<Self> + use<> {
+        let left_column = portal(
+            flex((
+                prose("Status"),
+                self.statuses
+                    .iter_mut()
+                    .map(Status::list_view)
+                    .collect::<Vec<_>>(),
+            ))
+            .padding(Padding::left(5.)),
+        );
+
+        let info_area = if let Some(selected_code) = self.selected_code {
+            if let Some(selected_status) =
+                self.statuses.iter_mut().find(|it| it.code == selected_code)
+            {
+                OneOf3::A(selected_status.details_view())
+            } else {
+                OneOf3::B(
+                    prose(format!(
+                        "Status code {selected_code} selected, but this was not found."
+                    ))
+                    .text_alignment(TextAlign::Center)
+                    .text_color(palette::css::YELLOW),
+                )
+            }
+        } else {
+            OneOf3::C(
+                prose("No selection yet made. Select an item from the sidebar to continue.")
+                    .text_alignment(TextAlign::Center),
+            )
+        };
+
+        // TODO: Should `web_image` be a built-in component?
+
+        fork(
+            flex((
+                // Add padding to the top for Android. Still a horrible hack
+                FlexSpacer::Fixed(40.),
+                split(left_column, portal(sized_box(info_area).expand_width())).split_point(0.4),
+            ))
+            .must_fill_major_axis(true),
+            worker(
+                |proxy, mut rx| async move {
+                    while let Some(code) = rx.recv().await {
+                        let proxy = proxy.clone();
+                        tokio::task::spawn(async move {
+                            let url = format!("https://http.cat/{code}");
+                            let result = image_from_url(&url).await;
+                            match result {
+                                // We choose not to handle the case where the event loop has ended
+                                Ok(image) => drop(proxy.message((code, image))),
+                                // TODO: Report in the frontend
+                                Err(err) => {
+                                    tracing::warn!(
+                                        "Loading image for HTTP status code {code} from {url} failed: {err:?}"
+                                    );
+                                }
+                            }
+                        });
+                    }
+                },
+                |state: &mut Self, sender| {
+                    state.download_sender = Some(sender);
+                },
+                |state: &mut Self, (code, image): (u32, Image)| {
+                    if let Some(status) = state.statuses.iter_mut().find(|it| it.code == code) {
+                        status.image = ImageState::Available(image);
+                    } else {
+                        // TODO: Error handling?
+                    }
+                },
+            ),
+        )
+    }
+}
+
+/// Load a [`vello::peniko::Image`] from the given url.
+async fn image_from_url(url: &str) -> anyhow::Result<Image> {
+    let response = reqwest::get(url).await?;
+    let bytes = response.bytes().await?;
+    let image = image::load_from_memory(&bytes)?.into_rgba8();
+    let width = image.width();
+    let height = image.height();
+    let data = image.into_vec();
+    Ok(Image::new(
+        Blob::new(Arc::new(data)),
+        vello::peniko::ImageFormat::Rgba8,
+        width,
+        height,
+    ))
+}
+
+impl Status {
+    fn list_view(&mut self) -> impl WidgetView<HttpCats> + use<> {
+        let code = self.code;
+        flex_row((
+            // TODO: Reduce allocations here?
+            inline_prose(self.code.to_string()),
+            inline_prose(self.message),
+            FlexSpacer::Flex(1.),
+            // TODO: Spinner if image pending?
+            // TODO: Tick if image loaded?
+            button("Select", move |state: &mut HttpCats| {
+                let status = state
+                    .statuses
+                    .iter_mut()
+                    .find(|it| it.code == code)
+                    .unwrap();
+
+                if matches!(status.image, ImageState::NotRequested) {
+                    state.download_sender.as_ref().unwrap().send(code).unwrap();
+                    status.image = ImageState::Pending;
+                }
+
+                state.selected_code = Some(code);
+            }),
+            FlexSpacer::Fixed(masonry::theme::SCROLLBAR_WIDTH),
+        ))
+    }
+
+    fn details_view(&mut self) -> impl WidgetView<HttpCats> + use<> {
+        let image = match &self.image {
+            ImageState::NotRequested => OneOf3::A(
+                prose("Failed to start fetching image. This is a bug!")
+                    .text_alignment(TextAlign::Center),
+            ),
+            ImageState::Pending => OneOf3::B(sized_box(spinner()).width(80.).height(80.)),
+            // TODO: Alt text?
+            ImageState::Available(image_data) => {
+                let attribution = sized_box(
+                    sized_box(
+                        prose("Copyright ©️ https://http.cat")
+                            .line_break_mode(LineBreaking::Clip)
+                            .text_alignment(TextAlign::End),
+                    )
+                    .padding(4.)
+                    .corner_radius(4.)
+                    .background_color(palette::css::BLACK.multiply_alpha(0.5)),
+                )
+                .padding(Padding {
+                    left: 0.,
+                    right: 42.,
+                    top: 30.,
+                    bottom: 0.,
+                });
+                OneOf3::C(zstack((
+                    image(image_data),
+                    attribution.alignment(UnitPoint::TOP_RIGHT),
+                )))
+            }
+        };
+        flex((
+            prose(format!("HTTP Status Code: {}", self.code)).text_alignment(TextAlign::Center),
+            prose(self.message)
+                .text_size(20.)
+                .text_alignment(TextAlign::Center),
+            FlexSpacer::Fixed(10.),
+            image,
+        ))
+        .main_axis_alignment(xilem::view::MainAxisAlignment::Start)
+    }
+}
+
+fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
+    let data = HttpCats {
+        statuses: Status::parse_file(),
+        selected_code: None,
+        download_sender: None,
+    };
+
+    let app = Xilem::new_simple(
+        data,
+        HttpCats::view,
+        WindowOptions::new("HTTP cats").with_min_inner_size(LogicalSize::new(200., 200.)),
+    );
+
+    app.run_in(event_loop)
+}
+
+impl Status {
+    /// Parse the supported HTTP cats.
+    fn parse_file() -> Vec<Self> {
+        let mut lines = STATUS_CODES_CSV.lines();
+        let first_line = lines.next();
+        assert_eq!(first_line, Some("code,message"));
+        lines.flat_map(Self::parse_single).collect()
+    }
+
+    fn parse_single(line: &'static str) -> Option<Self> {
+        let (code, message) = line.split_once(',')?;
+        Some(Self {
+            code: code.parse().ok()?,
+            message: message.trim(),
+            image: ImageState::NotRequested,
+        })
+    }
+}
+
+/// The status codes supported by <https://http.cat>, used under the MIT license.
+/// Full details can be found in `xilem/resources/data/http_cats_status/README.md` from
+/// the workspace root.
+const STATUS_CODES_CSV: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/resources/data/http_cats_status/status.csv",
+));
+
+// Boilerplate code: Identical across all applications which support Android
+
+#[expect(clippy::allow_attributes, reason = "No way to specify the condition")]
+#[allow(dead_code, reason = "False positive: needed in not-_android version")]
+// This is treated as dead code by the Android version of the example, but is actually live
+// This hackery is required because Cargo doesn't care to support this use case, of one
+// example which works across Android and desktop
+fn main() -> Result<(), EventLoopError> {
+    run(EventLoop::with_user_event())
+}
+#[cfg(target_os = "android")]
+// Safety: We are following `android_activity`'s docs here
+#[expect(
+    unsafe_code,
+    reason = "We believe that there are no other declarations using this name in the compiled objects here"
+)]
+#[unsafe(no_mangle)]
+fn android_main(app: winit::platform::android::activity::AndroidApp) {
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+
+    let mut event_loop = EventLoop::with_user_event();
+    event_loop.with_android_app(app);
+
+    run(event_loop).expect("Can create app");
+}
+</file>
+<file name="xilem-examples/calc.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! A simple calculator example
+#![expect(clippy::cast_possible_truncation, reason = "Deferred: Noisy")]
+
+use masonry::properties::types::{CrossAxisAlignment, MainAxisAlignment};
+use masonry::widgets::GridParams;
+use winit::dpi::LogicalSize;
+use winit::error::EventLoopError;
+use xilem::style::Style;
+use xilem::view::{
+    Axis, Flex, FlexSequence, FlexSpacer, GridExt, GridSequence, Label, button, flex, grid, label,
+    sized_box,
+};
+use xilem::{Color, EventLoop, EventLoopBuilder, WidgetView, WindowOptions, Xilem, palette};
+
+#[derive(Copy, Clone)]
+enum MathOperator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+}
+
+impl MathOperator {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Add => "+",
+            Self::Subtract => "\u{2212}",
+            Self::Multiply => "×",
+            Self::Divide => "÷",
+        }
+    }
+
+    fn perform_op(self, num1: f64, num2: f64) -> f64 {
+        match self {
+            Self::Add => num1 + num2,
+            Self::Subtract => num1 - num2,
+            Self::Multiply => num1 * num2,
+            Self::Divide => num1 / num2,
+        }
+    }
+}
+
+struct Calculator {
+    current_num_index: usize,
+    clear_current_entry_on_input: bool, // For instances of negation used on a result.
+    numbers: [String; 2],
+    result: Option<String>,
+    operation: Option<MathOperator>,
+}
+
+impl Calculator {
+    fn get_current_number(&self) -> String {
+        self.current_number().to_string()
+    }
+
+    fn current_number(&self) -> &str {
+        &self.numbers[self.current_num_index]
+    }
+
+    fn set_current_number(&mut self, new_num: String) {
+        self.numbers[self.current_num_index] = new_num;
+    }
+
+    fn clear_all(&mut self) {
+        self.current_num_index = 0;
+        self.result = None;
+        self.operation = None;
+        for num in self.numbers.iter_mut() {
+            *num = "".into();
+        }
+    }
+
+    fn clear_entry(&mut self) {
+        self.clear_current_entry_on_input = false;
+        if self.result.is_some() {
+            self.clear_all();
+            return;
+        }
+        self.set_current_number("".into());
+    }
+
+    fn on_entered_digit(&mut self, digit: &str) {
+        if self.result.is_some() {
+            self.clear_all();
+        } else if self.clear_current_entry_on_input {
+            self.clear_entry();
+        }
+        let mut num = self.get_current_number();
+        // Special case: Don't allow more than one decimal.
+        if digit == "." {
+            if num.contains('.') {
+                // invalid action
+                return;
+            }
+            // Make it so you don't end up with just a decimal point
+            if num.is_empty() {
+                num = "0".into();
+            }
+            num += ".";
+        } else if num == "0" || num.is_empty() {
+            num = digit.to_string();
+        } else {
+            num += digit;
+        }
+        self.set_current_number(num);
+    }
+
+    fn on_entered_operator(&mut self, operator: MathOperator) {
+        self.clear_current_entry_on_input = false;
+        if self.operation.is_some() && !self.numbers[1].is_empty() {
+            if self.result.is_none() {
+                // All info is there to create a result, so calculate it.
+                self.on_equals();
+            }
+            // There is a result present, so put that on the left.
+            self.move_result_to_left();
+            self.current_num_index = 1;
+        } else if self.current_num_index == 0 {
+            if self.numbers[0].is_empty() {
+                // Not ready yet. Left number needed.
+                // invalid action
+                return;
+            } else {
+                self.current_num_index = 1;
+            }
+        }
+        self.operation = Some(operator);
+    }
+
+    /// For instances when you continue working with the prior result.
+    fn move_result_to_left(&mut self) {
+        self.clear_current_entry_on_input = true;
+        self.numbers[0] = self.result.clone().expect("expected result");
+        self.numbers[1] = "".into();
+        self.operation = None;
+        self.current_num_index = 0; // Moved to left
+        self.result = None; // It's moved, so remove the result.
+    }
+
+    fn on_equals(&mut self) {
+        // Requires both numbers be present
+        if self.numbers[0].is_empty() || self.numbers[1].is_empty() {
+            // invalid action
+            return; // Just abort.
+        } else if self.result.is_some() {
+            // Repeat the operation using the prior result on the left.
+            self.numbers[0] = self.result.clone().unwrap();
+        }
+        self.current_num_index = 0;
+        let num1 = self.numbers[0].parse::<f64>();
+        let num2 = self.numbers[1].parse::<f64>();
+        // Display format error or display the result of the operation.
+        self.result = Some(match (num1, num2) {
+            (Ok(num1), Ok(num2)) => self.operation.unwrap().perform_op(num1, num2).to_string(),
+            (Err(err), _) => err.to_string(),
+            (_, Err(err)) => err.to_string(),
+        });
+    }
+
+    fn on_delete(&mut self) {
+        if self.result.is_some() {
+            // Delete does not do anything with the result. Invalid action.
+            return;
+        }
+        let mut num = self.get_current_number();
+        if !num.is_empty() {
+            num.remove(num.len() - 1);
+            self.set_current_number(num);
+        } // else, invalid action
+    }
+
+    fn negate(&mut self) {
+        // If there is a result, negate that after clearing and moving it to the first number
+        if self.result.is_some() {
+            self.move_result_to_left();
+        }
+        let mut num = self.get_current_number();
+        if num.is_empty() {
+            // invalid action
+            return;
+        }
+        if num.starts_with('-') {
+            num.remove(0);
+        } else {
+            num = format!("-{num}");
+        }
+        self.set_current_number(num);
+    }
+}
+
+fn num_row(nums: [&'static str; 3], row: i32) -> impl GridSequence<Calculator> {
+    let mut views: Vec<_> = vec![];
+    for (i, num) in nums.iter().enumerate() {
+        views.push(digit_button(num).grid_pos(i as i32, row));
+    }
+    views
+}
+
+const DISPLAY_FONT_SIZE: f32 = 30.;
+const GRID_GAP: f64 = 2.;
+fn app_logic(data: &mut Calculator) -> impl WidgetView<Calculator> + use<> {
+    grid(
+        (
+            // Display
+            centered_flex_row((
+                FlexSpacer::Flex(0.1),
+                display_label(data.numbers[0].as_ref()),
+                data.operation
+                    .map(|operation| display_label(operation.as_str())),
+                display_label(data.numbers[1].as_ref()),
+                data.result.is_some().then(|| display_label("=")),
+                data.result
+                    .as_ref()
+                    .map(|result| display_label(result.as_ref())),
+                FlexSpacer::Flex(0.1),
+            ))
+            .grid_item(GridParams::new(0, 0, 4, 1)),
+            // Top row
+            expanded_button(
+                label("CE").color(if data.get_current_number().is_empty() {
+                    palette::css::MEDIUM_VIOLET_RED
+                } else {
+                    palette::css::WHITE
+                }),
+                Calculator::clear_entry,
+            )
+            .grid_pos(0, 1),
+            expanded_button("C", Calculator::clear_all).grid_pos(1, 1),
+            expanded_button("DEL", Calculator::on_delete).grid_pos(2, 1),
+            operator_button(MathOperator::Divide).grid_pos(3, 1),
+            num_row(["7", "8", "9"], 2),
+            operator_button(MathOperator::Multiply).grid_pos(3, 2),
+            num_row(["4", "5", "6"], 3),
+            operator_button(MathOperator::Subtract).grid_pos(3, 3),
+            num_row(["1", "2", "3"], 4),
+            operator_button(MathOperator::Add).grid_pos(3, 4),
+            // bottom row
+            expanded_button("±", Calculator::negate).grid_pos(0, 5),
+            digit_button("0").grid_pos(1, 5),
+            expanded_button(".", |data: &mut Calculator| {
+                data.on_entered_digit(".");
+            })
+            .grid_pos(2, 5),
+            expanded_button("=", Calculator::on_equals).grid_pos(3, 5),
+        ),
+        4,
+        6,
+    )
+    .spacing(GRID_GAP)
+}
+
+/// Creates a horizontal centered flex row designed for the display portion of the calculator.
+pub fn centered_flex_row<State, Seq: FlexSequence<State>>(sequence: Seq) -> Flex<Seq, State> {
+    flex(sequence)
+        .direction(Axis::Horizontal)
+        .cross_axis_alignment(CrossAxisAlignment::Center)
+        .main_axis_alignment(MainAxisAlignment::Start)
+        .gap(5.)
+}
+
+/// Returns a label intended to be used in the calculator's top display.
+/// The default text size is out of proportion for this use case.
+fn display_label(text: &str) -> impl WidgetView<Calculator> + use<> {
+    label(text).text_size(DISPLAY_FONT_SIZE)
+}
+
+/// Returns a button contained in an expanded box. Useful for the buttons so that
+/// they take up all available space in flex containers.
+fn expanded_button(
+    text: impl Into<Label>,
+    callback: impl Fn(&mut Calculator) + Send + Sync + 'static,
+) -> impl WidgetView<Calculator> {
+    const BLUE: Color = Color::from_rgb8(0x00, 0x8d, 0xdd);
+
+    sized_box(
+        button(text, callback)
+            .background_color(BLUE)
+            .corner_radius(10.)
+            .border_color(Color::TRANSPARENT)
+            .hovered_border_color(Color::WHITE),
+    )
+    .expand()
+}
+
+/// Returns an expanded button that triggers the calculator's operator handler,
+/// `on_entered_operator()`.
+fn operator_button(math_operator: MathOperator) -> impl WidgetView<Calculator> {
+    expanded_button(math_operator.as_str(), move |data: &mut Calculator| {
+        data.on_entered_operator(math_operator);
+    })
+}
+
+/// A button which adds `digit` to the current input when pressed
+fn digit_button(digit: &'static str) -> impl WidgetView<Calculator> {
+    const GRAY: Color = Color::from_rgb8(0x3a, 0x3a, 0x3a);
+
+    sized_box(
+        button(digit, |data: &mut Calculator| {
+            data.on_entered_digit(digit);
+        })
+        .background_color(GRAY)
+        .corner_radius(10.)
+        .border_color(Color::TRANSPARENT),
+    )
+    .expand()
+}
+
+fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
+    let data = Calculator {
+        current_num_index: 0,
+        clear_current_entry_on_input: false,
+        numbers: ["".into(), "".into()],
+        result: None,
+        operation: None,
+    };
+
+    let min_window_size = LogicalSize::new(200., 200.);
+    let window_size = LogicalSize::new(400., 500.);
+    let window_options = WindowOptions::new("Calculator").with_min_inner_size(min_window_size);
+    // On iOS, winit has unsensible handling of `inner_size`
+    // See https://github.com/rust-windowing/winit/issues/2308 for more details
+    #[cfg(not(target_os = "ios"))]
+    let window_options = window_options.with_initial_inner_size(window_size);
+    let app = Xilem::new_simple(data, app_logic, window_options);
+    app.run_in(event_loop)?;
+    Ok(())
+}
+
+// Boilerplate code: Identical across all applications which support Android
+
+#[expect(clippy::allow_attributes, reason = "No way to specify the condition")]
+#[allow(dead_code, reason = "False positive: needed in not-_android version")]
+// This is treated as dead code by the Android version of the example, but is actually live
+// This hackery is required because Cargo doesn't care to support this use case, of one
+// example which works across Android and desktop
+fn main() -> Result<(), EventLoopError> {
+    run(EventLoop::with_user_event())
+}
+#[cfg(target_os = "android")]
+// Safety: We are following `android_activity`'s docs here
+#[expect(
+    unsafe_code,
+    reason = "We believe that there are no other declarations using this name in the compiled objects here"
+)]
+#[unsafe(no_mangle)]
+fn android_main(app: winit::platform::android::activity::AndroidApp) {
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+
+    let mut event_loop = EventLoop::with_user_event();
+    event_loop.with_android_app(app);
+
+    run(event_loop).expect("Can create app");
+}
+</file>
+<file name="xilem-examples/widgets.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! A widget gallery for xilem/masonry
+
+use masonry::dpi::LogicalSize;
+use masonry_winit::app::{EventLoop, EventLoopBuilder};
+use winit::error::EventLoopError;
+use xilem::style::Style as _;
+use xilem::view::{
+    FlexSpacer, button, checkbox, flex, flex_row, indexed_stack, progress_bar, sized_box,
+};
+use xilem::{Color, WidgetView, WindowOptions, Xilem};
+use xilem_core::lens;
+
+const SPACER_WIDTH: f64 = 10.;
+
+/// The state of the entire application.
+///
+/// This is owned by Xilem, used to construct the view tree, and updated by event handlers.
+struct WidgetGallery {
+    tab: GalleryTab,
+    progress: Option<f64>,
+    checked: bool,
+}
+
+#[repr(usize)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GalleryTab {
+    Progress = 0,
+    Checkbox,
+}
+
+fn progress_bar_view(data: Option<f64>) -> impl WidgetView<Option<f64>> {
+    flex((
+        progress_bar(data),
+        checkbox(
+            "set indeterminate progress",
+            data.is_none(),
+            |state: &mut Option<f64>, checked| {
+                if checked {
+                    *state = None;
+                } else {
+                    *state = Some(0.5);
+                }
+            },
+        ),
+        button("change progress", |state: &mut Option<f64>| match state {
+            Some(v) => *v = (*v + 0.1).rem_euclid(1.),
+            None => *state = Some(0.5),
+        }),
+    ))
+}
+
+fn checkbox_view(data: bool) -> impl WidgetView<bool> {
+    checkbox("a simple checkbox", data, |data, new_state| {
+        *data = new_state;
+    })
+}
+
+/// Wrap `inner` in a box with a border
+fn border_box<State: 'static, Action: 'static>(
+    inner: impl WidgetView<State, Action>,
+) -> impl WidgetView<State, Action> {
+    sized_box(flex_row((
+        FlexSpacer::Flex(1.),
+        flex((FlexSpacer::Flex(1.), inner, FlexSpacer::Flex(1.))),
+        FlexSpacer::Flex(1.),
+    )))
+    .border(Color::WHITE, 2.)
+    .width(450.)
+    .height(200.)
+}
+
+/// Top-level view
+fn app_logic(data: &mut WidgetGallery) -> impl WidgetView<WidgetGallery> + use<> {
+    // Use a `sized_box` to pad the window contents
+    sized_box(
+        flex((
+            flex_row((
+                button("Progress", |data: &mut WidgetGallery| {
+                    data.tab = GalleryTab::Progress;
+                })
+                .disabled(data.tab == GalleryTab::Progress),
+                button("Checkbox", |data: &mut WidgetGallery| {
+                    data.tab = GalleryTab::Checkbox;
+                })
+                .disabled(data.tab == GalleryTab::Checkbox),
+            )),
+            indexed_stack((
+                lens(
+                    |progress| border_box(progress_bar_view(*progress)),
+                    |data: &mut WidgetGallery| &mut data.progress,
+                ),
+                lens(
+                    |checked| border_box(checkbox_view(*checked)),
+                    |data: &mut WidgetGallery| &mut data.checked,
+                ),
+            ))
+            .active(data.tab as usize),
+        ))
+        .gap(SPACER_WIDTH),
+    )
+    .padding(SPACER_WIDTH)
+}
+
+fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
+    // Set up the initial state of the app
+    let data = WidgetGallery {
+        tab: GalleryTab::Progress,
+        progress: Some(0.5),
+        checked: false,
+    };
+
+    // Instantiate and run the UI using the passed event loop.
+    let min_window_size = LogicalSize::new(300., 200.);
+    let window_size = LogicalSize::new(650., 500.);
+    let app = Xilem::new_simple(
+        data,
+        app_logic,
+        WindowOptions::new("Xilem widgets")
+            .with_min_inner_size(min_window_size)
+            .with_initial_inner_size(window_size),
+    );
+    app.run_in(event_loop)?;
+    Ok(())
+}
+
+// Boilerplate code: Identical across all applications which support Android
+
+#[expect(clippy::allow_attributes, reason = "No way to specify the condition")]
+#[allow(dead_code, reason = "False positive: needed in not-_android version")]
+// This is treated as dead code by the Android version of the example, but is actually live
+// This hackery is required because Cargo doesn't care to support this use case, of one
+// example which works across Android and desktop
+fn main() -> Result<(), EventLoopError> {
+    run(EventLoop::with_user_event())
+}
+#[cfg(target_os = "android")]
+// Safety: We are following `android_activity`'s docs here
+#[expect(
+    unsafe_code,
+    reason = "We believe that there are no other declarations using this name in the compiled objects here"
+)]
+#[unsafe(no_mangle)]
+fn android_main(app: winit::platform::android::activity::AndroidApp) {
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+
+    let mut event_loop = EventLoop::with_user_event();
+    event_loop.with_android_app(app);
+
+    run(event_loop).expect("Can create app");
+}
+</file>
+<file name="xilem-examples/stopwatch.rs">// Copyright 2024 the Xilem Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//! A stopwatch to display elapsed time.
+
+use std::ops::{Add, Sub};
+use std::time::{Duration, SystemTime};
+
+use masonry::dpi::LogicalSize;
+use masonry::properties::types::{CrossAxisAlignment, MainAxisAlignment};
+use masonry_winit::app::{EventLoop, EventLoopBuilder};
+use tokio::time;
+use tracing::warn;
+use winit::error::EventLoopError;
+use xilem::core::fork;
+use xilem::core::one_of::Either;
+use xilem::view::{FlexSequence, FlexSpacer, button, flex, flex_row, label, task};
+use xilem::{WidgetView, WindowOptions, Xilem};
+
+/// The state of the entire application.
+///
+/// This is owned by Xilem, used to construct the view tree, and updated by event handlers.
+struct Stopwatch {
+    active: bool,
+    /// The duration to add to the duration since the last instant.
+    /// This is needed since you can pause a timer, and we need to account for all
+    /// time the timer was active before the last start.
+    added_duration: Duration,
+    /// The absolute time of the last start for calculating elapsed time.
+    last_start_time: Option<SystemTime>,
+    /// The duration displayed; updated by by `update_display()`
+    displayed_duration: Duration,
+    /// An error string to display if there is an error.
+    displayed_error: String,
+    /// A list of the length of all completed splits. Does not include the current split.
+    completed_lap_splits: Vec<Duration>,
+    /// The duration of the main timer when the split was started.
+    split_start_time: Duration,
+}
+
+impl Stopwatch {
+    fn start(&mut self) {
+        self.last_start_time = Some(SystemTime::now());
+        self.active = true;
+        self.update_display();
+    }
+
+    fn stop(&mut self) {
+        let dur_since_last_instant = self
+            .last_start_time
+            .expect("stop should only be called when the start time is set")
+            .elapsed();
+        match dur_since_last_instant {
+            Ok(dur) => {
+                self.added_duration = self.added_duration.add(dur);
+                self.displayed_error = "".into();
+            }
+            Err(err) => {
+                self.displayed_error = format!("failed to calculate elapsed time: {err}");
+            }
+        }
+        self.last_start_time = None;
+        self.active = false;
+        self.update_display();
+    }
+
+    fn reset(&mut self) {
+        self.active = false;
+        self.last_start_time = None;
+        self.added_duration = Duration::ZERO;
+        self.completed_lap_splits.clear();
+        self.split_start_time = Duration::ZERO;
+        self.update_display();
+    }
+
+    fn lap(&mut self) {
+        let split_end = self.get_current_duration();
+        self.completed_lap_splits
+            .push(split_end.sub(self.split_start_time));
+        self.split_start_time = split_end;
+    }
+
+    fn get_current_duration(&self) -> Duration {
+        match self.last_start_time {
+            Some(last_start_time) => match last_start_time.elapsed() {
+                Ok(elapsed) => self.added_duration + elapsed,
+                Err(err) => {
+                    warn!("error calculating elapsed time: {}", err.to_string());
+                    self.added_duration
+                }
+            },
+            _ => self.added_duration,
+        }
+    }
+
+    fn update_display(&mut self) {
+        self.displayed_duration = self.get_current_duration();
+    }
+}
+
+fn get_formatted_duration(dur: Duration) -> String {
+    let seconds = dur.as_secs_f64() % 60.0;
+    let minutes = (dur.as_secs() / 60) % 60;
+    let hours = (dur.as_secs() / 60) / 60;
+    format!("{hours}:{minutes:0>2}:{seconds:0>4.1}")
+}
+
+fn app_logic(data: &mut Stopwatch) -> impl WidgetView<Stopwatch> + use<> {
+    fork(
+        flex((
+            FlexSpacer::Fixed(5.0),
+            label(get_formatted_duration(data.displayed_duration)).text_size(70.0),
+            flex_row((lap_reset_button(data), start_stop_button(data))),
+            FlexSpacer::Fixed(1.0),
+            laps_section(data),
+            label(data.displayed_error.as_ref()),
+        )),
+        data.active.then(|| {
+            // Only update while active.
+            task(
+                |proxy| async move {
+                    let mut interval = time::interval(Duration::from_millis(50));
+                    loop {
+                        interval.tick().await;
+                        let Ok(()) = proxy.message(()) else {
+                            break;
+                        };
+                    }
+                },
+                |data: &mut Stopwatch, ()| {
+                    data.update_display();
+                },
+            )
+        }),
+    )
+}
+
+/// Creates a list of items that shows the lap number, split time, and total cumulative time.
+fn laps_section(data: &mut Stopwatch) -> impl FlexSequence<Stopwatch> + use<> {
+    let mut items = Vec::new();
+    let mut total_dur = Duration::ZERO;
+    let current_lap = data.completed_lap_splits.len();
+    for (i, split_dur) in data.completed_lap_splits.iter().enumerate() {
+        total_dur = total_dur.add(*split_dur);
+        items.push(single_lap(i, *split_dur, total_dur));
+    }
+    let current_split_duration = data.get_current_duration().sub(total_dur);
+    // Add the current lap, which is not stored in completed_lap_splits
+    items.push(single_lap(
+        current_lap,
+        current_split_duration,
+        data.get_current_duration(),
+    ));
+    items.reverse();
+    items
+}
+
+fn single_lap(
+    lap_id: usize,
+    split_dur: Duration,
+    total_dur: Duration,
+) -> impl WidgetView<Stopwatch> {
+    flex_row((
+        FlexSpacer::Flex(1.0),
+        label(format!("Lap {}", lap_id + 1)),
+        label(get_formatted_duration(split_dur)),
+        label(get_formatted_duration(total_dur)),
+        FlexSpacer::Flex(1.0),
+    ))
+    .cross_axis_alignment(CrossAxisAlignment::Center)
+    .main_axis_alignment(MainAxisAlignment::Start)
+    .must_fill_major_axis(true)
+}
+
+fn start_stop_button(data: &mut Stopwatch) -> impl WidgetView<Stopwatch> + use<> {
+    if data.active {
+        Either::A(button("Stop", |data: &mut Stopwatch| {
+            data.stop();
+        }))
+    } else {
+        Either::B(button("Start", |data: &mut Stopwatch| {
+            data.start();
+        }))
+    }
+}
+
+fn lap_reset_button(data: &mut Stopwatch) -> impl WidgetView<Stopwatch> + use<> {
+    if data.active {
+        Either::A(button("  Lap  ", |data: &mut Stopwatch| {
+            data.lap();
+        }))
+    } else {
+        Either::B(button("Reset", |data: &mut Stopwatch| {
+            data.reset();
+        }))
+    }
+}
+
+fn run(event_loop: EventLoopBuilder) -> Result<(), EventLoopError> {
+    let mut data = Stopwatch {
+        active: false,
+        added_duration: Duration::ZERO,
+        last_start_time: None,
+        displayed_duration: Duration::ZERO,
+        displayed_error: "".into(),
+        completed_lap_splits: Vec::new(),
+        split_start_time: Duration::ZERO,
+    };
+    data.update_display();
+
+    let window_options = WindowOptions::new("Stopwatch")
+        .with_min_inner_size(LogicalSize::new(300., 200.))
+        .with_initial_inner_size(LogicalSize::new(450., 300.));
+    let app = Xilem::new_simple(data, app_logic, window_options);
+    app.run_in(event_loop)?;
+    Ok(())
+}
+
+// Boilerplate code: Identical across all applications which support Android
+
+#[expect(clippy::allow_attributes, reason = "No way to specify the condition")]
+#[allow(dead_code, reason = "False positive: needed in not-_android version")]
+// This is treated as dead code by the Android version of the example, but is actually live
+// This hackery is required because Cargo doesn't care to support this use case, of one
+// example which works across Android and desktop
+fn main() -> Result<(), EventLoopError> {
+    run(EventLoop::with_user_event())
+}
+#[cfg(target_os = "android")]
+// Safety: We are following `android_activity`'s docs here
+#[expect(
+    unsafe_code,
+    reason = "We believe that there are no other declarations using this name in the compiled objects here"
+)]
+#[unsafe(no_mangle)]
+fn android_main(app: winit::platform::android::activity::AndroidApp) {
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+
+    let mut event_loop = EventLoop::with_user_event();
+    event_loop.with_android_app(app);
+
+    run(event_loop).expect("Can create app");
+}
+</file>

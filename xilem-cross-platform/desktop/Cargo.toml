@@ -3,5 +3,5 @@ name = "xilem_example_desktop"
 edition.workspace = true
 
 [dependencies]
-xilem_example_app = { path = "../app" }
+graph_learning_app = { path = "../app" }
 winit.workspace = true

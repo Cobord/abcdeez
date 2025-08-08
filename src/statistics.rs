@@ -304,11 +304,11 @@ pub struct StrategyAnalysis {
     pub transition_point: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum StrategyType {
     SerialScan,
     DirectIndex,
-    Mixed(f64),
+    Mixed(i32), // Changed to i32 for Hash trait
 }
 
 impl StrategyAnalysis {
@@ -320,7 +320,7 @@ impl StrategyAnalysis {
         } else if correlation < 0.3 {
             StrategyType::DirectIndex
         } else {
-            StrategyType::Mixed(correlation)
+            StrategyType::Mixed((correlation * 100.0) as i32)
         };
 
         let transition_point = Self::find_strategy_transition(response_times, distances);

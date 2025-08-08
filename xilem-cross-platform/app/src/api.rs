@@ -1,0 +1,218 @@
+use anyhow::Result;
+use reqwest::{Client, Response};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use uuid::Uuid;
+
+use crate::models::*;
+
+pub struct ApiClient {
+    client: Client,
+    base_url: String,
+    auth_token: Arc<RwLock<Option<String>>>,
+}
+
+impl ApiClient {
+    pub fn new(base_url: String) -> Self {
+        Self {
+            client: Client::new(),
+            base_url,
+            auth_token: Arc::new(RwLock::new(None)),
+        }
+    }
+    
+    pub async fn set_auth_token(&self, token: String) {
+        let mut auth = self.auth_token.write().await;
+        *auth = Some(token);
+    }
+    
+    pub async fn clear_auth_token(&self) {
+        let mut auth = self.auth_token.write().await;
+        *auth = None;
+    }
+    
+    async fn get_auth_header(&self) -> Option<String> {
+        let auth = self.auth_token.read().await;
+        auth.as_ref().map(|token| format!("Bearer {}", token))
+    }
+    
+    async fn post<T: Serialize, R: DeserializeOwned>(&self, path: &str, body: &T) -> Result<R> {
+        let url = format!("{}{}", self.base_url, path);
+        let mut request = self.client.post(&url).json(body);
+        
+        if let Some(auth_header) = self.get_auth_header().await {
+            request = request.header("Authorization", auth_header);
+        }
+        
+        let response = request.send().await?;
+        
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            Err(anyhow::anyhow!("API request failed: {}", response.status()))
+        }
+    }
+    
+    async fn get<R: DeserializeOwned>(&self, path: &str) -> Result<R> {
+        let url = format!("{}{}", self.base_url, path);
+        let mut request = self.client.get(&url);
+        
+        if let Some(auth_header) = self.get_auth_header().await {
+            request = request.header("Authorization", auth_header);
+        }
+        
+        let response = request.send().await?;
+        
+        if response.status().is_success() {
+            Ok(response.json().await?)
+        } else {
+            Err(anyhow::anyhow!("API request failed: {}", response.status()))
+        }
+    }
+    
+    // Authentication endpoints
+    pub async fn login(&self, username: String, password: String) -> Result<User> {
+        let request = LoginRequest { username, password };
+        let response: serde_json::Value = self.post("/api/auth/login", &request).await?;
+        
+        // Extract token and user from response
+        if let Some(token) = response.get("token").and_then(|t| t.as_str()) {
+            self.set_auth_token(token.to_string()).await;
+        }
+        
+        if let Some(user_value) = response.get("user") {
+            Ok(serde_json::from_value(user_value.clone())?)
+        } else {
+            Err(anyhow::anyhow!("Invalid login response"))
+        }
+    }
+    
+    pub async fn register(&self, username: String, email: String, password: String) -> Result<User> {
+        let request = RegisterRequest { username, email, password };
+        let response: serde_json::Value = self.post("/api/auth/register", &request).await?;
+        
+        if let Some(token) = response.get("token").and_then(|t| t.as_str()) {
+            self.set_auth_token(token.to_string()).await;
+        }
+        
+        if let Some(user_value) = response.get("user") {
+            Ok(serde_json::from_value(user_value.clone())?)
+        } else {
+            Err(anyhow::anyhow!("Invalid registration response"))
+        }
+    }
+    
+    // Learner endpoints
+    pub async fn create_learner(&self, display_name: Option<String>) -> Result<Learner> {
+        let request = serde_json::json!({
+            "display_name": display_name,
+        });
+        self.post("/api/learners", &request).await
+    }
+    
+    pub async fn get_learner(&self, learner_id: &str) -> Result<Learner> {
+        self.get(&format!("/api/learners/{}", learner_id)).await
+    }
+    
+    // Session endpoints
+    pub async fn create_session(&self, learner_id: String, topology_type: String, topology_data: Option<serde_json::Value>) -> Result<Session> {
+        let request = CreateSessionRequest {
+            learner_id,
+            topology_type,
+            topology_data,
+        };
+        self.post("/api/sessions", &request).await
+    }
+    
+    pub async fn end_session(&self, session_id: &str) -> Result<Session> {
+        self.post(&format!("/api/sessions/{}/end", session_id), &serde_json::json!({})).await
+    }
+    
+    pub async fn get_session(&self, session_id: &str) -> Result<Session> {
+        self.get(&format!("/api/sessions/{}", session_id)).await
+    }
+    
+    // Response endpoints
+    pub async fn submit_response(&self, session_id: &str, response: SubmitResponseRequest) -> Result<TaskResponse> {
+        self.post(&format!("/api/sessions/{}/responses", session_id), &response).await
+    }
+    
+    pub async fn get_session_responses(&self, session_id: &str) -> Result<Vec<TaskResponse>> {
+        self.get(&format!("/api/sessions/{}/responses", session_id)).await
+    }
+    
+    // Analytics endpoints
+    pub async fn get_learner_performance(&self, learner_id: &str) -> Result<PerformanceMetrics> {
+        let responses: Vec<TaskResponse> = self.get(&format!("/api/learners/{}/responses", learner_id)).await?;
+        
+        let mut metrics = PerformanceMetrics::default();
+        for response in responses {
+            metrics.update(response.correct, response.response_time_ms);
+        }
+        
+        Ok(metrics)
+    }
+    
+    // Export endpoints
+    pub async fn export_learner_data(&self, learner_id: &str) -> Result<ExportData> {
+        let learner = self.get_learner(learner_id).await?;
+        let sessions: Vec<Session> = self.get(&format!("/api/learners/{}/sessions", learner_id)).await?;
+        let responses: Vec<TaskResponse> = self.get(&format!("/api/learners/{}/responses", learner_id)).await?;
+        
+        let mut metrics = PerformanceMetrics::default();
+        for response in &responses {
+            metrics.update(response.correct, response.response_time_ms);
+        }
+        
+        Ok(ExportData {
+            learner,
+            sessions,
+            responses,
+            metrics,
+            export_time: chrono::Utc::now(),
+        })
+    }
+}
+
+// Mock API client for testing without backend
+pub struct MockApiClient;
+
+impl MockApiClient {
+    pub fn new() -> Self {
+        Self
+    }
+    
+    pub async fn login(&self, username: String, _password: String) -> Result<User> {
+        Ok(User {
+            id: Uuid::new_v4().to_string(),
+            username,
+            email: "test@example.com".to_string(),
+            token: Some("mock_token".to_string()),
+        })
+    }
+    
+    pub async fn create_learner(&self, display_name: Option<String>) -> Result<Learner> {
+        Ok(Learner {
+            id: Uuid::new_v4().to_string(),
+            user_id: Some(Uuid::new_v4().to_string()),
+            display_name,
+            created_at: chrono::Utc::now(),
+            metadata: None,
+        })
+    }
+    
+    pub async fn create_session(&self, learner_id: String, topology_type: String, topology_data: Option<serde_json::Value>) -> Result<Session> {
+        Ok(Session {
+            id: Uuid::new_v4().to_string(),
+            learner_id,
+            topology_type,
+            topology_data,
+            start_time: chrono::Utc::now(),
+            end_time: None,
+            status: "active".to_string(),
+            summary: None,
+        })
+    }
+}
