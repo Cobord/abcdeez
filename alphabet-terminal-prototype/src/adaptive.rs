@@ -327,6 +327,7 @@ impl AdaptiveScheduler {
     }
 }
 
+#[allow(dead_code)]
 pub struct InformationGain {
     entropy_before: f64,
     entropy_after: f64,

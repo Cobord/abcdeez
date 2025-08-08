@@ -415,7 +415,7 @@ impl InterventionSystem {
         }
     }
     
-    pub fn process_response(&mut self, task: &Task, correct: bool, rt_ms: u64) {
+    pub fn process_response(&mut self, _task: &Task, correct: bool, rt_ms: u64) {
         self.struggle_detector.update(rt_ms, correct);
         self.difficulty_adapter.update(correct);
         

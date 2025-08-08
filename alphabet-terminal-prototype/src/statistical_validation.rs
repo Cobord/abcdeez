@@ -1,7 +1,6 @@
 use statrs::distribution::{ContinuousCDF, Normal, StudentsT, ChiSquared, FisherSnedecor};
-use statrs::statistics::{Statistics, OrderStatistics};
+use statrs::statistics::Statistics;
 use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
 
 /// Comprehensive statistical validation framework for the learning system
 pub struct StatisticalValidator {
@@ -110,9 +109,10 @@ impl StatisticalValidator {
         let n1 = group1.len();
         let n2 = group2.len();
         
-        if n1 < 2 || n2 < 2 {
+        // Check for minimum sample size
+        if n1 < self.min_sample_size || n2 < self.min_sample_size {
             return HypothesisTestResult {
-                test_name: "t-test".to_string(),
+                test_name: "t-test (insufficient sample size)".to_string(),
                 statistic: 0.0,
                 p_value: 1.0,
                 significant: false,
@@ -313,7 +313,7 @@ impl StatisticalValidator {
         let mut sorted = data.to_vec();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
         
-        let mean = data.mean();
+        let _mean = data.mean();
         let variance = data.variance();
         
         // Calculate W statistic (simplified)

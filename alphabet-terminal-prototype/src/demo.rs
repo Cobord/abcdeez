@@ -461,7 +461,7 @@ pub fn demonstrate_extended_tasks() {
     println!("═══════════════════════════════════════════════════\n");
 
     let topology = crate::topology::Topology::alphabet();
-    let mut ext_gen = crate::extended_tasks::ExtendedTaskGenerator::new(topology.clone());
+    let ext_gen = crate::extended_tasks::ExtendedTaskGenerator::new(topology.clone());
 
     println!("1. Between Query (3-way comparison):");
     println!("──────────────────────────────────────────────────");

@@ -22,6 +22,10 @@ pub mod demo;
 #[cfg(feature = "cli")]
 pub mod ui;
 
+// Test modules
+#[cfg(test)]
+mod tests;
+
 // Re-export commonly used types at the root level
 pub use topology::{Topology, TopologyType, Node, Edge};
 pub use learner::{LearnerModel, LearnerMetrics, OperationType};

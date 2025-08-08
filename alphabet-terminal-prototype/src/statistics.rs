@@ -116,7 +116,11 @@ pub struct ExGaussianModel {
 }
 
 impl ExGaussianModel {
-    pub fn new(mu: f64, sigma: f64, tau: f64) -> Self {
+    pub fn new(params: ExGaussianParameters) -> Self {
+        ExGaussianModel { params }
+    }
+    
+    pub fn from_params(mu: f64, sigma: f64, tau: f64) -> Self {
         ExGaussianModel {
             params: ExGaussianParameters { mu, sigma, tau },
         }
@@ -129,11 +133,11 @@ impl ExGaussianModel {
         let sigma = stats.std_dev * 0.8;
         let tau = stats.std_dev * 0.5;
 
-        ExGaussianModel::new(mu, sigma, tau)
+        ExGaussianModel::from_params(mu, sigma, tau)
     }
 
     pub fn pdf(&self, x: f64) -> f64 {
-        if self.params.tau <= 0.0 || self.params.sigma <= 0.0 {
+        if x < 0.0 || self.params.tau <= 0.0 || self.params.sigma <= 0.0 {
             return 0.0;
         }
 
@@ -166,12 +170,13 @@ impl ExGaussianModel {
             // For large negative values, erfc approaches 2
             2.0
         } else {
-            // Use the CDF of standard normal to compute erfc
-            // erfc(z) = 2 * (1 - Φ(z)) where Φ is the CDF of N(0,1)
-            2.0 * (1.0 - normal.cdf(erfc_arg))
+            // Use statrs to compute erfc
+            statrs::function::erf::erfc(erfc_arg)
         };
         
         // Calculate the result with additional stability checks
+        // The formula is: (λ/2) * exp(exp_arg) * erfc_val
+        // where exp_arg = (λ/2) * (2μ + λσ² - 2x)
         let result = (lambda / 2.0) * exp_arg.exp() * erfc_val;
         
         // Final sanity check to avoid NaN or Inf
@@ -188,6 +193,38 @@ impl ExGaussianModel {
 
     pub fn variance(&self) -> f64 {
         self.params.sigma.powi(2) + self.params.tau.powi(2)
+    }
+    
+    pub fn cdf(&self, x: f64) -> f64 {
+        if self.params.tau <= 0.0 || self.params.sigma <= 0.0 {
+            return 0.0;
+        }
+        
+        // Ex-Gaussian CDF has closed form:
+        // F(x) = Φ((x-μ)/σ) - exp((λ/2)*(2μ + λσ² - 2x)) * Φ((x - μ - λσ²)/σ)
+        let lambda = 1.0 / self.params.tau;
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        
+        // First term: Φ((x-μ)/σ)
+        let term1 = normal.cdf((x - self.params.mu) / self.params.sigma);
+        
+        // Second term exponential part
+        let exp_arg = (lambda / 2.0) * (2.0 * self.params.mu + lambda * self.params.sigma.powi(2) - 2.0 * x);
+        
+        // Prevent overflow
+        if exp_arg > 50.0 {
+            return 0.0; // exp would be huge, making second term dominate incorrectly
+        }
+        
+        // Second term normal CDF part
+        let term2_arg = (x - self.params.mu - lambda * self.params.sigma.powi(2)) / self.params.sigma;
+        let term2 = if exp_arg < -50.0 {
+            0.0 // exp is essentially 0
+        } else {
+            exp_arg.exp() * normal.cdf(term2_arg)
+        };
+        
+        (term1 - term2).max(0.0).min(1.0)
     }
 }
 
@@ -334,23 +371,28 @@ pub struct StrategyAnalysis {
     pub rt_distance_correlation: f64,
     pub strategy_classification: StrategyType,
     pub transition_point: Option<usize>,
+    pub correlation: f64,  // Add this field for test compatibility
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum StrategyType {
     SerialScan,
     DirectIndex,
-    Mixed(i32), // Changed to i32 for Hash trait
+    DirectAccess,  // Add for test compatibility
+    Hybrid,        // Add for test compatibility  
+    Mixed(i32),    // Changed to i32 for Hash trait
 }
 
 impl StrategyAnalysis {
     pub fn analyze(response_times: &[f64], distances: &[usize]) -> Self {
         let correlation = Self::calculate_correlation(response_times, distances);
         
-        let strategy_classification = if correlation > 0.7 {
+        let strategy_classification = if correlation > 0.8 {
             StrategyType::SerialScan
         } else if correlation < 0.3 {
-            StrategyType::DirectIndex
+            StrategyType::DirectAccess
+        } else if correlation < 0.8 && correlation > 0.3 {
+            StrategyType::Hybrid
         } else {
             StrategyType::Mixed((correlation * 100.0) as i32)
         };
@@ -361,6 +403,7 @@ impl StrategyAnalysis {
             rt_distance_correlation: correlation,
             strategy_classification,
             transition_point,
+            correlation,  // Use same value as rt_distance_correlation
         }
     }
 
@@ -425,6 +468,37 @@ impl StrategyAnalysis {
         } else {
             None
         }
+    }
+}
+
+pub struct ResponseTimeDistribution;
+
+impl ResponseTimeDistribution {
+    pub fn fit_ex_gaussian(data: &[f64]) -> ExGaussianParameters {
+        let model = ExGaussianModel::fit(data);
+        model.params
+    }
+    
+    pub fn detect_outliers(response_times: &[f64], z_threshold: f64) -> Vec<usize> {
+        if response_times.is_empty() {
+            return vec![];
+        }
+        
+        let mean = response_times.iter().sum::<f64>() / response_times.len() as f64;
+        let variance = response_times.iter()
+            .map(|x| (x - mean).powi(2))
+            .sum::<f64>() / response_times.len() as f64;
+        let std_dev = variance.sqrt();
+        
+        let mut outliers = Vec::new();
+        for (i, &rt) in response_times.iter().enumerate() {
+            let z_score = (rt - mean).abs() / std_dev;
+            if z_score > z_threshold {
+                outliers.push(i);
+            }
+        }
+        
+        outliers
     }
 }
 

@@ -69,7 +69,7 @@ impl LearnerModel {
                 node.id.clone(),
                 MemoryStrength {
                     node_id: node.id.clone(),
-                    strength: 0.0,
+                    strength: 0.5, // Start at neutral strength
                     last_practice: chrono::Utc::now(),
                 },
             );
@@ -93,7 +93,7 @@ impl LearnerModel {
                 key,
                 OperationProficiency {
                     operation: op,
-                    theta: -1.0,
+                    theta: 0.0, // Start at neutral (50% probability)
                     practice_count: 0,
                 },
             );
@@ -155,7 +155,16 @@ impl LearnerModel {
     }
 
     pub fn update_memory_strength(&mut self, node_id: &str, correct: bool) {
-        if let Some(mem) = self.memory_strengths.get_mut(node_id) {
+        // Handle both "A" and "node_0" formats
+        let key = if node_id.starts_with("node_") {
+            node_id.to_string()
+        } else {
+            // Convert letter to node_X format
+            let idx = (node_id.chars().next().unwrap_or('A') as usize) - ('A' as usize);
+            format!("node_{}", idx)
+        };
+        
+        if let Some(mem) = self.memory_strengths.get_mut(&key) {
             let now = chrono::Utc::now();
             let time_since = now.signed_duration_since(mem.last_practice);
             let hours_since = time_since.num_hours() as f64;

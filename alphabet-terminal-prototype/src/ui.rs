@@ -335,7 +335,7 @@ impl TerminalApp {
     }
 
     fn initialize_training(&mut self, topology: Topology) {
-        let learner_model = LearnerModel::new("user".to_string(), &topology);
+        let learner_model = LearnerModel::new(self.learner_name.clone(), &topology);
         let scheduler = AdaptiveScheduler::new(learner_model, topology.clone());
         let session = TaskSession::new(topology.clone());
         

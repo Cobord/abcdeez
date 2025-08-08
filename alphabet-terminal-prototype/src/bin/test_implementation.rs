@@ -1,4 +1,3 @@
-use graph_learning_core::*;
 use graph_learning_core::demo::*;
 
 fn main() {

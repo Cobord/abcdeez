@@ -3,7 +3,7 @@ use crate::tasks::{Task, TaskType};
 use crate::topology::Topology;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 
 /// Extended task types to complete paper specifications
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -616,6 +616,26 @@ impl ExtendedTaskGenerator {
         
         let pattern = self.identify_pattern(&sequence);
         
+        // Check if sequence matches any predefined macros
+        let mut options = vec![];
+        for (macro_name, macro_sequence) in &self.macros {
+            if macro_sequence == &sequence {
+                options.push(format!("Macro: {}", macro_name));
+            }
+        }
+        
+        // Add standard pattern options
+        options.extend(vec![
+            "Consecutive forward".to_string(),
+            "Consecutive backward".to_string(),
+            "Skip pattern".to_string(),
+            "Chunk boundary crossing".to_string(),
+            "Random sequence".to_string(),
+        ]);
+        
+        // Limit to 5 options
+        options.truncate(5);
+        
         Task {
             task_type: TaskType::Segment { 
                 start: sequence.first().unwrap_or(&"".to_string()).clone(),
@@ -624,13 +644,7 @@ impl ExtendedTaskGenerator {
             },
             prompt,
             correct_answer: pattern.clone(),
-            options: vec![
-                "Consecutive forward".to_string(),
-                "Consecutive backward".to_string(),
-                "Skip pattern".to_string(),
-                "Chunk boundary crossing".to_string(),
-                "Random sequence".to_string(),
-            ],
+            options,
             difficulty: 0.6,
             operation: OperationType::Segment(sequence.len(), false),
         }
@@ -906,10 +920,26 @@ impl TransferLearning {
     }
     
     pub fn transfer_task(&self, source_task: &Task) -> Option<Task> {
+        // Validate task is from source domain
+        let is_valid_source = match &source_task.task_type {
+            TaskType::Successor { item } | TaskType::Predecessor { item } => {
+                self.source_domain.nodes.iter().any(|n| &n.label == item)
+            }
+            _ => true
+        };
+        
+        if !is_valid_source {
+            return None;
+        }
+        
         // Map task from source to target domain
         match &source_task.task_type {
             TaskType::Successor { item } => {
                 if let Some(target_item) = self.mapping.get(item) {
+                    // Verify target item exists in target domain
+                    if !self.target_domain.nodes.iter().any(|n| &n.label == target_item) {
+                        return None;
+                    }
                     Some(Task {
                         task_type: TaskType::Successor { item: target_item.clone() },
                         prompt: source_task.prompt.replace(item, target_item),

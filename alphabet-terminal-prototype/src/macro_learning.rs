@@ -2,7 +2,7 @@ use crate::topology::Topology;
 use crate::tasks::{Task, TaskType};
 use crate::learner::OperationType;
 use serde::{Serialize, Deserialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use rand::seq::SliceRandom;
 
 /// Represents a discovered macro (sequence pattern) that can be reused
@@ -231,6 +231,11 @@ impl MacroDiscoverySystem {
     }
     
     fn determine_abstraction_level(&self, sequence: &[String]) -> AbstractionLevel {
+        // If abstraction is disabled, always return Concrete
+        if !self.abstraction_enabled {
+            return AbstractionLevel::Concrete;
+        }
+        
         // Check if all items are vowels or consonants
         let vowels = vec!["A", "E", "I", "O", "U"];
         let all_vowels = sequence.iter().all(|s| vowels.contains(&s.as_str()));
@@ -416,7 +421,7 @@ impl MacroDiscoverySystem {
         match &macro_def.abstraction_level {
             AbstractionLevel::Structural => {
                 // Apply structural pattern (e.g., chunk boundaries)
-                let mut result = vec![start.to_string()];
+                let result = vec![start.to_string()];
                 // Implementation depends on specific structural pattern
                 Some(result)
             }
@@ -465,12 +470,12 @@ impl MacroDiscoverySystem {
         
         // Off by one
         if correct_sequence.len() > 1 {
-            let mut off_by_one = correct_sequence[1..].to_vec();
+            let off_by_one = correct_sequence[1..].to_vec();
             options.push(off_by_one.join(", "));
         }
         
         // Random sequence
-        let mut random_seq = self.topology.nodes.iter()
+        let random_seq = self.topology.nodes.iter()
             .skip(rand::random::<usize>() % 10)
             .take(macro_def.pattern.len())
             .map(|n| n.label.clone())

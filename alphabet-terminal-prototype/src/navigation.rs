@@ -396,7 +396,7 @@ impl MultiHopNavigator {
         // Create constraints
         let anchor = &nodes[rand::random::<usize>() % nodes.len()].label;
         let dist1 = (rand::random::<usize>() % 5) + 1;
-        let dist2 = (rand::random::<usize>() % 5) + 1;
+        let _dist2 = (rand::random::<usize>() % 5) + 1;
         
         let valid = self.find_nodes_at_distances(vec![
             (anchor.clone(), dist1),

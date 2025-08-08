@@ -207,7 +207,7 @@ impl TransferLearningSystem {
             match pattern_type.as_str() {
                 "sequential" => {
                     // Boost sequential operation proficiencies
-                    for (op_key, prof) in &mut target.operation_proficiencies {
+                    for (_op_key, prof) in &mut target.operation_proficiencies {
                         if matches!(prof.operation, OperationType::Successor) {
                             prof.theta += strength * 0.5;
                         }

@@ -102,7 +102,7 @@ impl MusicTheory {
             
             // Calculate frequency (A4 = 440Hz)
             let a4_position = 9; // A is at position 9
-            let octave = 4;
+            let _octave = 4;
             let semitones_from_a4 = *pitch_class as i32 - a4_position;
             let frequency = 440.0 * 2.0_f64.powf(semitones_from_a4 as f64 / 12.0);
             

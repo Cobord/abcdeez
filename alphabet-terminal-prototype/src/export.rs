@@ -121,7 +121,7 @@ impl LearnerDataExport {
         let mut running_total = 0;
         
         for session in &session_data {
-            for (i, response) in session.responses.iter().enumerate() {
+            for (_i, response) in session.responses.iter().enumerate() {
                 running_total += 1;
                 if response.correct {
                     running_correct += 1;
@@ -571,3 +571,41 @@ fn sigmoid(x: f64) -> f64 {
 
 // Add UUID support
 pub use uuid;
+
+// Session exporter for test compatibility
+pub struct SessionExporter;
+
+impl SessionExporter {
+    pub fn new() -> Self {
+        SessionExporter
+    }
+    
+    pub fn export_to_csv(&self, responses: &[TaskResponse]) -> Result<String, std::io::Error> {
+        let mut csv = String::new();
+        csv.push_str("task_id,response_time_ms,correct,user_answer\n");
+        
+        for (i, response) in responses.iter().enumerate() {
+            csv.push_str(&format!("{},{},{},{}\n", 
+                i, 
+                response.response_time_ms,
+                response.correct,
+                response.user_answer
+            ));
+        }
+        
+        Ok(csv)
+    }
+    
+    pub fn generate_summary(&self, responses: &[TaskResponse]) -> String {
+        let total = responses.len();
+        let correct = responses.iter().filter(|r| r.correct).count();
+        let accuracy = if total > 0 {
+            (correct as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+        
+        format!("Total responses: {}\nCorrect: {}\nOverall accuracy: {:.2}%", 
+                total, correct, accuracy)
+    }
+}

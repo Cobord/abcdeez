@@ -1,10 +1,8 @@
-# TEST_STRATEGY.md
+# Test Strategy for Graph-Coded Mental Model Training System
 
-## Comprehensive Testing Strategy for Graph Learning Core Library
+## Executive Summary
 
-### Executive Summary
-
-This document outlines a comprehensive testing strategy for the alphabet-terminal-prototype graph learning system. The strategy covers unit testing, integration testing, performance testing, statistical validation, and experimental validation to ensure the system meets all requirements specified in PAPER.md and achieves high scientific rigor.
+This document provides a comprehensive testing strategy for the alphabet-terminal-prototype implementation, with particular focus on validating the Expected Information Gain (EIG) implementation, mathematical correctness, and compliance with PAPER.md specifications.
 
 ## 1. Test Categories
 

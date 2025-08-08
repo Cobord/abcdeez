@@ -1,10 +1,9 @@
-use crate::bayesian::BayesianLearnerModel;
-use crate::learner::{LearnerModel, OperationType};
+use crate::learner::OperationType;
 use crate::topology::Topology;
 use crate::tasks::Task;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
-use statrs::distribution::{Normal, Beta, Gamma, Continuous, ContinuousCDF};
+use statrs::distribution::{Normal, Beta, Gamma, Continuous};
 use rand::prelude::*;
 
 /// Hyperparameters for the hierarchical model
@@ -78,7 +77,7 @@ pub struct ResponseData {
 }
 
 impl HierarchicalBayesianModel {
-    pub fn new(topology: &Topology) -> Self {
+    pub fn new(_topology: &Topology) -> Self {
         let hyperparameters = Hyperparameters {
             mu_theta: 0.0,
             sigma_theta: 1.0,
@@ -192,22 +191,18 @@ impl HierarchicalBayesianModel {
         
         // Update individual learner parameters
         if let Some(learner) = self.individual_models.get_mut(&response.learner_id) {
-            // Bayesian update of ability
+            // Inline the update to avoid borrow checker issues
             let prior_mean = learner.ability;
-            let prior_var = 0.5; // Prior variance
-            
-            let likelihood_var = 1.0; // Observation variance
+            let prior_var = 0.5;
+            let likelihood_var = 1.0;
             let observed = if response.correct { 1.0 } else { 0.0 };
             
-            // Posterior parameters (conjugate normal update)
             let posterior_var = 1.0 / (1.0 / prior_var + 1.0 / likelihood_var);
             let posterior_mean = posterior_var * (prior_mean / prior_var + observed / likelihood_var);
             
-            // Update with learning rate
             learner.ability = learner.ability * (1.0 - learner.learning_rate) + 
                               posterior_mean * learner.learning_rate;
             
-            // Update response time parameters
             let log_rt = response.response_time.ln();
             learner.response_time_params.mu = 
                 learner.response_time_params.mu * 0.95 + log_rt * 0.05;
@@ -217,33 +212,20 @@ impl HierarchicalBayesianModel {
                 learner.response_time_params.sigma * 0.95 + deviation * 0.05;
         }
         
-        // Update item parameters - get item, modify it, then update in self
-        let item_update = if let Some(item) = self.item_bank.get(&response.task_id) {
-            let mut new_item = item.clone();
-            
-            // Update difficulty using empirical Bayes
+        // Update item parameters - compute update then apply
+        if let Some(item) = self.item_bank.get(&response.task_id) {
+            let mut updated_item = item.clone();
             let observed = if response.correct { 1.0 } else { 0.0 };
+            let alpha = 0.05;
+            updated_item.difficulty = updated_item.difficulty * (1.0 - alpha) + (1.0 - observed) * alpha;
             
-            // Simple exponential smoothing update
-            let alpha = 0.05; // Learning rate for item parameters
-            new_item.difficulty = new_item.difficulty * (1.0 - alpha) + (1.0 - observed) * alpha;
-            
-            // Update discrimination based on response consistency
             if let Some(learner) = self.individual_models.get(&response.learner_id) {
-                let expected = self.predict_probability(learner, &new_item);
+                let expected = self.predict_probability(learner, &updated_item);
                 let residual = (observed - expected).abs();
-                
-                // Higher discrimination if predictions are accurate
-                new_item.discrimination = new_item.discrimination * 0.95 + (1.0 - residual) * 2.0 * 0.05;
-                new_item.discrimination = new_item.discrimination.max(0.1).min(3.0);
+                updated_item.discrimination = updated_item.discrimination * 0.95 + (1.0 - residual) * 2.0 * 0.05;
+                updated_item.discrimination = updated_item.discrimination.max(0.1).min(3.0);
             }
             
-            Some(new_item)
-        } else {
-            None
-        };
-        
-        if let Some(updated_item) = item_update {
             self.item_bank.insert(response.task_id.clone(), updated_item);
         }
         
@@ -253,58 +235,6 @@ impl HierarchicalBayesianModel {
         }
     }
     
-    fn update_individual_params(&mut self, learner: &mut IndividualParameters, response: &ResponseData) {
-        // Bayesian update of ability
-        let prior_mean = learner.ability;
-        let prior_var = 0.5; // Prior variance
-        
-        let likelihood_var = 1.0; // Observation variance
-        let observed = if response.correct { 1.0 } else { 0.0 };
-        
-        // Posterior parameters (conjugate normal update)
-        let posterior_var = 1.0 / (1.0 / prior_var + 1.0 / likelihood_var);
-        let posterior_mean = posterior_var * (prior_mean / prior_var + observed / likelihood_var);
-        
-        // Update with learning rate
-        learner.ability = learner.ability * (1.0 - learner.learning_rate) + 
-                          posterior_mean * learner.learning_rate;
-        
-        // Update operation-specific ability
-        if let Some(item) = self.item_bank.get(&response.task_id) {
-            if let Some(op_ability) = learner.operation_abilities.get_mut(&item.operation_type) {
-                *op_ability = *op_ability * (1.0 - learner.learning_rate) +
-                             (observed - item.difficulty) * learner.learning_rate;
-            }
-        }
-        
-        // Update response time parameters
-        let log_rt = response.response_time.ln();
-        learner.response_time_params.mu = 
-            learner.response_time_params.mu * 0.95 + log_rt * 0.05;
-        
-        let deviation = (log_rt - learner.response_time_params.mu).abs();
-        learner.response_time_params.sigma = 
-            learner.response_time_params.sigma * 0.95 + deviation * 0.05;
-    }
-    
-    fn update_item_params(&mut self, item: &mut ItemParameters, response: &ResponseData) {
-        // Update difficulty using empirical Bayes
-        let observed = if response.correct { 1.0 } else { 0.0 };
-        
-        // Simple exponential smoothing update
-        let alpha = 0.05; // Learning rate for item parameters
-        item.difficulty = item.difficulty * (1.0 - alpha) + (1.0 - observed) * alpha;
-        
-        // Update discrimination based on response consistency
-        if let Some(learner) = self.individual_models.get(&response.learner_id) {
-            let expected = self.predict_probability(learner, item);
-            let residual = (observed - expected).abs();
-            
-            // Higher discrimination if predictions are accurate
-            item.discrimination = item.discrimination * 0.95 + (1.0 - residual) * 2.0 * 0.05;
-            item.discrimination = item.discrimination.max(0.1).min(3.0);
-        }
-    }
     
     fn update_population_params(&mut self) {
         if self.individual_models.is_empty() {
@@ -571,80 +501,6 @@ impl HierarchicalBayesianModel {
         }
     }
     
-    fn sample_individual_parameters(&mut self, learner: &mut IndividualParameters, rng: &mut ThreadRng) {
-        // Sample ability
-        let responses: Vec<_> = self.data_points.iter()
-            .filter(|r| r.learner_id == learner.learner_id)
-            .collect();
-        
-        if !responses.is_empty() {
-            // Calculate likelihood
-            let mut log_likelihood = 0.0;
-            for response in &responses {
-                if let Some(item) = self.item_bank.get(&response.task_id) {
-                    let p = self.predict_probability(learner, item);
-                    log_likelihood += if response.correct { p.ln() } else { (1.0 - p).ln() };
-                }
-            }
-            
-            // Prior
-            let prior_dist = Normal::new(
-                self.population_parameters.mean_ability,
-                self.population_parameters.variance_ability.sqrt()
-            ).unwrap();
-            
-            // Metropolis step
-            let proposal_std = 0.2;
-            let current = learner.ability;
-            let proposal = Normal::new(current, proposal_std).unwrap().sample(rng);
-            
-            let log_prior_ratio = prior_dist.ln_pdf(proposal) - prior_dist.ln_pdf(current);
-            
-            // Calculate likelihood ratio
-            let old_ability = learner.ability;
-            learner.ability = proposal;
-            let mut new_log_likelihood = 0.0;
-            for response in &responses {
-                if let Some(item) = self.item_bank.get(&response.task_id) {
-                    let p = self.predict_probability(learner, item);
-                    new_log_likelihood += if response.correct { p.ln() } else { (1.0 - p).ln() };
-                }
-            }
-            
-            let log_ratio = new_log_likelihood - log_likelihood + log_prior_ratio;
-            
-            if rng.gen::<f64>().ln() >= log_ratio {
-                learner.ability = old_ability; // Reject proposal
-            }
-        }
-        
-        // Sample strategy weights (Dirichlet)
-        let alpha = learner.strategy_weights.iter().map(|w| w * 10.0).collect::<Vec<_>>();
-        learner.strategy_weights = self.sample_dirichlet(&alpha);
-    }
-    
-    fn sample_item_parameters(&mut self, item: &mut ItemParameters, rng: &mut ThreadRng) {
-        // Sample difficulty
-        let responses: Vec<_> = self.data_points.iter()
-            .filter(|r| r.task_id == item.task_id)
-            .collect();
-        
-        if responses.len() > 5 { // Only update if we have enough data
-            let n_correct = responses.iter().filter(|r| r.correct).count() as f64;
-            let n_total = responses.len() as f64;
-            
-            // Beta-binomial conjugate update
-            let alpha = n_correct + 1.0;
-            let beta = n_total - n_correct + 1.0;
-            
-            let beta_dist = Beta::new(alpha, beta).unwrap();
-            let p_correct = beta_dist.sample(rng);
-            
-            // Convert to difficulty (logit scale)
-            item.difficulty = -(p_correct / (1.0 - p_correct)).ln();
-            item.difficulty = item.difficulty.max(-3.0).min(3.0);
-        }
-    }
     
     fn log_posterior_hyperparameter(&self, value: f64, param_name: &str) -> f64 {
         // Log prior (weakly informative)

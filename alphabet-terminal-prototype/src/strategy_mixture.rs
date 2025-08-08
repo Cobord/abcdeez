@@ -1,6 +1,6 @@
 use crate::topology::Topology;
 use crate::tasks::{Task, TaskType};
-use crate::learner::{LearnerModel, OperationType};
+use crate::learner::LearnerModel;
 // Define our own strategy types for the mixture model
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MixtureStrategyType {
@@ -13,7 +13,7 @@ pub enum MixtureStrategyType {
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use rand::prelude::*;
-use statrs::distribution::{Continuous, Normal, Beta};
+use statrs::distribution::{Continuous, Normal};
 
 /// Represents a cognitive strategy for solving tasks
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,7 +164,7 @@ impl StrategyMixtureModel {
         // Calculate likelihood of each strategy given the performance
         let mut likelihoods = Vec::new();
         
-        for (i, strategy) in self.strategies.iter().enumerate() {
+        for (_i, strategy) in self.strategies.iter().enumerate() {
             let likelihood = self.calculate_strategy_likelihood(
                 strategy, 
                 task, 

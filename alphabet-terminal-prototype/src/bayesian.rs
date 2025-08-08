@@ -15,6 +15,12 @@ pub struct BayesianLearnerModel {
     pub chunk_boundaries: Vec<ChunkBoundaryPosterior>,
     /// Historical responses for updating posteriors
     pub response_history: Vec<ResponseData>,
+    /// Topology reference for node mapping
+    topology: crate::topology::Topology,
+    /// Confusability posteriors
+    pub confusability: HashMap<(String, String), PosteriorDistribution>,
+    /// Memory strength posteriors
+    pub memory_strengths: HashMap<String, PosteriorDistribution>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,12 +103,19 @@ impl BayesianLearnerModel {
     pub fn new(topology: &crate::topology::Topology) -> Self {
         let mut node_positions = HashMap::new();
         let mut operation_proficiencies = HashMap::new();
+        let mut memory_strengths = HashMap::new();
         
         // Initialize node position posteriors
         for node in &topology.nodes {
             node_positions.insert(
                 node.id.clone(),
                 PosteriorDistribution::new(node.position, 1.0)
+            );
+            
+            // Initialize memory strength posteriors
+            memory_strengths.insert(
+                node.id.clone(),
+                PosteriorDistribution::new(0.5, 0.25)
             );
         }
         
@@ -137,6 +150,9 @@ impl BayesianLearnerModel {
             operation_proficiencies,
             chunk_boundaries,
             response_history: vec![],
+            topology: topology.clone(),
+            confusability: HashMap::new(),
+            memory_strengths,
         }
     }
 
@@ -200,7 +216,7 @@ impl BayesianLearnerModel {
     }
     
     /// Calculate KL divergence for correct response in Monte Carlo
-    fn calculate_kl_if_correct_monte_carlo(&self, task: &crate::tasks::Task, sampled: &SampledModel) -> f64 {
+    fn calculate_kl_if_correct_monte_carlo(&self, task: &crate::tasks::Task, _sampled: &SampledModel) -> f64 {
         // Create updated posterior given correct response
         let mut updated_model = self.clone();
         updated_model.update_with_response(ResponseData {
@@ -214,7 +230,7 @@ impl BayesianLearnerModel {
     }
     
     /// Calculate KL divergence for incorrect response in Monte Carlo
-    fn calculate_kl_if_incorrect_monte_carlo(&self, task: &crate::tasks::Task, sampled: &SampledModel) -> f64 {
+    fn calculate_kl_if_incorrect_monte_carlo(&self, task: &crate::tasks::Task, _sampled: &SampledModel) -> f64 {
         // Create updated posterior given incorrect response
         let mut updated_model = self.clone();
         updated_model.update_with_response(ResponseData {
@@ -346,20 +362,30 @@ impl BayesianLearnerModel {
         total_kl
     }
 
-    fn get_node_position(&self, _label: &str) -> Option<&PosteriorDistribution> {
-        // This would need topology access to map label to node_id
-        // For now, simplified implementation
-        self.node_positions.values().next()
+    fn get_node_position(&self, label: &str) -> Option<&PosteriorDistribution> {
+        // Properly map label to node_id using topology
+        if let Some(node) = self.topology.get_node_by_label(label) {
+            self.node_positions.get(&node.id)
+        } else {
+            None
+        }
     }
 
-    fn calculate_boundary_kl(&self, _start: &str, offset: usize) -> f64 {
+    fn calculate_boundary_kl(&self, start: &str, offset: usize) -> f64 {
         // Check if this crosses a chunk boundary
-        for boundary in &self.chunk_boundaries {
-            if offset == boundary.position {
-                // Crossing boundary would update our belief about its strength
-                let mut post = boundary.strength.clone();
-                post.variance *= 0.9;
-                return boundary.strength.kl_divergence(&post);
+        if let Some(node) = self.topology.get_node_by_label(start) {
+            let start_idx = self.topology.node_map.get(&node.id)
+                .copied()
+                .unwrap_or(0);
+            let position = start_idx + offset;
+            
+            for boundary in &self.chunk_boundaries {
+                if position == boundary.position {
+                    // Crossing boundary would update our belief about its strength
+                    let mut post = boundary.strength.clone();
+                    post.variance *= 0.9;
+                    return boundary.strength.kl_divergence(&post);
+                }
             }
         }
         0.0
@@ -368,26 +394,202 @@ impl BayesianLearnerModel {
     pub fn update_with_response(&mut self, response: ResponseData) {
         self.response_history.push(response.clone());
         
+        // Calculate observation variance before mutable borrows
+        let obs_variance = self.calculate_observation_variance(&response);
+        
         // Update relevant posteriors based on response
         let op_key = format!("{:?}", response.task.operation);
         if let Some(prof) = self.operation_proficiencies.get_mut(&op_key) {
             let observation = if response.correct { 1.0 } else { 0.0 };
-            prof.update(observation, 0.1);
+            prof.update(observation, obs_variance);
         }
         
-        // Update node position posteriors
+        // Update node position posteriors and other parameters
         match &response.task.task_type {
             crate::tasks::TaskType::PairwiseOrder { a, b } => {
                 // Update beliefs about relative positions
                 self.update_pairwise_positions(a, b, response.correct);
             }
+            crate::tasks::TaskType::Successor { item } | 
+            crate::tasks::TaskType::Predecessor { item } => {
+                self.update_adjacency_beliefs(item, &response.task.task_type, response.correct);
+            }
+            crate::tasks::TaskType::Segment { start, count, .. } => {
+                self.update_segment_beliefs(start, *count, response.correct, response.response_time);
+            }
+            crate::tasks::TaskType::KJump { start, k } => {
+                self.update_kjump_beliefs(start, *k, response.correct);
+            }
             _ => {}
         }
     }
 
-    fn update_pairwise_positions(&mut self, _a: &str, _b: &str, _correct: bool) {
-        // Implementation would update position posteriors based on comparison result
-        // Simplified for now
+    fn update_pairwise_positions(&mut self, a: &str, b: &str, correct: bool) {
+        // Update position posteriors based on comparison result
+        if let (Some(node_a), Some(node_b)) = (self.topology.get_node_by_label(a), 
+                                                 self.topology.get_node_by_label(b)) {
+            // Avoid double mutable borrow by updating positions separately
+            let node_a_id = node_a.id.clone();
+            let node_b_id = node_b.id.clone();
+            
+            // Update position for node A
+            if let Some(pos_a) = self.node_positions.get_mut(&node_a_id) {
+                let obs_variance = 0.2;
+                if correct {
+                    pos_a.update(pos_a.mean, obs_variance * 0.8);
+                } else {
+                    pos_a.variance *= 1.1;
+                }
+            }
+            
+            // Update position for node B
+            if let Some(pos_b) = self.node_positions.get_mut(&node_b_id) {
+                let obs_variance = 0.2;
+                if correct {
+                    pos_b.update(pos_b.mean, obs_variance * 0.8);
+                } else {
+                    pos_b.variance *= 1.1;
+                }
+            }
+            
+            // Update confusability if incorrect
+            if !correct {
+                let key = if a < b { (a.to_string(), b.to_string()) } 
+                          else { (b.to_string(), a.to_string()) };
+                self.confusability.entry(key)
+                    .or_insert(PosteriorDistribution::new(0.0, 1.0))
+                    .update(1.0, 0.2);
+            }
+            
+            // Update memory strengths
+            if let Some(mem_a) = self.memory_strengths.get_mut(&node_a_id) {
+                mem_a.update(if correct { 0.8 } else { 0.3 }, 0.1);
+            }
+            if let Some(mem_b) = self.memory_strengths.get_mut(&node_b_id) {
+                mem_b.update(if correct { 0.8 } else { 0.3 }, 0.1);
+            }
+        }
+    }
+    
+    /// Calculate adaptive observation variance based on response characteristics
+    fn calculate_observation_variance(&self, response: &ResponseData) -> f64 {
+        // Base variance
+        let mut variance = 0.1;
+        
+        // Adjust based on response time (faster responses = more confidence)
+        let rt_factor = (response.response_time / 1000.0).min(3.0).max(0.5);
+        variance *= rt_factor / 1.5;
+        
+        // Adjust based on task difficulty
+        let difficulty_factor = 0.5 + response.task.difficulty;
+        variance *= difficulty_factor;
+        
+        // Adjust based on response history (more consistent = lower variance)
+        if self.response_history.len() > 10 {
+            let recent_accuracy = self.response_history.iter()
+                .rev()
+                .take(10)
+                .filter(|r| r.correct)
+                .count() as f64 / 10.0;
+            variance *= 2.0 - recent_accuracy; // Higher accuracy = lower variance
+        }
+        
+        variance.max(0.01).min(1.0)
+    }
+    
+    /// Update beliefs for adjacency tasks (successor/predecessor)
+    fn update_adjacency_beliefs(&mut self, item: &str, task_type: &crate::tasks::TaskType, correct: bool) {
+        if let Some(node) = self.topology.get_node_by_label(item) {
+            if let Some(pos) = self.node_positions.get_mut(&node.id) {
+                let obs_variance = if correct { 0.05 } else { 0.15 };
+                pos.update(pos.mean, obs_variance);
+            }
+            
+            // Update memory strength
+            if let Some(mem) = self.memory_strengths.get_mut(&node.id) {
+                mem.update(if correct { 0.9 } else { 0.4 }, 0.1);
+            }
+            
+            // Update adjacency-specific beliefs
+            match task_type {
+                crate::tasks::TaskType::Successor { .. } => {
+                    if let Some(next_id) = self.topology.get_successor(&node.id) {
+                        if let Some(next_mem) = self.memory_strengths.get_mut(&next_id) {
+                            next_mem.update(if correct { 0.7 } else { 0.3 }, 0.15);
+                        }
+                    }
+                }
+                crate::tasks::TaskType::Predecessor { .. } => {
+                    if let Some(prev_id) = self.topology.get_predecessor(&node.id) {
+                        if let Some(prev_mem) = self.memory_strengths.get_mut(&prev_id) {
+                            prev_mem.update(if correct { 0.7 } else { 0.3 }, 0.15);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    
+    /// Update beliefs for segment tasks
+    fn update_segment_beliefs(&mut self, start: &str, count: usize, correct: bool, response_time: f64) {
+        if let Some(start_node) = self.topology.get_node_by_label(start) {
+            let start_idx = self.topology.node_map.get(&start_node.id).copied().unwrap_or(0);
+            
+            // Update memory for all nodes in segment
+            for i in 0..count {
+                let idx = start_idx + i;
+                if idx < self.topology.nodes.len() {
+                    let node_id = &self.topology.nodes[idx].id;
+                    if let Some(mem) = self.memory_strengths.get_mut(node_id) {
+                        // Decay factor for distance from start
+                        let distance_factor = 1.0 - (i as f64 / count as f64) * 0.3;
+                        mem.update(if correct { 0.8 * distance_factor } else { 0.3 }, 0.12);
+                    }
+                }
+            }
+            
+            // Update chunk boundaries if response time suggests difficulty
+            if response_time > 2000.0 {
+                for i in 1..count {
+                    let boundary_pos = start_idx + i;
+                    for boundary in &mut self.chunk_boundaries {
+                        if boundary.position == boundary_pos {
+                            // Slow response suggests chunk boundary
+                            boundary.strength.update(0.7, 0.15);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Update beliefs for k-jump tasks
+    fn update_kjump_beliefs(&mut self, start: &str, k: i32, correct: bool) {
+        if let Some(start_node) = self.topology.get_node_by_label(start) {
+            let start_idx = self.topology.node_map.get(&start_node.id).copied().unwrap_or(0) as i32;
+            let target_idx = (start_idx + k).max(0) as usize;
+            
+            // Update memory for start and target
+            if let Some(mem) = self.memory_strengths.get_mut(&start_node.id) {
+                mem.update(if correct { 0.85 } else { 0.4 }, 0.1);
+            }
+            
+            if target_idx < self.topology.nodes.len() {
+                let target_id = &self.topology.nodes[target_idx].id;
+                if let Some(mem) = self.memory_strengths.get_mut(target_id) {
+                    mem.update(if correct { 0.75 } else { 0.35 }, 0.12);
+                }
+                
+                // Update position beliefs for large jumps
+                if k.abs() > 2 {
+                    if let Some(pos) = self.node_positions.get_mut(target_id) {
+                        let obs_variance = if correct { 0.08 } else { 0.2 };
+                        pos.update(pos.mean, obs_variance);
+                    }
+                }
+            }
+        }
     }
 
     /// Get tasks ranked by Expected Information Gain
