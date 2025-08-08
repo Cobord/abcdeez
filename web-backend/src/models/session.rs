@@ -19,8 +19,8 @@ pub struct Session {
 #[derive(Debug, Deserialize)]
 pub struct CreateSessionRequest {
     pub learner_id: Uuid,
-    pub topology_type: TopologyType,
-    pub topology_size: Option<usize>,
+    pub topology_type: String, // Accept as string from UI
+    pub topology_data: Option<serde_json::Value>, // Accept optional topology data from UI
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

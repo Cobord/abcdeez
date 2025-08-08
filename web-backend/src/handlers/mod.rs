@@ -2,6 +2,7 @@ pub mod auth;
 pub mod learner;
 pub mod session;
 pub mod task;
+pub mod task_simple;
 pub mod analytics;
 pub mod experiment;
 pub mod music;

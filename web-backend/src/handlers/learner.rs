@@ -11,6 +11,7 @@ use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
     models::learner::{CreateLearnerRequest, Learner, LearnerStats, UpdateLearnerRequest},
+    models::session::Session,
     services::{audit::AuditService, LearnerService},
     state::AppState,
 };
@@ -365,4 +366,64 @@ pub async fn delete(
     .ok();
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn sessions(
+    State(state): State<Arc<AppState>>,
+    claims: Extension<Claims>,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<Vec<Session>>> {
+    // Check permissions first
+    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+
+    let learner = learner_service
+        .get_learner(id)
+        .await
+        .map_err(|e| AppError::NotFound("Learner not found".to_string()))?;
+
+    if let Some(learner_user_id) = learner.user_id {
+        if learner_user_id != claims.sub {
+            return Err(AppError::Forbidden);
+        }
+    }
+
+    // Get sessions for this learner
+    let learner_bytes = id.as_bytes();
+    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    
+    let session_rows = sqlx::query(
+        "SELECT id, learner_id, topology_type, topology_data, status, 
+                start_time, end_time, summary
+         FROM sessions 
+         WHERE learner_id = ? 
+         ORDER BY start_time DESC"
+    )
+    .bind(learner_bytes)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(|e| AppError::DatabaseError(e))?;
+
+    let sessions: Vec<Session> = session_rows
+        .into_iter()
+        .map(|row| {
+            let id_bytes: Vec<u8> = row.get("id");
+            let learner_id_bytes: Vec<u8> = row.get("learner_id");
+            
+            Session {
+                id: Uuid::from_bytes(id_bytes.try_into().unwrap_or_default()),
+                learner_id: Uuid::from_bytes(learner_id_bytes.try_into().unwrap_or_default()),
+                topology_type: row.get("topology_type"),
+                topology_data: row.get::<Option<String>, _>("topology_data")
+                    .and_then(|s| serde_json::from_str(&s).ok())
+                    .unwrap_or_else(|| serde_json::json!({})),
+                status: row.get("status"),
+                start_time: row.get("start_time"),
+                end_time: row.get("end_time"),
+                summary: row.get::<Option<String>, _>("summary")
+                    .and_then(|s| serde_json::from_str(&s).ok()),
+            }
+        })
+        .collect();
+
+    Ok(Json(sessions))
 }

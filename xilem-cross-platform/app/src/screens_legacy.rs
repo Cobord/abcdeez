@@ -28,9 +28,19 @@ pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     data.password_input = value;
                 }),
             ),
-            button("Login", |data: &mut AppData| {
-                data.login();
-            }),
+            button(
+                if data.login_request_in_flight {
+                    "Logging in..."
+                } else {
+                    "Login"
+                }
+                .to_string(),
+                |data: &mut AppData| {
+                    if !data.login_request_in_flight {
+                        data.login();
+                    }
+                },
+            ),
         )).direction(Axis::Vertical)),
 
         card("Quick Start", flex((
@@ -53,6 +63,10 @@ pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             button("Demo Showcase", |data: &mut AppData| {
                 // Run a short automated demo training sequence and navigate to Dashboard
                 data.demo_showcase();
+                data.current_screen = Screen::Dashboard;
+            }),
+            // Always-available navigation to avoid dead ends
+            button("Go to Dashboard", |data: &mut AppData| {
                 data.current_screen = Screen::Dashboard;
             }),
         )).direction(Axis::Vertical)),
@@ -120,9 +134,18 @@ pub fn domain_selection_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             ))
             .direction(Axis::Vertical),
         ),
-        button("Start Training Session", |data: &mut AppData| {
-            data.start_session();
-        }),
+        button(
+            if data.create_session_in_flight {
+                "Starting session..."
+            } else {
+                "Start Training Session"
+            },
+            |data: &mut AppData| {
+                if !data.create_session_in_flight {
+                    data.start_session();
+                }
+            },
+        ),
     ))
     .direction(Axis::Vertical)
 }
@@ -196,8 +219,8 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     .map(|(index, option)| {
                         let option_text = option.clone();
                         button(option_text, move |data: &mut AppData| {
-                            // only submit if not in feedback state
-                            if !data.show_feedback {
+                            // only submit if not in feedback state or already submitting
+                            if !data.show_feedback && !data.submit_response_in_flight {
                                 data.submit_answer(index);
                             }
                         })
@@ -206,7 +229,7 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             })
             .unwrap_or_else(|| Vec::new());
 
-        let masked_buttons = if data.show_feedback {
+        let masked_buttons = if data.show_feedback || data.submit_response_in_flight {
             Vec::<_>::new()
         } else {
             option_buttons
@@ -214,7 +237,9 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         let answers = flex(masked_buttons).direction(Axis::Vertical);
 
         // Feedback text and color (always a Label)
-        let feedback_text = if data.show_feedback {
+        let feedback_text = if data.submit_response_in_flight {
+            "Submitting...".to_string()
+        } else if data.show_feedback {
             if data.last_response_correct {
                 "Correct! Well done!".to_string()
             } else {
@@ -230,7 +255,9 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             "".to_string()
         };
 
-        let feedback_color = if data.show_feedback {
+        let feedback_color = if data.submit_response_in_flight {
+            Color::from_rgb8(128, 128, 128)
+        } else if data.show_feedback {
             if data.last_response_correct {
                 Color::from_rgb8(0, 200, 0)
             } else {
@@ -245,17 +272,31 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             .alignment(TextAlignment::Middle);
 
         // Continue and hint buttons are always Buttons; their handlers are no-ops when not appropriate
-        let continue_button = button("Continue", |data: &mut AppData| {
-            if data.show_feedback {
-                data.continue_to_next_task();
-            }
-        });
+        let continue_button = button(
+            if data.submit_response_in_flight {
+                "Submitting..."
+            } else {
+                "Continue"
+            },
+            |data: &mut AppData| {
+                if data.show_feedback && !data.submit_response_in_flight {
+                    data.continue_to_next_task();
+                }
+            },
+        );
 
-        let get_hint_button = button("Get Hint", |data: &mut AppData| {
-            if !data.show_feedback && data.enable_hints {
-                data.request_hint();
-            }
-        });
+        let get_hint_button = button(
+            if data.submit_response_in_flight {
+                "Processing..."
+            } else {
+                "Get Hint"
+            },
+            |data: &mut AppData| {
+                if !data.show_feedback && !data.submit_response_in_flight && data.enable_hints {
+                    data.request_hint();
+                }
+            },
+        );
 
         // Hint card always present (Label inside a card). Empty when no hint.
         let hint_text = if !data.show_feedback {
@@ -320,9 +361,18 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 data.current_screen = Screen::Dashboard;
                 data.success_message = Some("Session paused. You can resume anytime.".to_string());
             }),
-            button("End Session", |data: &mut AppData| {
-                data.end_session();
-            }),
+            button(
+                if data.end_session_in_flight {
+                    "Ending session..."
+                } else {
+                    "End Session"
+                },
+                |data: &mut AppData| {
+                    if !data.end_session_in_flight {
+                        data.end_session();
+                    }
+                },
+            ),
         ))
         .direction(Axis::Horizontal),
     ))
@@ -705,14 +755,18 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             flex((
                 prose("Export your learning data for analysis or backup")
                     .alignment(TextAlignment::Start),
-                button("Export as JSON", |data: &mut AppData| {
-                    data.export_current_data();
-                    if let Some(export) = &data.export_data {
-                        _ = serde_json::to_string_pretty(export).unwrap_or_default();
-                        // In a real app, save to file
-                        data.success_message = Some("Data exported as JSON".to_string());
-                    }
-                }),
+                button(
+                    if data.export_data_in_flight {
+                        "Exporting..."
+                    } else {
+                        "Export as JSON"
+                    },
+                    |data: &mut AppData| {
+                        if !data.export_data_in_flight {
+                            data.export_current_data();
+                        }
+                    },
+                ),
             ))
             .direction(Axis::Vertical),
         ),

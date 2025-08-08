@@ -701,7 +701,7 @@ pub async fn population_strategy_analysis(
     let mut strategy_counts = HashMap::new();
     let mut rt_distance_data = Vec::new();
     
-    for learner_id in recent_learners {
+    for learner_id in &recent_learners {
         let learner_bytes = learner_id.as_bytes().to_vec();
         let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
         
@@ -846,7 +846,7 @@ pub async fn adaptive_difficulty_analysis(
 
 // Helper functions
 
-async fn get_recent_learner_ids(db: &sqlx::Pool<sqlx::Any>, limit: usize) -> AppResult<Vec<Uuid>> {
+async fn get_recent_learner_ids(db: &sqlx::PgPool, limit: usize) -> AppResult<Vec<Uuid>> {
     let mut conn = db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
     
     let rows = sqlx::query(

@@ -117,6 +117,112 @@ pub fn performance_chart(metrics: &PerformanceMetrics) -> impl WidgetView<AppDat
     .direction(Axis::Vertical)
 }
 
+/// Wrapper component that adds highlighting for demo mode
+pub fn highlighted<V>(element_id: &str, content: V, app_data: &AppData) -> impl WidgetView<AppData>
+where
+    V: WidgetView<AppData> + 'static,
+{
+    let tooltip_text = if app_data
+        .demo_controller
+        .should_highlight(element_id)
+        .is_some()
+    {
+        app_data
+            .demo_controller
+            .get_tooltip(element_id)
+            .map(|t| format!("💡 {}", t))
+            .unwrap_or_else(|| String::new())
+    } else {
+        String::new()
+    };
+
+    flex((
+        content,
+        label(tooltip_text).alignment(TextAlignment::Middle),
+    ))
+    .direction(Axis::Vertical)
+}
+
+/// Create a highlighted button for demo mode
+pub fn demo_button(element_id: &str, text: &str, app_data: &AppData) -> impl WidgetView<AppData> {
+    let tooltip_text = if app_data
+        .demo_controller
+        .should_highlight(element_id)
+        .is_some()
+    {
+        app_data
+            .demo_controller
+            .get_tooltip(element_id)
+            .map(|t| format!("💡 {}", t))
+            .unwrap_or_else(|| String::new())
+    } else {
+        String::new()
+    };
+
+    flex((
+        label(text).alignment(TextAlignment::Middle),
+        label(tooltip_text).alignment(TextAlignment::Middle),
+    ))
+    .direction(Axis::Vertical)
+}
+
+/// Create a highlighted card for demo mode
+pub fn demo_card<V>(
+    element_id: &str,
+    title: &str,
+    content: V,
+    app_data: &AppData,
+) -> impl WidgetView<AppData>
+where
+    V: WidgetView<AppData> + 'static,
+{
+    highlighted(element_id, card(title, content), app_data)
+}
+
+/// Confirmation modal component
+pub fn confirm_modal(
+    title: &str,
+    message: &str,
+    on_confirm: impl Fn(&mut AppData) + 'static,
+    on_cancel: impl Fn(&mut AppData) + 'static,
+) -> impl WidgetView<AppData> {
+    card(
+        title,
+        flex((
+            prose(message).alignment(TextAlignment::Middle),
+            flex((
+                button("✓ Confirm", on_confirm),
+                button("✗ Cancel", on_cancel),
+            ))
+            .direction(Axis::Horizontal),
+        ))
+        .direction(Axis::Vertical),
+    )
+}
+
+/// Toast notification component
+pub fn toast_notification(message: String, is_success: bool) -> impl WidgetView<AppData> {
+    let icon = if is_success { "✓" } else { "⚠" };
+    let color = if is_success { "#4CAF50" } else { "#f44336" };
+
+    card(
+        &format!("{} Notification", icon),
+        prose(&message).alignment(TextAlignment::Middle),
+    )
+}
+
+/// Loading overlay component
+pub fn loading_overlay(message: &str) -> impl WidgetView<AppData> {
+    card(
+        "Loading",
+        flex((
+            label("⏳").alignment(TextAlignment::Middle),
+            prose(message).alignment(TextAlignment::Middle),
+        ))
+        .direction(Axis::Vertical),
+    )
+}
+
 // Domain card component
 pub fn domain_card(domain: &Domain, selected: bool) -> impl WidgetView<AppData> {
     let color = if selected {

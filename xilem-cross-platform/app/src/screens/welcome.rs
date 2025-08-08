@@ -1,41 +1,82 @@
 use xilem::{
-    view::{button, flex, label, Axis},
+    view::{button, flex, label, prose, Axis},
     Color, TextAlignment, WidgetView,
 };
 
-use crate::AppData;
+use crate::{components::*, models::*, AppData, Screen};
 
-/// Stub implementation of `welcome_screen` to enable gradual migration
-/// from the single-file `app/src/screens.rs` to per-screen modules under
-/// `app/src/screens/`.
-///
-/// NOTE:
-/// - This file is not yet wired into the build until `mod screens;` in `lib.rs`
-///   points to `app/src/screens/mod.rs` (the directory-based module) and the
-///   functions are moved over from the legacy `screens.rs`.
-/// - Keep this function signature exactly the same as the legacy one so callers
-///   can be switched over without churn.
-///
-/// When you are ready to migrate:
-/// 1) Move the existing welcome screen view code from `app/src/screens.rs`
-///    into this function body.
-/// 2) Ensure `app/src/screens/mod.rs` re-exports `welcome::welcome_screen`.
-/// 3) Remove/rename the legacy `app/src/screens.rs` to avoid module conflicts.
-pub fn welcome_screen(_data: &mut AppData) -> impl WidgetView<AppData> {
-    // Minimal placeholder content; replace with full content during migration.
+// Welcome/Login Screen
+pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
     flex((
         label("Adaptive Learning System")
-            .brush(Color::from_rgb8(0, 128, 255))
-            .alignment(TextAlignment::Middle),
-        label("Welcome (stub)")
-            .alignment(TextAlignment::Middle)
-            .brush(Color::from_rgb8(160, 160, 160)),
-        button(
-            "This is a stub — wired during migration",
-            |_data: &mut AppData| {
-                // no-op
-            },
-        ),
+            .brush(Color::from_rgb8(0, 128, 255)),
+
+        prose("An intelligent learning system that adapts to your knowledge and optimizes your learning path using graph-based cognitive models."),
+
+        card("Login", flex((
+            labeled_input(
+                "Username:",
+                data.username_input.clone(),
+                std::sync::Arc::new(|data: &mut AppData, value: String| {
+                    data.username_input = value;
+                }),
+            ),
+            labeled_input(
+                "Password:",
+                data.password_input.clone(),
+                std::sync::Arc::new(|data: &mut AppData, value: String| {
+                    data.password_input = value;
+                }),
+            ),
+            button(
+                if data.login_request_in_flight {
+                    "Logging in..."
+                } else {
+                    "Login"
+                }
+                .to_string(),
+                |data: &mut AppData| {
+                    if !data.login_request_in_flight {
+                        data.login();
+                    }
+                },
+            ),
+        )).direction(Axis::Vertical)),
+
+        card("Quick Start", flex((
+            prose("Start learning immediately without creating an account")
+                .alignment(TextAlignment::Middle),
+            button("Start as Guest", |data: &mut AppData| {
+                // Create a guest user and learner
+                data.current_user = Some(User {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    username: "Guest".to_string(),
+                    email: "guest@example.com".to_string(),
+                    password_hash: String::new(),
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                });
+                data.create_learner();
+                data.current_screen = Screen::DomainSelection;
+            }),
+            button("Quick Tour 📚", |data: &mut AppData| {
+                // Start the interactive guided tour
+                data.demo_start();
+            }),
+            button("Training Demo 🎯", |data: &mut AppData| {
+                // Start the full training demo
+                data.demo_start_training();
+            }),
+            button("Demo Showcase", |data: &mut AppData| {
+                // Run a short automated demo training sequence and navigate to Dashboard
+                data.demo_showcase();
+                data.current_screen = Screen::Dashboard;
+            }),
+            // Always-available navigation to avoid dead ends
+            button("Go to Dashboard", |data: &mut AppData| {
+                data.current_screen = Screen::Dashboard;
+            }),
+        )).direction(Axis::Vertical)),
     ))
     .direction(Axis::Vertical)
 }

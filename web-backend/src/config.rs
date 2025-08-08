@@ -14,6 +14,14 @@ pub struct Config {
     pub cors_origin: String,
     pub rate_limit_requests: u32,
     pub rate_limit_window_seconds: u64,
+    pub max_failed_login_attempts: u32,
+    pub login_lockout_duration_minutes: u32,
+    pub session_timeout_hours: u32,
+    pub require_strong_passwords: bool,
+    pub metrics_enabled: bool,
+    pub tracing_endpoint: Option<String>,
+    pub health_check_interval_seconds: u32,
+    pub performance_monitoring_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -62,6 +70,35 @@ impl Config {
                 .unwrap_or_else(|_| "60".to_string())
                 .parse()
                 .expect("RATE_LIMIT_WINDOW_SECONDS must be a number"),
+            max_failed_login_attempts: env::var("MAX_FAILED_LOGIN_ATTEMPTS")
+                .unwrap_or_else(|_| "5".to_string())
+                .parse()
+                .expect("MAX_FAILED_LOGIN_ATTEMPTS must be a number"),
+            login_lockout_duration_minutes: env::var("LOGIN_LOCKOUT_DURATION_MINUTES")
+                .unwrap_or_else(|_| "15".to_string())
+                .parse()
+                .expect("LOGIN_LOCKOUT_DURATION_MINUTES must be a number"),
+            session_timeout_hours: env::var("SESSION_TIMEOUT_HOURS")
+                .unwrap_or_else(|_| "24".to_string())
+                .parse()
+                .expect("SESSION_TIMEOUT_HOURS must be a number"),
+            require_strong_passwords: env::var("REQUIRE_STRONG_PASSWORDS")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .expect("REQUIRE_STRONG_PASSWORDS must be a boolean"),
+            metrics_enabled: env::var("METRICS_ENABLED")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .expect("METRICS_ENABLED must be a boolean"),
+            tracing_endpoint: env::var("TRACING_ENDPOINT").ok(),
+            health_check_interval_seconds: env::var("HEALTH_CHECK_INTERVAL_SECONDS")
+                .unwrap_or_else(|_| "30".to_string())
+                .parse()
+                .expect("HEALTH_CHECK_INTERVAL_SECONDS must be a number"),
+            performance_monitoring_enabled: env::var("PERFORMANCE_MONITORING_ENABLED")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .expect("PERFORMANCE_MONITORING_ENABLED must be a boolean"),
         })
     }
 

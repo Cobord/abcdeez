@@ -18,7 +18,7 @@ use crate::{
     services::{audit::AuditService, AdaptationService, LearnerService},
     state::AppState,
 };
-use graph_learning_core::{tasks::TaskResponse as CoreTaskResponse, Topology, TopologyType};
+use graph_learning_core::{tasks::TaskResponse as CoreTaskResponse, Topology};
 
 pub async fn create(
     State(state): State<Arc<AppState>>,
@@ -41,12 +41,20 @@ pub async fn create(
         }
     }
 
-    // Create topology based on request
-    let topology = match req.topology_type {
-        TopologyType::Linear => Topology::alphabet(),
-        TopologyType::Cyclic => Topology::days_of_week(),
-        TopologyType::PartialOrder => Topology::alphabet(), // Use alphabet as fallback
-        TopologyType::GeneralGraph => Topology::alphabet(), // Use alphabet as fallback
+    // Create topology based on request - either use provided topology_data or create from type
+    let topology_data = if let Some(provided_topology) = req.topology_data {
+        // Use provided topology data from UI
+        provided_topology
+    } else {
+        // Create topology server-side based on string type
+        let topology = match req.topology_type.to_lowercase().as_str() {
+            "linear" | "alphabet" => Topology::alphabet(),
+            "cyclic" | "days_of_week" => Topology::days_of_week(),
+            "partial_order" | "partialorder" => Topology::alphabet(), // Use alphabet as fallback
+            "general_graph" | "generalgraph" | "music" | "mathematics" => Topology::alphabet(), // Use alphabet as fallback
+            _ => Topology::alphabet(), // Default fallback
+        };
+        serde_json::to_value(&topology).map_err(|_| AppError::InternalServerError)?
     };
 
     // Create session in database
@@ -55,9 +63,6 @@ pub async fn create(
     let learner_id_bytes = req.learner_id.as_bytes();
     let now = Utc::now();
 
-    let topology_data =
-        serde_json::to_value(&topology).map_err(|_| AppError::InternalServerError)?;
-
     let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
     sqlx::query(
         "INSERT INTO sessions (id, learner_id, topology_type, topology_data, start_time, status)
@@ -65,7 +70,7 @@ pub async fn create(
     )
     .bind(session_id_bytes)
     .bind(learner_id_bytes)
-    .bind(format!("{:?}", req.topology_type))
+    .bind(&req.topology_type)
     .bind(topology_data.to_string())
     .bind(now)
     .bind(SessionStatus::Active.to_string())
@@ -76,13 +81,16 @@ pub async fn create(
     let session = Session {
         id: session_id,
         learner_id: req.learner_id,
-        topology_type: format!("{:?}", req.topology_type),
+        topology_type: req.topology_type.clone(),
         topology_data,
         start_time: now,
         end_time: None,
         status: SessionStatus::Active.to_string(),
         summary: None,
     };
+
+    // Record session creation
+    crate::monitoring::global_metrics().record_session_creation();
 
     // Log audit event
     AuditService::log_event(
@@ -222,7 +230,7 @@ pub async fn submit_response(
     // Create a core task response for model updating
     let core_response = CoreTaskResponse {
         task,
-        user_answer: response.user_answer.clone().unwrap_or_default(),
+        user_answer: response.user_answer.clone(),
         correct: is_correct,
         response_time_ms: response.response_time_ms as u128,
         timestamp: Utc::now(),
@@ -286,7 +294,7 @@ pub async fn complete(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
     Path(session_id): Path<Uuid>,
-) -> AppResult<Json<SessionSummary>> {
+) -> AppResult<StatusCode> {
     // Verify session exists and user has permission
     let session = get_session_with_permission(&state, &claims, session_id).await?;
 
@@ -362,7 +370,7 @@ pub async fn complete(
     .await
     .ok();
 
-    Ok(Json(summary))
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn replay(
@@ -413,6 +421,15 @@ pub async fn replay(
         .collect();
 
     Ok(Json(responses))
+}
+
+pub async fn responses(
+    State(state): State<Arc<AppState>>,
+    claims: Extension<Claims>,
+    Path(session_id): Path<Uuid>,
+) -> AppResult<Json<Vec<ResponseRecord>>> {
+    // This is an alias/delegation to the replay function for UI compatibility
+    replay(State(state), claims, Path(session_id)).await
 }
 
 // Helper functions
@@ -473,15 +490,12 @@ async fn validate_task_response(response: &TaskResponse) -> AppResult<bool> {
     match response.task_type.as_str() {
         "successor" | "predecessor" => {
             // For alphabet tasks, check if the answer is reasonable
-            if let Some(answer) = &response.user_answer {
-                Ok(answer.len() == 1 && answer.chars().next().unwrap().is_alphabetic())
-            } else {
-                Ok(false)
-            }
+            Ok(response.user_answer.len() == 1 && 
+               response.user_answer.chars().next().unwrap().is_alphabetic())
         }
         "pairwise_order" => {
             // For ordering tasks, accept any non-empty answer
-            Ok(response.user_answer.is_some())
+            Ok(!response.user_answer.is_empty())
         }
         _ => {
             // Default validation - assume correct for unknown task types

@@ -5,6 +5,7 @@ mod error;
 mod handlers;
 mod middleware;
 mod models;
+mod monitoring;
 mod services;
 mod state;
 mod websocket;
@@ -24,8 +25,9 @@ use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::Config;
-use crate::handlers::{admin, analytics, auth, experiment, learner, music, session, task};
-use crate::middleware::{auth_middleware, rate_limit};
+use crate::handlers::{admin, analytics, auth, experiment, learner, music, session, task, task_simple};
+use crate::middleware::{audit_middleware, auth_middleware, content_validation, ip_blocking, rate_limit, require_admin, require_analytics_permission, security_headers};
+use crate::monitoring::{health, metrics, performance};
 use crate::state::AppState;
 
 #[tokio::main]
@@ -69,20 +71,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/learners/:id", get(learner::get))
         .route("/learners/:id", patch(learner::update))
         .route("/learners/:id/stats", get(learner::stats))
+        .route("/learners/:id/sessions", get(learner::sessions))
         .route("/learners/:id/export", get(learner::export))
         .route("/learners/:id", delete(learner::delete))
         // Session routes (protected)
         .route("/sessions", post(session::create))
         .route("/sessions/:id", get(session::get))
         .route("/sessions/:id/responses", post(session::submit_response))
+        .route("/sessions/:id/responses", get(session::responses))
         .route("/sessions/:id/complete", post(session::complete))
         .route("/sessions/:id/replay", get(session::replay))
-        // Task routes (protected)
-        .route("/tasks/next", get(task::next))
-        .route("/tasks/generate", post(task::generate))
-        .route("/tasks/difficulty", get(task::difficulty))
-        .route("/hints/request", post(task::request_hint))
-        // Analytics routes (protected with different permissions)
+        // Task routes (protected) - using simple handlers that work with current Axum
+        .route("/tasks/generate", get(task_simple::generate_simple))
+        .route("/tasks/difficulty", get(task_simple::get_difficulty))
+        .route("/tasks/hint", get(task_simple::generate_hint))
+        // Analytics routes (protected with analytics permissions)  
         .route("/analytics/population", get(analytics::population))
         .route("/analytics/bottlenecks", get(analytics::bottlenecks))
         .route("/analytics/strategies", get(analytics::strategies))
@@ -97,6 +100,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/analytics/learner/:id/performance", get(analytics::learner_performance_analysis))
         .route("/analytics/population/strategies", get(analytics::population_strategy_analysis))
         .route("/analytics/learner/:id/adaptive-difficulty", get(analytics::adaptive_difficulty_analysis))
+        // Apply analytics permission middleware to analytics routes
+        .layer(axum_middleware::from_fn(require_analytics_permission))
         // Experiment routes (protected)
         .route("/experiments", get(experiment::list))
         .route("/experiments", post(experiment::create))
@@ -117,6 +122,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/admin/jobs", get(admin::list_jobs))
         .route("/admin/jobs", post(admin::trigger_job))
         .route("/admin/config", post(admin::update_config))
+        .route("/admin/audit-report", get(admin::audit_report))
+        // Apply admin-only middleware to admin routes
+        .layer(axum_middleware::from_fn(require_admin))
         // Apply auth middleware to protected routes
         .layer(axum_middleware::from_fn_with_state(
             app_state.clone(),
@@ -126,6 +134,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(axum_middleware::from_fn_with_state(
             app_state.clone(),
             rate_limit,
+        ))
+        // Add content validation middleware
+        .layer(axum_middleware::from_fn(content_validation))
+        // Add IP blocking middleware
+        .layer(axum_middleware::from_fn_with_state(
+            app_state.clone(),
+            ip_blocking,
         ));
 
     // WebSocket routes (separate as they need different handling)
@@ -133,21 +148,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/sessions/:id/live", get(websocket::session_handler))
         .route("/analytics/live", get(websocket::analytics_handler));
 
-    // Health check routes
+    // Health check and monitoring routes
     let health_routes = Router::new()
-        .route("/live", get(health_check))
+        .route("/live", get(health::simple_health_check))
         .route("/ready", get(ready_check))
-        .route("/metrics", get(metrics));
+        .route("/health", get(health::detailed_health_check))
+        .route("/metrics", get(metrics::prometheus_metrics))
+        .route("/metrics/json", get(metrics::json_metrics))
+        .route("/performance", get(performance::get_performance_metrics))
+        .route("/performance/endpoints", get(performance::get_endpoint_performance));
 
     // Combine all routes
     let app = Router::new()
         .nest("/api", api_routes)
         .nest("/api", ws_routes)
         .nest("/health", health_routes)
+        .layer(axum_middleware::from_fn_with_state(
+            app_state.clone(),
+            audit_middleware,
+        ))
+        .layer(axum_middleware::from_fn(performance::performance_middleware))
+        .layer(axum_middleware::from_fn_with_state(
+            app_state.clone(),
+            security_headers,
+        ))
         .layer(CorsLayer::permissive())
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
-        .with_state(app_state);
+        .with_state(app_state.clone());
+
+    // Start background monitoring tasks
+    let health_monitor_state = app_state.clone();
+    let performance_monitor_state = app_state.clone();
+    
+    tokio::spawn(async move {
+        health::start_health_monitor(health_monitor_state).await;
+    });
+    
+    tokio::spawn(async move {
+        performance::start_performance_monitor(performance_monitor_state).await;
+    });
 
     // Start server
     let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
@@ -159,10 +199,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn health_check() -> &'static str {
-    "OK"
-}
-
 async fn ready_check(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
 ) -> Result<&'static str, error::AppError> {
@@ -172,8 +208,11 @@ async fn ready_check(
         .await
         .map_err(|e| {
             error!("Database health check failed: {}", e);
+            crate::monitoring::global_metrics().record_db_query();
             error::AppError::InternalServerError
         })?;
+
+    crate::monitoring::global_metrics().record_db_query();
 
     // Check in-memory cache connection (PING)
     let mut conn = state.redis_conn.clone();
@@ -182,17 +221,10 @@ async fn ready_check(
         .await
         .map_err(|e| {
             error!("Cache health check failed: {}", e);
+            crate::monitoring::global_metrics().record_cache_access(false);
             error::AppError::InternalServerError
         })?;
 
+    crate::monitoring::global_metrics().record_cache_access(true);
     Ok("READY")
-}
-
-async fn metrics() -> String {
-    // TODO: Implement Prometheus metrics export
-    "# HELP tasks_completed_total Total number of tasks completed
-     # TYPE tasks_completed_total counter
-     tasks_completed_total 0
-"
-    .to_string()
 }

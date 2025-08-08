@@ -1,18 +1,13 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use graph_learning_core::{
-    LearnerModel as CoreLearnerModel,
-    LearnerMetrics as CoreLearnerMetrics,
-    Task as CoreTask,
-    TaskType as CoreTaskType,
+    export::{ErrorAnalysis, LearnerDataExport, ModelSnapshot, PerformancePoint, SessionData},
+    hints::{HintLevel, InterventionAction, InterventionSystem, StruggleLevel},
+    statistics::{DetailedStatistics, ExGaussianParameters, StrategyType},
     tasks::TaskResponse as CoreTaskResponse,
-    OperationType,
-    Topology,
-    TopologyType,
-    export::{LearnerDataExport, SessionData, PerformancePoint, ErrorAnalysis, ModelSnapshot},
-    hints::{InterventionSystem, StruggleLevel, HintLevel, InterventionAction},
-    statistics::{ExGaussianParameters, DetailedStatistics, StrategyType},
+    LearnerMetrics as CoreLearnerMetrics, LearnerModel as CoreLearnerModel, OperationType,
+    Task as CoreTask, TaskType as CoreTaskType, Topology, TopologyType,
 };
+use serde::{Deserialize, Serialize};
 
 // UI-specific wrapper types that bridge between the core library and the UI
 
@@ -73,7 +68,7 @@ impl Domain {
             Domain::Custom(s) => s,
         }
     }
-    
+
     pub fn display_name(&self) -> &str {
         match self {
             Domain::Alphabet => "Alphabet (A-Z)",
@@ -83,7 +78,7 @@ impl Domain {
             Domain::Custom(s) => s,
         }
     }
-    
+
     pub fn description(&self) -> &str {
         match self {
             Domain::Alphabet => "Learn letter positions, sequences, and relationships",
@@ -93,7 +88,7 @@ impl Domain {
             Domain::Custom(_) => "Custom learning domain",
         }
     }
-    
+
     pub fn to_topology_type(&self) -> TopologyType {
         match self {
             Domain::Alphabet => TopologyType::Linear,
@@ -118,7 +113,7 @@ pub struct UITask {
 impl UITask {
     pub fn from_core_task(task: CoreTask) -> Self {
         let (display_prompt, display_options) = Self::format_task_for_ui(&task);
-        
+
         UITask {
             core_task: task,
             display_prompt,
@@ -127,12 +122,12 @@ impl UITask {
             feedback_message: None,
         }
     }
-    
+
     fn format_task_for_ui(task: &CoreTask) -> (String, Vec<String>) {
         // Format the task prompt and options based on task type
         let prompt = task.prompt.clone();
         let options = task.options.clone();
-        
+
         (prompt, options)
     }
 }
@@ -145,7 +140,7 @@ pub struct PerformanceMetrics {
     pub correct_responses: usize,
     pub average_response_time_ms: f64,
     pub accuracy_rate: f64,
-    pub recent_accuracy: f64,  // Last 10 responses
+    pub recent_accuracy: f64, // Last 10 responses
     pub improvement_rate: f64,
     pub streak_count: usize,
     pub best_streak: usize,
@@ -163,17 +158,17 @@ impl PerformanceMetrics {
         } else {
             self.streak_count = 0;
         }
-        
+
         // Update average response time
         let old_avg = self.average_response_time_ms;
-        self.average_response_time_ms = 
-            (old_avg * (self.total_responses - 1) as f64 + response_time_ms as f64) 
+        self.average_response_time_ms = (old_avg * (self.total_responses - 1) as f64
+            + response_time_ms as f64)
             / self.total_responses as f64;
-        
+
         // Update accuracy rate
         self.accuracy_rate = self.correct_responses as f64 / self.total_responses as f64;
     }
-    
+
     pub fn update_from_core_metrics(&mut self, metrics: &CoreLearnerMetrics) {
         self.core_metrics = Some(metrics.clone());
     }
@@ -224,6 +219,8 @@ pub struct ExportData {
     pub sessions: Vec<Session>,
     pub metrics: PerformanceMetrics,
     pub export_time: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub demo_seed: Option<u64>,
 }
 
 // Serialization helpers for Learner (since it contains non-serializable CoreLearnerModel)
@@ -251,5 +248,19 @@ impl<'de> Deserialize<'de> for Learner {
         // For now, we can't deserialize a Learner with a CoreLearnerModel
         // This would need to be handled by reconstructing from stored data
         unimplemented!("Learner deserialization requires topology information")
+    }
+}
+
+// Export format enum for data export functionality
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ExportFormat {
+    Json,
+    Csv,
+    Replay,
+}
+
+impl Default for ExportFormat {
+    fn default() -> Self {
+        ExportFormat::Json
     }
 }

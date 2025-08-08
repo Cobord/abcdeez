@@ -1,0 +1,452 @@
+use xilem::{
+    view::{button, flex, label, prose, Axis},
+    Color, TextAlignment, WidgetView,
+};
+
+use crate::{components::*, models::*, AppData, Screen};
+
+// Enhanced Performance Dashboard with interactive features
+pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
+    // Session summary card
+    let session_summary = if let Some(session) = &data.current_session {
+        let duration = if let Some(end) = session.end_time {
+            end.signed_duration_since(session.start_time).num_seconds()
+        } else {
+            chrono::Utc::now()
+                .signed_duration_since(session.start_time)
+                .num_seconds()
+        };
+
+        card(
+            "Current Session",
+            flex((
+                flex((
+                    label(format!(
+                        "📚 Domain: {}",
+                        data.selected_domain.display_name()
+                    ))
+                    .alignment(TextAlignment::Start),
+                    label(format!(
+                        "⏱ Duration: {}:{:02}",
+                        duration / 60,
+                        duration % 60
+                    ))
+                    .alignment(TextAlignment::End),
+                ))
+                .direction(Axis::Horizontal),
+                flex((
+                    label(format!("✅ Status: {}", session.status))
+                        .brush(if session.status == "active" {
+                            Color::from_rgb8(0, 200, 0)
+                        } else {
+                            Color::from_rgb8(128, 128, 128)
+                        })
+                        .alignment(TextAlignment::Start),
+                    label(format!("📊 Tasks: {}", data.session_responses.len()))
+                        .alignment(TextAlignment::End),
+                ))
+                .direction(Axis::Horizontal),
+            ))
+            .direction(Axis::Vertical),
+        )
+    } else {
+        card(
+            "No Active Session",
+            prose("Start a new session to begin tracking your progress")
+                .alignment(TextAlignment::Middle),
+        )
+    };
+
+    // Enhanced overall metrics with visual indicators
+    let overall_metrics = card(
+        "Performance Overview",
+        flex((
+            // Top row metrics
+            flex((
+                metric_display(
+                    "📈 Total Tasks",
+                    data.current_metrics.total_responses.to_string(),
+                    Color::from_rgb8(0, 128, 255),
+                ),
+                metric_display(
+                    "🎯 Accuracy",
+                    format!("{:.1}%", data.current_metrics.accuracy_rate * 100.0),
+                    if data.current_metrics.accuracy_rate >= 0.8 {
+                        Color::from_rgb8(0, 200, 0)
+                    } else if data.current_metrics.accuracy_rate >= 0.6 {
+                        Color::from_rgb8(255, 165, 0)
+                    } else {
+                        Color::from_rgb8(255, 100, 100)
+                    },
+                ),
+            ))
+            .direction(Axis::Horizontal),
+            // Bottom row metrics
+            flex((
+                metric_display(
+                    "⚡ Avg Time",
+                    format!("{:.0}ms", data.current_metrics.average_response_time_ms),
+                    Color::from_rgb8(255, 128, 0),
+                ),
+                metric_display(
+                    "🔥 Best Streak",
+                    data.current_metrics.best_streak.to_string(),
+                    Color::from_rgb8(128, 0, 255),
+                ),
+            ))
+            .direction(Axis::Horizontal),
+            // Performance rating
+            label({
+                let rating = if data.current_metrics.accuracy_rate >= 0.9 {
+                    "⭐⭐⭐⭐⭐ Excellent!"
+                } else if data.current_metrics.accuracy_rate >= 0.8 {
+                    "⭐⭐⭐⭐ Great!"
+                } else if data.current_metrics.accuracy_rate >= 0.7 {
+                    "⭐⭐⭐ Good!"
+                } else if data.current_metrics.accuracy_rate >= 0.6 {
+                    "⭐⭐ Keep practicing!"
+                } else {
+                    "⭐ Just getting started!"
+                };
+                rating
+            })
+            .brush(Color::from_rgb8(255, 215, 0))
+            .alignment(TextAlignment::Middle),
+        ))
+        .direction(Axis::Vertical),
+    );
+
+    // Interactive learning analytics with explanations
+    let learning_analytics = {
+        let core = data.current_metrics.core_metrics.as_ref();
+        let metrics_block = core.map(|m| {
+            flex((
+                label("🧠 Cognitive Metrics")
+                    .brush(Color::from_rgb8(0, 128, 255))
+                    .alignment(TextAlignment::Start),
+                // Bidirectionality with visual indicator
+                flex((
+                    metric_display(
+                        "↔️ Bidirectionality",
+                        format!("{:.3}", m.bidirectionality_index),
+                        Color::from_rgb8(0, 128, 255),
+                    ),
+                    progress_bar(
+                        (m.bidirectionality_index + 1.0) / 2.0,
+                        "Forward/Backward Balance".to_string(),
+                    ),
+                    prose("How well you navigate sequences in both directions")
+                        .brush(Color::from_rgb8(100, 100, 100))
+                        .alignment(TextAlignment::Start),
+                ))
+                .direction(Axis::Vertical),
+                // Distance effect with visual indicator
+                flex((
+                    metric_display(
+                        "📏 Distance Effect",
+                        format!("{:.3}", m.symbolic_distance_slope),
+                        Color::from_rgb8(128, 0, 255),
+                    ),
+                    progress_bar(
+                        1.0 - m.symbolic_distance_slope.abs().min(1.0),
+                        "Distance Independence".to_string(),
+                    ),
+                    prose("Impact of item separation on your performance")
+                        .brush(Color::from_rgb8(100, 100, 100))
+                        .alignment(TextAlignment::Start),
+                ))
+                .direction(Axis::Vertical),
+                // Chunk boundary with visual indicator
+                flex((
+                    metric_display(
+                        "🧩 Chunk Mastery",
+                        format!("{:.3}", m.chunk_boundary_penalty),
+                        Color::from_rgb8(255, 128, 0),
+                    ),
+                    progress_bar(
+                        1.0 - m.chunk_boundary_penalty.abs().min(1.0),
+                        "Boundary Crossing Ability".to_string(),
+                    ),
+                    prose("Ease of crossing conceptual boundaries")
+                        .brush(Color::from_rgb8(100, 100, 100))
+                        .alignment(TextAlignment::Start),
+                ))
+                .direction(Axis::Vertical),
+            ))
+            .direction(Axis::Vertical)
+        });
+
+        let placeholder = if core.is_none() {
+            Some(
+                flex((
+                    label("📊 Complete more tasks to unlock detailed analytics")
+                        .alignment(TextAlignment::Middle),
+                    prose("Analytics appear after 5+ responses")
+                        .brush(Color::from_rgb8(128, 128, 128))
+                        .alignment(TextAlignment::Middle),
+                ))
+                .direction(Axis::Vertical),
+            )
+        } else {
+            None
+        };
+
+        card(
+            "Learning Analytics",
+            flex((metrics_block, placeholder)).direction(Axis::Vertical),
+        )
+    };
+
+    // Enhanced proficiencies with skill levels
+    let proficiencies = {
+        let profs_block = data.current_learner.as_ref().map(|learner| {
+            let profs = &learner.core_model.operation_proficiencies;
+            let mut prof_list: Vec<_> = profs.values().collect();
+            prof_list.sort_by(|a, b| b.theta.partial_cmp(&a.theta).unwrap());
+
+            let prof_displays = prof_list
+                .iter()
+                .take(5)
+                .map(|prof| {
+                    let proficiency = (prof.theta + 2.0) / 4.0; // Normalize from [-2, 2] to [0, 1]
+                    let level = match proficiency {
+                        p if p >= 0.9 => "Master",
+                        p if p >= 0.7 => "Expert",
+                        p if p >= 0.5 => "Proficient",
+                        p if p >= 0.3 => "Learning",
+                        _ => "Beginner",
+                    };
+
+                    flex((
+                        label(format!("{:?} - {}", prof.operation, level))
+                            .alignment(TextAlignment::Start),
+                        progress_bar(
+                            proficiency.min(1.0).max(0.0),
+                            format!("{}x practice", prof.practice_count),
+                        ),
+                    ))
+                    .direction(Axis::Vertical)
+                })
+                .collect::<Vec<_>>();
+
+            flex(prof_displays).direction(Axis::Vertical)
+        });
+
+        let no_data = if data.current_learner.is_none() {
+            Some(
+                flex((
+                    label("🎯 No proficiency data yet").alignment(TextAlignment::Middle),
+                    prose("Complete tasks to build your skill profile")
+                        .brush(Color::from_rgb8(128, 128, 128))
+                        .alignment(TextAlignment::Middle),
+                ))
+                .direction(Axis::Vertical),
+            )
+        } else {
+            None
+        };
+
+        card(
+            "Skill Proficiencies",
+            flex((profs_block, no_data)).direction(Axis::Vertical),
+        )
+    };
+
+    // Interactive recent activity with details
+    let recent_activity = {
+        let recent_responses = data
+            .session_responses
+            .iter()
+            .rev()
+            .take(10)
+            .enumerate()
+            .map(|(i, response)| {
+                let status = if response.correct { "✅" } else { "❌" };
+                let color = if response.correct {
+                    Color::from_rgb8(0, 200, 0)
+                } else {
+                    Color::from_rgb8(255, 100, 100)
+                };
+
+                let prompt_preview = response.task.prompt.chars().take(40).collect::<String>();
+
+                flex((
+                    label(format!("{} {}", status, prompt_preview))
+                        .brush(color)
+                        .alignment(TextAlignment::Start),
+                    label(format!("⚡{}ms", response.response_time_ms))
+                        .brush(Color::from_rgb8(128, 128, 128))
+                        .alignment(TextAlignment::End),
+                ))
+                .direction(Axis::Horizontal)
+            })
+            .collect::<Vec<_>>();
+
+        let list_block = if recent_responses.is_empty() {
+            None
+        } else {
+            Some(flex(recent_responses).direction(Axis::Vertical))
+        };
+
+        let empty_block = if list_block.is_none() {
+            Some(label("No responses yet - start a session!").alignment(TextAlignment::Middle))
+        } else {
+            None
+        };
+
+        card(
+            "Recent Activity",
+            flex((
+                list_block,
+                empty_block,
+                if data.session_responses.len() > 10 {
+                    Some(
+                        label(format!(
+                            "... and {} more",
+                            data.session_responses.len() - 10
+                        ))
+                        .brush(Color::from_rgb8(128, 128, 128))
+                        .alignment(TextAlignment::Middle),
+                    )
+                } else {
+                    None
+                },
+            ))
+            .direction(Axis::Vertical),
+        )
+    };
+
+    // Enhanced visualization section
+    let visualizations = {
+        let enough = data.session_responses.len() > 5;
+
+        if enough {
+            card(
+                "Performance Visualizations",
+                flex((
+                    // Response time distribution
+                    flex((
+                        label("📊 Response Time Distribution")
+                            .brush(Color::from_rgb8(0, 128, 255))
+                            .alignment(TextAlignment::Start),
+                        response_time_histogram(
+                            &data
+                                .session_responses
+                                .iter()
+                                .map(|r| r.response_time_ms as u128)
+                                .collect::<Vec<_>>(),
+                        ),
+                    ))
+                    .direction(Axis::Vertical),
+                    // Learning curve
+                    flex((
+                        label("📈 Learning Progress")
+                            .brush(Color::from_rgb8(0, 200, 0))
+                            .alignment(TextAlignment::Start),
+                        learning_curve_display(&data.session_responses),
+                    ))
+                    .direction(Axis::Vertical),
+                    // Error pattern analysis
+                    flex((
+                        label("🔍 Error Patterns")
+                            .brush(Color::from_rgb8(255, 128, 0))
+                            .alignment(TextAlignment::Start),
+                        error_analysis_display(&data.session_responses),
+                    ))
+                    .direction(Axis::Vertical),
+                ))
+                .direction(Axis::Horizontal),
+            )
+        } else {
+            card(
+                "Performance Visualizations",
+                flex((
+                    label("📊 Charts will appear after 5+ responses")
+                        .alignment(TextAlignment::Middle),
+                    prose("Keep practicing to unlock detailed visualizations!")
+                        .brush(Color::from_rgb8(128, 128, 128))
+                        .alignment(TextAlignment::Middle),
+                ))
+                .direction(Axis::Vertical),
+            )
+        }
+    };
+
+    // Export section with multiple formats
+    let export_section = card(
+        "Data Export",
+        flex((
+            prose("Export your learning data for analysis or backup")
+                .alignment(TextAlignment::Start),
+            flex((
+                button(
+                    if data.export_data_in_flight {
+                        "Exporting..."
+                    } else {
+                        "📄 Export JSON"
+                    },
+                    |data: &mut AppData| {
+                        if !data.export_data_in_flight {
+                            data.export_format = ExportFormat::Json;
+                            data.export_current_data();
+                        }
+                    },
+                ),
+                button("📊 Export CSV", |data: &mut AppData| {
+                    data.export_format = ExportFormat::Csv;
+                    data.export_current_data();
+                    data.success_message = Some("CSV export coming soon!".to_string());
+                }),
+                button("🔄 Export Replay", |data: &mut AppData| {
+                    data.export_format = ExportFormat::Replay;
+                    data.export_current_data();
+                    data.success_message = Some("Replay export coming soon!".to_string());
+                }),
+            ))
+            .direction(Axis::Horizontal),
+        ))
+        .direction(Axis::Vertical),
+    );
+
+    // Session controls
+    let controls = card(
+        "Actions",
+        flex((
+            button("▶️ Resume Session", |data: &mut AppData| {
+                if data.current_session.is_some() {
+                    data.current_screen = Screen::Training;
+                } else {
+                    data.error_message = Some("No active session to resume".to_string());
+                }
+            }),
+            button("🆕 New Session", |data: &mut AppData| {
+                data.current_screen = Screen::DomainSelection;
+            }),
+            button("⚙️ Settings", |data: &mut AppData| {
+                data.current_screen = Screen::Settings;
+            }),
+            button("🏠 Home", |data: &mut AppData| {
+                data.current_screen = Screen::Welcome;
+            }),
+        ))
+        .direction(Axis::Horizontal),
+    );
+
+    // Main layout
+    flex((
+        label("📊 Performance Dashboard")
+            .brush(Color::from_rgb8(0, 128, 255))
+            .alignment(TextAlignment::Middle),
+        session_summary,
+        overall_metrics,
+        flex((
+            flex((learning_analytics, proficiencies)).direction(Axis::Vertical),
+            recent_activity,
+        ))
+        .direction(Axis::Horizontal),
+        visualizations,
+        export_section,
+        controls,
+    ))
+    .direction(Axis::Vertical)
+}

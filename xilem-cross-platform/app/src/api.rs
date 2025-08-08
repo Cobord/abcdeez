@@ -178,6 +178,7 @@ impl ApiClient {
             sessions,
             metrics,
             export_time: chrono::Utc::now(),
+            demo_seed: None,
         })
     }
 }
