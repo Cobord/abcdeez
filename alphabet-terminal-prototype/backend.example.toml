@@ -1,0 +1,28 @@
+# Backend Configuration Example
+# Copy this file to backend.toml and update with your settings
+
+# API endpoint for the backend server
+api_url = "https://api.learning-experiment.com/v1"
+
+# Optional API key for authentication
+# api_key = "your-api-key-here"
+
+# Experiment identifier
+experiment_id = "alphabet_learning_2024"
+
+# Number of responses to buffer before syncing
+batch_size = 50
+
+# How often to sync in seconds
+sync_interval_secs = 60
+
+# Number of retry attempts for failed requests
+retry_attempts = 3
+
+# Request timeout in seconds
+timeout_secs = 30
+
+# Environment variables can also be used:
+# LEARNING_API_URL=https://api.example.com
+# LEARNING_API_KEY=your-key
+# EXPERIMENT_ID=exp_001

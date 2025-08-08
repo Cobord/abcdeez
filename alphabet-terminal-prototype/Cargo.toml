@@ -17,8 +17,14 @@ path = "src/main.rs"
 name = "test_implementation"
 path = "src/bin/test_implementation.rs"
 
+[[bin]]
+name = "mock_backend"
+path = "src/bin/mock_backend.rs"
+required-features = ["backend-server"]
+
 [dependencies]
 crossterm = { version = "0.27", optional = true }
+ratatui = { version = "0.26", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 rand = { workspace = true }
@@ -26,10 +32,19 @@ rand_distr = { workspace = true }
 chrono = { workspace = true }
 statrs = { workspace = true }
 uuid = { workspace = true }
-tokio = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["sync", "time", "rt-multi-thread", "macros"] }
 tracing = { workspace = true }
+anyhow = "1.0"
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+toml = "0.8"
+axum = { version = "0.7", optional = true }
+
+[dev-dependencies]
+proptest = "1.0"
+criterion = "0.5"
 
 [features]
 default = ["cli"]
-cli = ["crossterm"]
+cli = ["crossterm", "ratatui"]
 async = ["tokio"]
+backend-server = ["tokio", "axum"]

@@ -324,3 +324,206 @@ fn test_strategy_transition_detection() {
                second_analysis.strategy_classification,
                "Should detect strategy change");
 }
+
+#[cfg(test)]
+mod multiple_comparison_tests {
+    use crate::statistics::{MultipleComparisonCorrection, CorrectionMethod};
+
+    #[test]
+    fn test_bonferroni_correction() {
+        let p_values = vec![0.01, 0.04, 0.03, 0.005];
+        let corrector = MultipleComparisonCorrection::new(CorrectionMethod::Bonferroni, 0.05);
+        let adjusted = corrector.adjust_p_values(&p_values);
+        
+        // Bonferroni multiplies each p-value by n
+        assert_eq!(adjusted.len(), 4);
+        assert!((adjusted[0] - 0.04).abs() < 1e-10);  // 0.01 * 4
+        assert!((adjusted[1] - 0.16).abs() < 1e-10);  // 0.04 * 4
+        assert!((adjusted[2] - 0.12).abs() < 1e-10);  // 0.03 * 4
+        assert!((adjusted[3] - 0.02).abs() < 1e-10);  // 0.005 * 4
+        
+        let rejected = corrector.reject_hypotheses(&p_values);
+        assert_eq!(rejected, vec![true, false, false, true]);
+    }
+
+    #[test]
+    fn test_benjamini_hochberg_correction() {
+        let p_values = vec![0.01, 0.04, 0.03, 0.005];
+        let corrector = MultipleComparisonCorrection::new(CorrectionMethod::BenjaminiHochberg, 0.05);
+        let adjusted = corrector.adjust_p_values(&p_values);
+        
+        // BH correction should be less conservative than Bonferroni
+        assert_eq!(adjusted.len(), 4);
+        for &p in &adjusted {
+            assert!(p >= 0.0 && p <= 1.0);
+        }
+        
+        // Verify BH property: adjusted p-values are non-decreasing when sorted by original p-values
+        let mut indexed: Vec<(f64, f64)> = p_values.iter().zip(adjusted.iter())
+            .map(|(&p, &adj)| (p, adj))
+            .collect();
+        indexed.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        
+        for i in 1..indexed.len() {
+            assert!(indexed[i].1 >= indexed[i-1].1 || (indexed[i].1 - indexed[i-1].1).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_holm_correction() {
+        let p_values = vec![0.01, 0.04, 0.03, 0.005];
+        let corrector = MultipleComparisonCorrection::new(CorrectionMethod::Holm, 0.05);
+        let adjusted = corrector.adjust_p_values(&p_values);
+        
+        assert_eq!(adjusted.len(), 4);
+        for &p in &adjusted {
+            assert!(p >= 0.0 && p <= 1.0);
+        }
+        
+        // Holm should be less conservative than Bonferroni but more than BH
+        let bonf_corrector = MultipleComparisonCorrection::new(CorrectionMethod::Bonferroni, 0.05);
+        let bonf_adjusted = bonf_corrector.adjust_p_values(&p_values);
+        
+        // At least one Holm p-value should be <= corresponding Bonferroni
+        let holm_better = adjusted.iter().zip(bonf_adjusted.iter())
+            .any(|(&h, &b)| h <= b);
+        assert!(holm_better);
+    }
+
+    #[test]
+    fn test_multiple_comparison_edge_cases() {
+        let corrector = MultipleComparisonCorrection::new(CorrectionMethod::Bonferroni, 0.05);
+        
+        // Empty input
+        let empty: Vec<f64> = vec![];
+        assert_eq!(corrector.adjust_p_values(&empty), Vec::<f64>::new());
+        
+        // Single p-value
+        let single = vec![0.03];
+        let adjusted = corrector.adjust_p_values(&single);
+        assert_eq!(adjusted, vec![0.03]);  // No correction needed for single test
+        
+        // p-values at boundaries
+        let boundary = vec![0.0, 0.5, 1.0];
+        let adjusted = corrector.adjust_p_values(&boundary);
+        assert_eq!(adjusted[0], 0.0);
+        assert_eq!(adjusted[2], 1.0);  // Should cap at 1.0
+    }
+}
+
+#[cfg(test)]
+mod power_analysis_tests {
+    use crate::statistics::PowerAnalysis;
+
+    #[test]
+    fn test_sample_size_calculation() {
+        // Standard parameters: alpha=0.05, power=0.80, medium effect (d=0.5)
+        let analysis = PowerAnalysis::new(0.05, 0.80, 0.5);
+        let n = analysis.calculate_sample_size_t_test(true);
+        
+        // Should be around 64 per group (128 total) for medium effect
+        assert!(n >= 60 && n <= 70, "Sample size should be ~64 for medium effect, got {}", n);
+        
+        // Large effect size should require smaller sample
+        let large_effect = PowerAnalysis::new(0.05, 0.80, 0.8);
+        let n_large = large_effect.calculate_sample_size_t_test(true);
+        assert!(n_large < n, "Larger effect should require smaller sample");
+        
+        // Small effect size should require larger sample
+        let small_effect = PowerAnalysis::new(0.05, 0.80, 0.2);
+        let n_small = small_effect.calculate_sample_size_t_test(true);
+        assert!(n_small > n, "Smaller effect should require larger sample");
+    }
+
+    #[test]
+    fn test_power_calculation() {
+        let analysis = PowerAnalysis::new(0.05, 0.80, 0.5);
+        
+        // With adequate sample size, should achieve target power
+        let power = analysis.calculate_power(64);
+        assert!((power - 0.80).abs() < 0.05, "Power should be close to 0.80, got {}", power);
+        
+        // Smaller sample should have less power
+        let low_power = analysis.calculate_power(20);
+        assert!(low_power < 0.50, "Small sample should have low power");
+        
+        // Larger sample should have more power
+        let high_power = analysis.calculate_power(200);
+        assert!(high_power > 0.95, "Large sample should have high power");
+    }
+
+    #[test]
+    fn test_minimum_detectable_effect() {
+        let analysis = PowerAnalysis::new(0.05, 0.80, 0.5);
+        
+        // With n=64, should detect d≈0.5
+        let mde = analysis.calculate_min_effect_size(64);
+        assert!((mde - 0.5).abs() < 0.1, "MDE should be close to 0.5, got {}", mde);
+        
+        // Larger sample can detect smaller effects
+        let mde_large = analysis.calculate_min_effect_size(200);
+        assert!(mde_large < mde, "Larger sample should detect smaller effects");
+    }
+
+    #[test]
+    fn test_anova_sample_size() {
+        let analysis = PowerAnalysis::new(0.05, 0.80, 0.25); // f=0.25 is medium effect
+        
+        // 3 groups
+        let n_3groups = analysis.calculate_sample_size_anova(3);
+        assert!(n_3groups > 50 && n_3groups < 200, "ANOVA sample size reasonable");
+        
+        // More groups require larger total sample
+        let n_5groups = analysis.calculate_sample_size_anova(5);
+        assert!(n_5groups > n_3groups, "More groups need larger total sample");
+    }
+
+    #[test]
+    fn test_correlation_sample_size() {
+        // Medium correlation r=0.3
+        let analysis = PowerAnalysis::new(0.05, 0.80, 0.3);
+        let n = analysis.calculate_sample_size_correlation();
+        
+        // Should be around 84 for r=0.3
+        assert!(n >= 80 && n <= 90, "Sample size for r=0.3 should be ~84, got {}", n);
+        
+        // Strong correlation needs smaller sample
+        let strong = PowerAnalysis::new(0.05, 0.80, 0.5);
+        let n_strong = strong.calculate_sample_size_correlation();
+        assert!(n_strong < n, "Stronger correlation needs smaller sample");
+    }
+
+    #[test]
+    fn test_post_hoc_power() {
+        let analysis = PowerAnalysis::new(0.05, 0.80, 0.5);
+        
+        // If observed effect matches expected, post-hoc power ≈ planned power
+        let post_hoc = analysis.post_hoc_power(0.5, 64);
+        assert!((post_hoc - 0.80).abs() < 0.05, "Post-hoc power should match planned");
+        
+        // If observed effect is smaller, post-hoc power is lower
+        let post_hoc_small = analysis.post_hoc_power(0.3, 64);
+        assert!(post_hoc_small < 0.60, "Smaller observed effect means lower power");
+    }
+
+    #[test]
+    fn test_sensitivity_analysis() {
+        let analysis = PowerAnalysis::new(0.05, 0.80, 0.5);
+        let effect_sizes = vec![0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
+        
+        let sensitivity = analysis.sensitivity_analysis(64, &effect_sizes);
+        
+        // Power should increase with effect size
+        for i in 1..sensitivity.len() {
+            assert!(sensitivity[i].1 >= sensitivity[i-1].1, 
+                    "Power should increase with effect size");
+        }
+        
+        // Check specific values
+        let power_at_05 = sensitivity.iter()
+            .find(|(d, _)| (*d - 0.5).abs() < 0.01)
+            .map(|(_, p)| *p)
+            .unwrap();
+        assert!((power_at_05 - 0.80).abs() < 0.05, "Power at d=0.5 should be ~0.80");
+    }
+}

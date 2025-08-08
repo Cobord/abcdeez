@@ -578,3 +578,224 @@ impl SessionAnalyzer {
         }
     }
 }
+
+// Multiple Comparison Corrections
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum CorrectionMethod {
+    Bonferroni,
+    BenjaminiHochberg,
+    Holm,
+    HolmBonferroni,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultipleComparisonCorrection {
+    pub method: CorrectionMethod,
+    pub alpha: f64,
+}
+
+impl MultipleComparisonCorrection {
+    pub fn new(method: CorrectionMethod, alpha: f64) -> Self {
+        Self { method, alpha }
+    }
+
+    /// Apply multiple comparison correction to p-values
+    pub fn adjust_p_values(&self, p_values: &[f64]) -> Vec<f64> {
+        match self.method {
+            CorrectionMethod::Bonferroni => self.bonferroni_correction(p_values),
+            CorrectionMethod::BenjaminiHochberg => self.benjamini_hochberg_correction(p_values),
+            CorrectionMethod::Holm => self.holm_correction(p_values),
+            CorrectionMethod::HolmBonferroni => self.holm_bonferroni_correction(p_values),
+        }
+    }
+
+    /// Bonferroni correction: p_adjusted = min(p * n, 1.0)
+    fn bonferroni_correction(&self, p_values: &[f64]) -> Vec<f64> {
+        let n = p_values.len() as f64;
+        p_values.iter()
+            .map(|&p| (p * n).min(1.0))
+            .collect()
+    }
+
+    /// Benjamini-Hochberg FDR correction
+    fn benjamini_hochberg_correction(&self, p_values: &[f64]) -> Vec<f64> {
+        if p_values.is_empty() {
+            return vec![];
+        }
+
+        let n = p_values.len();
+        let mut indexed_p: Vec<(usize, f64)> = p_values.iter()
+            .enumerate()
+            .map(|(i, &p)| (i, p))
+            .collect();
+        
+        // Sort by p-value
+        indexed_p.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        
+        let mut adjusted = vec![0.0; n];
+        let mut cummin = 1.0;
+        
+        // Apply BH correction from largest to smallest p-value
+        for i in (0..n).rev() {
+            let rank = i + 1;
+            let p_adj = (indexed_p[i].1 * n as f64 / rank as f64).min(cummin);
+            cummin = cummin.min(p_adj);
+            adjusted[indexed_p[i].0] = p_adj;
+        }
+        
+        adjusted
+    }
+
+    /// Holm correction (step-down method)
+    fn holm_correction(&self, p_values: &[f64]) -> Vec<f64> {
+        if p_values.is_empty() {
+            return vec![];
+        }
+
+        let n = p_values.len();
+        let mut indexed_p: Vec<(usize, f64)> = p_values.iter()
+            .enumerate()
+            .map(|(i, &p)| (i, p))
+            .collect();
+        
+        // Sort by p-value
+        indexed_p.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        
+        let mut adjusted = vec![0.0; n];
+        let mut cummax = 0.0;
+        
+        for i in 0..n {
+            let p_adj = ((indexed_p[i].1 * (n - i) as f64).min(1.0)).max(cummax);
+            cummax = cummax.max(p_adj);
+            adjusted[indexed_p[i].0] = p_adj;
+        }
+        
+        adjusted
+    }
+
+    /// Holm-Bonferroni correction (same as Holm)
+    fn holm_bonferroni_correction(&self, p_values: &[f64]) -> Vec<f64> {
+        self.holm_correction(p_values)
+    }
+
+    /// Determine which hypotheses to reject based on corrected p-values
+    pub fn reject_hypotheses(&self, p_values: &[f64]) -> Vec<bool> {
+        let adjusted = self.adjust_p_values(p_values);
+        adjusted.iter().map(|&p| p < self.alpha).collect()
+    }
+}
+
+// Power Analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PowerAnalysis {
+    pub alpha: f64,
+    pub power: f64,
+    pub effect_size: f64,
+}
+
+impl PowerAnalysis {
+    pub fn new(alpha: f64, power: f64, effect_size: f64) -> Self {
+        Self { alpha, power, effect_size }
+    }
+
+    /// Calculate required sample size for t-test
+    pub fn calculate_sample_size_t_test(&self, two_tailed: bool) -> usize {
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        
+        // Z-scores for alpha and beta
+        let z_alpha = if two_tailed {
+            normal.inverse_cdf(1.0 - self.alpha / 2.0)
+        } else {
+            normal.inverse_cdf(1.0 - self.alpha)
+        };
+        
+        let z_beta = normal.inverse_cdf(self.power);
+        
+        // Sample size formula: n = [(z_alpha + z_beta)^2 * 2] / d^2
+        let n = ((z_alpha + z_beta).powi(2) * 2.0) / self.effect_size.powi(2);
+        
+        n.ceil() as usize
+    }
+
+    /// Calculate power given sample size
+    pub fn calculate_power(&self, n: usize) -> f64 {
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        
+        // Critical value
+        let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
+        
+        // Non-centrality parameter
+        let ncp = self.effect_size * (n as f64 / 2.0).sqrt();
+        
+        // Power = P(Z > z_alpha - ncp)
+        1.0 - normal.cdf(z_alpha - ncp)
+    }
+
+    /// Calculate minimum detectable effect size
+    pub fn calculate_min_effect_size(&self, n: usize) -> f64 {
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        
+        let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
+        let z_beta = normal.inverse_cdf(self.power);
+        
+        // d = (z_alpha + z_beta) * sqrt(2/n)
+        (z_alpha + z_beta) * (2.0 / n as f64).sqrt()
+    }
+
+    /// Power analysis for ANOVA (one-way)
+    pub fn calculate_sample_size_anova(&self, k_groups: usize) -> usize {
+        // Using Cohen's f instead of d for ANOVA
+        let f = self.effect_size;
+        let _df1 = (k_groups - 1) as f64;
+        
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let z_alpha = normal.inverse_cdf(1.0 - self.alpha);
+        let z_beta = normal.inverse_cdf(self.power);
+        
+        // Approximation for balanced design
+        let lambda = f.powi(2) * k_groups as f64;
+        let n_per_group = ((z_alpha + z_beta).powi(2) / lambda + 1.0).ceil() as usize;
+        
+        n_per_group * k_groups
+    }
+
+    /// Power analysis for correlation
+    pub fn calculate_sample_size_correlation(&self) -> usize {
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        
+        let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
+        let z_beta = normal.inverse_cdf(self.power);
+        
+        // Fisher's z transformation
+        let r = self.effect_size;
+        let z_r = 0.5 * ((1.0 + r) / (1.0 - r)).ln();
+        
+        // n = [(z_alpha + z_beta) / z_r]^2 + 3
+        let n = ((z_alpha + z_beta) / z_r).powi(2) + 3.0;
+        
+        n.ceil() as usize
+    }
+
+    /// Post-hoc power calculation for completed study
+    pub fn post_hoc_power(&self, observed_effect: f64, n: usize) -> f64 {
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
+        
+        // Non-centrality parameter with observed effect
+        let ncp = observed_effect * (n as f64 / 2.0).sqrt();
+        
+        // Power = P(Z > z_alpha - ncp)
+        1.0 - normal.cdf(z_alpha - ncp)
+    }
+
+    /// Sensitivity analysis: vary effect size
+    pub fn sensitivity_analysis(&self, n: usize, effect_sizes: &[f64]) -> Vec<(f64, f64)> {
+        effect_sizes.iter()
+            .map(|&d| {
+                let mut analysis = self.clone();
+                analysis.effect_size = d;
+                (d, analysis.calculate_power(n))
+            })
+            .collect()
+    }
+}

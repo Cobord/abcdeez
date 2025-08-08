@@ -156,7 +156,7 @@ proptest! {
             .map(|i| ((65 + i) as u8 as char).to_string())
             .collect();
         
-        let topo = Topology::linear(nodes.clone());
+        let topo = Topology::new_linear(nodes.clone());
         
         // Triangle inequality for all triplets
         for i in 0..nodes.len() {
@@ -166,9 +166,9 @@ proptest! {
                     let b = &nodes[j];
                     let c = &nodes[k];
                     
-                    let ab = topo.distance(a, b).unwrap_or(0);
-                    let bc = topo.distance(b, c).unwrap_or(0);
-                    let ac = topo.distance(a, c).unwrap_or(0);
+                    let ab = topo.get_distance(a, b).unwrap_or(0);
+                    let bc = topo.get_distance(b, c).unwrap_or(0);
+                    let ac = topo.get_distance(a, c).unwrap_or(0);
                     
                     // Triangle inequality
                     prop_assert!(ac <= ab + bc,
@@ -187,13 +187,13 @@ proptest! {
             .map(|i| ((65 + i) as u8 as char).to_string())
             .collect();
         
-        let topo = Topology::linear(nodes.clone());
+        let topo = Topology::new_linear(nodes.clone());
         
         // Distance should be symmetric
         for i in 0..nodes.len() {
             for j in 0..nodes.len() {
-                let dist_ij = topo.distance(&nodes[i], &nodes[j]).unwrap_or(0);
-                let dist_ji = topo.distance(&nodes[j], &nodes[i]).unwrap_or(0);
+                let dist_ij = topo.get_distance(&nodes[i], &nodes[j]).unwrap_or(0);
+                let dist_ji = topo.get_distance(&nodes[j], &nodes[i]).unwrap_or(0);
                 
                 prop_assert_eq!(dist_ij, dist_ji,
                                "Distance not symmetric: d({},{})={} != d({},{})={}",
@@ -249,7 +249,8 @@ proptest! {
         decay_rate in 0.01..0.5
     ) {
         // Test decay formula
-        let decayed = initial_strength * (-decay_rate * hours_elapsed).exp();
+        let exponent: f64 = -(decay_rate as f64) * (hours_elapsed as f64);
+        let decayed = initial_strength * exponent.exp();
         
         // Decayed strength should be less than or equal to initial
         prop_assert!(decayed <= initial_strength + 1e-10,
@@ -298,7 +299,7 @@ proptest! {
         let nodes: Vec<String> = (0..num_nodes)
             .map(|i| ((65 + i) as u8 as char).to_string())
             .collect();
-        let topo = Topology::linear(nodes);
+        let topo = Topology::new_linear(nodes);
         let model = BayesianLearnerModel::new(&topo);
         
         // Create a task
@@ -436,7 +437,7 @@ proptest! {
         large_exp in 50.0..100.0
     ) {
         // Test exponential overflow prevention
-        let exp_result = large_exp.exp();
+        let exp_result = (large_exp as f64).exp();
         if exp_result.is_finite() {
             prop_assert!(exp_result > 0.0,
                         "Exponential should be positive: {}", exp_result);
@@ -446,7 +447,8 @@ proptest! {
         }
         
         // Test underflow prevention
-        let tiny_exp = (-large_exp).exp();
+        let neg_large: f64 = -(large_exp as f64);
+        let tiny_exp = neg_large.exp();
         prop_assert!(tiny_exp >= 0.0 && tiny_exp < 1.0,
                     "Should handle underflow: {}", tiny_exp);
     }

@@ -348,3 +348,157 @@ fn test_entropy_calculation() {
     assert!(entropy_after > 0.0,
             "Entropy should remain positive: {}", entropy_after);
 }
+
+#[test]
+fn test_model_comparison_metrics() {
+    use crate::bayesian::ModelComparisonMetrics;
+    
+    // Model 1: Better fit, more complex
+    let model1 = ModelComparisonMetrics::new(-50.0, 10, 100);
+    
+    // Model 2: Worse fit, simpler
+    let model2 = ModelComparisonMetrics::new(-60.0, 5, 100);
+    
+    // AIC should penalize complexity
+    let aic1 = model1.aic();
+    let aic2 = model2.aic();
+    assert!(aic1 < aic2 + 5.0, "Model 1 has better likelihood, should have competitive AIC");
+    
+    // BIC penalizes complexity more heavily
+    let bic1 = model1.bic();
+    let bic2 = model2.bic();
+    assert!(bic1 > aic1 - aic2 + bic2, "BIC penalty should be stronger than AIC");
+    
+    // AICc for small samples
+    let model_small = ModelComparisonMetrics::new(-20.0, 8, 20);
+    let aicc = model_small.aicc();
+    let aic = model_small.aic();
+    assert!(aicc > aic, "AICc should add correction for small samples");
+    
+    // Evidence ratio
+    let evidence = model1.evidence_ratio(&model2);
+    assert!(evidence > 1.0, "Model 1 should have higher evidence");
+}
+
+#[test]
+fn test_dic_calculation() {
+    use crate::bayesian::DIC;
+    
+    let dic = DIC::new(100.0, 90.0);
+    
+    // Effective parameters
+    let p_eff = dic.effective_parameters();
+    assert_eq!(p_eff, 10.0, "Effective parameters = mean_dev - dev_at_mean");
+    
+    // DIC calculation
+    let dic_value = dic.dic();
+    assert_eq!(dic_value, 110.0, "DIC = 2*mean_dev - dev_at_mean");
+}
+
+#[test]
+fn test_waic_calculation() {
+    use crate::bayesian::WAIC;
+    
+    let waic = WAIC::new(-50.0, 5.0);
+    
+    // WAIC value
+    let waic_value = waic.waic();
+    assert_eq!(waic_value, -2.0 * (-50.0 - 5.0), "WAIC = -2(lppd - p_waic)");
+    assert_eq!(waic_value, 110.0);
+    
+    // Standard error
+    let variances = vec![0.1, 0.2, 0.15, 0.1];
+    let se = waic.se(&variances);
+    assert!(se > 0.0, "Standard error should be positive");
+}
+
+#[test]
+fn test_aic_weights() {
+    use crate::bayesian::ModelComparisonMetrics;
+    
+    // Two competing models
+    let model1 = ModelComparisonMetrics::new(-50.0, 5, 100);
+    let model2 = ModelComparisonMetrics::new(-52.0, 5, 100);
+    
+    // Model 1 is better (higher likelihood)
+    let weight1 = model1.aic_weight(&model2);
+    assert!(weight1 > 0.5, "Better model should have weight > 0.5");
+    
+    // Weights should sum to 1
+    let weight2 = model2.aic_weight(&model1);
+    assert!((weight1 + weight2 - 1.0).abs() < 1e-10, "Weights should sum to 1");
+}
+
+#[test]
+fn test_posterior_predictive_check() {
+    let topo = Topology::alphabet();
+    let mut model = BayesianLearnerModel::new(&topo);
+    
+    // Add some response data
+    for i in 0..20 {
+        let task = Task {
+            task_type: TaskType::Successor { 
+                item: char::from(b'A' + (i % 26) as u8).to_string() 
+            },
+            prompt: "test".to_string(),
+            correct_answer: "test".to_string(),
+            options: vec![],
+            difficulty: 0.3,
+            operation: OperationType::Successor,
+        };
+        
+        model.update_with_response(ResponseData {
+            task,
+            correct: i % 3 != 0,  // ~67% accuracy
+            response_time: 1000.0 + (i as f64 * 50.0),
+        });
+    }
+    
+    // Run posterior predictive check
+    let ppc = model.posterior_predictive_check(100);
+    
+    // Check that we have replications
+    assert_eq!(ppc.n_replications, 100);
+    assert_eq!(ppc.replicated_statistics.len(), 100);
+    
+    // Calculate p-values
+    let p_values = ppc.calculate_p_values();
+    
+    // P-values should be between 0 and 1
+    assert!(p_values.accuracy >= 0.0 && p_values.accuracy <= 1.0);
+    assert!(p_values.mean_rt >= 0.0 && p_values.mean_rt <= 1.0);
+    assert!(p_values.rt_std >= 0.0 && p_values.rt_std <= 1.0);
+    assert!(p_values.autocorrelation >= 0.0 && p_values.autocorrelation <= 1.0);
+    
+    // Check model adequacy
+    let adequacy = ppc.check_model_adequacy(0.05);
+    
+    // At least some statistics should be adequate (not all may be due to randomness)
+    let adequate_count = [
+        adequacy.accuracy_adequate,
+        adequacy.mean_rt_adequate,
+        adequacy.rt_std_adequate,
+        adequacy.autocorr_adequate,
+    ].iter().filter(|&&x| x).count();
+    
+    assert!(adequate_count >= 2, "At least half of statistics should be adequate");
+}
+
+#[test]
+fn test_posterior_predictive_statistics() {
+    use crate::bayesian::TestStatistics;
+    
+    // Create known test statistics
+    let stats = TestStatistics {
+        accuracy: 0.75,
+        mean_rt: 1200.0,
+        rt_std: 300.0,
+        autocorrelation: 0.1,
+    };
+    
+    // Verify all fields are accessible
+    assert_eq!(stats.accuracy, 0.75);
+    assert_eq!(stats.mean_rt, 1200.0);
+    assert_eq!(stats.rt_std, 300.0);
+    assert_eq!(stats.autocorrelation, 0.1);
+}

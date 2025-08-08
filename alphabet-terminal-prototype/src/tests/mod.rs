@@ -13,3 +13,15 @@ pub mod integration_tests;
 
 #[cfg(test)]
 pub mod mathematical_tests;
+
+#[cfg(test)]
+pub mod property_tests;
+
+#[cfg(test)]
+pub mod empirical_tests;
+
+#[cfg(test)]
+pub mod stress_tests;
+
+#[cfg(test)]
+pub mod statistical_correctness_tests;

@@ -1,20 +1,53 @@
 use std::env;
-use std::io;
-use graph_learning_core::{demo,ui::TerminalApp};
+use anyhow::Result;
 
-fn main() -> io::Result<()> {
+#[cfg(feature = "cli")]
+use graph_learning_core::tui;
+
+use graph_learning_core::demo;
+
+fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     
-    if args.len() > 1 && args[1] == "demo" {
-        demo::run_demo();
-        demo::demonstrate_task_types();
-        demo::demonstrate_dag_tasks();
-        demo::demonstrate_statistical_analysis();
-        demo::demonstrate_eig();
-        demo::demonstrate_extended_tasks();
-        Ok(())
+    if args.len() > 1 {
+        match args[1].as_str() {
+            "demo" => {
+                demo::run_demo();
+                demo::demonstrate_task_types();
+                demo::demonstrate_dag_tasks();
+                demo::demonstrate_statistical_analysis();
+                demo::demonstrate_eig();
+                demo::demonstrate_extended_tasks();
+                Ok(())
+            }
+            #[cfg(feature = "cli")]
+            "legacy" => {
+                // Use old UI for compatibility
+                use graph_learning_core::ui::TerminalApp;
+                let mut app = TerminalApp::new();
+                app.run().map_err(Into::into)
+            }
+            _ => {
+                #[cfg(feature = "cli")]
+                {
+                    tui::run()
+                }
+                #[cfg(not(feature = "cli"))]
+                {
+                    println!("CLI feature not enabled. Run with --features cli");
+                    Ok(())
+                }
+            }
+        }
     } else {
-        let mut app = TerminalApp::new();
-        app.run()
+        #[cfg(feature = "cli")]
+        {
+            tui::run()
+        }
+        #[cfg(not(feature = "cli"))]
+        {
+            println!("CLI feature not enabled. Run with --features cli");
+            Ok(())
+        }
     }
 }

@@ -20,8 +20,11 @@ pub mod strategy_mixture;
 pub mod hierarchical_bayes;
 pub mod experiments;
 pub mod demo;
+pub mod backend;
 #[cfg(feature = "cli")]
 pub mod ui;
+#[cfg(feature = "cli")]
+pub mod tui;
 
 // Test modules
 #[cfg(test)]
@@ -33,12 +36,12 @@ pub use topology::{Topology, TopologyType, Node, Edge};
 pub use learner::{LearnerModel, LearnerMetrics, OperationType};
 pub use tasks::{Task, TaskType, TaskGenerator, TaskSession};
 pub use adaptive::AdaptiveScheduler;
-pub use bayesian::BayesianLearnerModel;
-pub use statistics::{ExGaussianModel, SessionAnalyzer, StrategyType};
+pub use bayesian::{BayesianLearnerModel, ResponseData};
+pub use statistics::{ExGaussianModel, SessionAnalyzer, StrategyType, ExGaussianParameters, DetailedStatistics, ResponseTimeDistribution};
 pub use export::{LearnerDataExport, PopulationAnalyzer};
 pub use music::{MusicTheory, MusicStructure, MusicTaskGenerator};
 pub use prediction::{PerformancePredictor, ScheduleOptimizer};
-pub use hints::{StruggleDetector, HintGenerator, InterventionSystem};
+pub use hints::{StruggleDetector, HintGenerator, InterventionSystem, HintLevel, InterventionAction, StruggleLevel};
 
 // Version info
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -204,18 +204,61 @@ impl TaskGenerator {
     }
 
     fn generate_segment(&self, start: String, count: usize, reverse: bool) -> Task {
-        let direction = if reverse { "reverse" } else { "forward" };
-        let prompt = format!("List {} items starting from '{}' in {} order:", count, start, direction);
+        // Enhanced segment recital task based on PAPER.md
+        // Can ask for items before, after, or from a starting point
+        let mut rng = rand::thread_rng();
+        let recital_type = rng.gen_range(0..3);
         
-        let segment = self.topology.get_segment(&start, count, reverse);
-        let correct_answer = segment.join(", ");
+        let (prompt, correct_answer, difficulty_bonus) = match recital_type {
+            0 => {
+                // Standard: from a starting point
+                let direction = if reverse { "reverse" } else { "forward" };
+                let prompt = format!("List {} items starting from '{}' in {} order:", count, start, direction);
+                let segment = self.topology.get_segment(&start, count, reverse);
+                (prompt, segment.join(", "), 0.0)
+            },
+            1 if count <= 4 => {
+                // Preceding items (like "4 letters preceding P in reverse")
+                let prompt = if reverse {
+                    format!("Recite the {} items preceding '{}' in reverse order:", count, start)
+                } else {
+                    format!("List the {} items that come before '{}':", count, start)
+                };
+                // Get items before start
+                if let Some(node) = self.topology.get_node_by_label(&start) {
+                    let idx = self.topology.node_map[&node.id];
+                    let start_idx = idx.saturating_sub(count);
+                    let mut items = Vec::new();
+                    for i in start_idx..idx {
+                        if i < self.topology.nodes.len() {
+                            items.push(self.topology.nodes[i].label.clone());
+                        }
+                    }
+                    if reverse {
+                        items.reverse();
+                    }
+                    (prompt, items.join(", "), 0.1)
+                } else {
+                    let prompt = format!("List {} items starting from '{}' in forward order:", count, start);
+                    let segment = self.topology.get_segment(&start, count, false);
+                    (prompt, segment.join(", "), 0.0)
+                }
+            },
+            _ => {
+                // Standard fallback for larger segments
+                let direction = if reverse { "reverse" } else { "forward" };
+                let prompt = format!("List {} items starting from '{}' in {} order:", count, start, direction);
+                let segment = self.topology.get_segment(&start, count, reverse);
+                (prompt, segment.join(", "), 0.0)
+            }
+        };
 
         Task {
             task_type: TaskType::Segment { start, count, reverse },
             prompt,
             correct_answer: correct_answer.clone(),
             options: vec![],
-            difficulty: 0.3 + (count as f64 * 0.1) + if reverse { 0.2 } else { 0.0 },
+            difficulty: 0.3 + (count as f64 * 0.1) + if reverse { 0.2 } else { 0.0 } + difficulty_bonus,
             operation: OperationType::Segment(count, reverse),
         }
     }
