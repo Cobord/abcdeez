@@ -9,6 +9,9 @@ use graph_learning_core::{
     OperationType,
     Topology,
     TopologyType,
+    export::{LearnerDataExport, SessionData, PerformancePoint, ErrorAnalysis, ModelSnapshot},
+    hints::{InterventionSystem, StruggleLevel, HintLevel, InterventionAction},
+    statistics::{ExGaussianParameters, DetailedStatistics, StrategyType},
 };
 
 // UI-specific wrapper types that bridge between the core library and the UI
@@ -19,7 +22,10 @@ pub struct User {
     pub id: String,
     pub username: String,
     pub email: String,
-    pub token: Option<String>,
+    #[serde(skip)]
+    pub password_hash: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // Wrapper for core LearnerModel with UI-specific fields
@@ -178,6 +184,14 @@ impl PerformanceMetrics {
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TokenResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub token_type: String,
+    pub expires_in: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

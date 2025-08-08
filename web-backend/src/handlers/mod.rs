@@ -5,3 +5,4 @@ pub mod task;
 pub mod analytics;
 pub mod experiment;
 pub mod music;
+pub mod admin;

@@ -24,7 +24,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::Config;
 use crate::state::AppState;
-use crate::handlers::{auth, learner, session, task, analytics, experiment, music};
+use crate::handlers::{auth, learner, session, task, analytics, experiment, music, admin};
 use crate::middleware::{auth_middleware, rate_limit};
 
 #[tokio::main]
@@ -101,6 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/analytics/strategies", get(analytics::strategies))
         .route("/analytics/learning-curves", get(analytics::learning_curves))
         .route("/analytics/compare", post(analytics::compare))
+        .route("/analytics/live", get(analytics::live))
         
         // Experiment routes (protected)
         .route("/experiments", get(experiment::list))
@@ -115,6 +116,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/music/progressions", get(music::progressions))
         .route("/music/tasks", post(music::tasks))
         .route("/music/audio/:note", get(music::audio))
+        
+        // Admin routes (protected with admin permissions)
+        .route("/admin/dashboard", get(admin::dashboard))
+        .route("/admin/users", get(admin::list_users))
+        .route("/admin/learners", get(admin::list_learners))
+        .route("/admin/audit", get(admin::audit_trail))
+        .route("/admin/jobs", get(admin::list_jobs))
+        .route("/admin/jobs", post(admin::trigger_job))
+        .route("/admin/config", post(admin::update_config))
         
         // Apply auth middleware to protected routes
         .layer(axum_middleware::from_fn_with_state(

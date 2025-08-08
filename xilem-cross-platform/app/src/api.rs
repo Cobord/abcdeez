@@ -75,33 +75,22 @@ impl ApiClient {
     // Authentication endpoints
     pub async fn login(&self, username: String, password: String) -> Result<User> {
         let request = LoginRequest { username, password };
-        let response: serde_json::Value = self.post("/api/auth/login", &request).await?;
+        let response: TokenResponse = self.post("/api/auth/login", &request).await?;
         
-        // Extract token and user from response
-        if let Some(token) = response.get("token").and_then(|t| t.as_str()) {
-            self.set_auth_token(token.to_string()).await;
-        }
+        // Store the access token
+        self.set_auth_token(response.access_token).await;
         
-        if let Some(user_value) = response.get("user") {
-            Ok(serde_json::from_value(user_value.clone())?)
-        } else {
-            Err(anyhow::anyhow!("Invalid login response"))
-        }
+        // Get user info with the token
+        let user: User = self.get("/api/auth/me").await?;
+        Ok(user)
     }
     
     pub async fn register(&self, username: String, email: String, password: String) -> Result<User> {
         let request = RegisterRequest { username, email, password };
-        let response: serde_json::Value = self.post("/api/auth/register", &request).await?;
+        let user: User = self.post("/api/auth/register", &request).await?;
         
-        if let Some(token) = response.get("token").and_then(|t| t.as_str()) {
-            self.set_auth_token(token.to_string()).await;
-        }
-        
-        if let Some(user_value) = response.get("user") {
-            Ok(serde_json::from_value(user_value.clone())?)
-        } else {
-            Err(anyhow::anyhow!("Invalid registration response"))
-        }
+        // Backend returns user directly, no need to extract token separately
+        Ok(user)
     }
     
     // Learner endpoints
@@ -126,8 +115,8 @@ impl ApiClient {
         self.post("/api/sessions", &request).await
     }
     
-    pub async fn end_session(&self, session_id: &str) -> Result<Session> {
-        self.post(&format!("/api/sessions/{}/end", session_id), &serde_json::json!({})).await
+    pub async fn end_session(&self, session_id: &str) -> Result<()> {
+        self.post::<_, ()>(&format!("/api/sessions/{}/complete", session_id), &serde_json::json!({})).await
     }
     
     pub async fn get_session(&self, session_id: &str) -> Result<Session> {

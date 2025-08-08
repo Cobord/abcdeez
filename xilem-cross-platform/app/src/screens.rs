@@ -12,8 +12,7 @@ pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         label("Adaptive Learning System")
             .color(Color::rgb8(0, 128, 255)),
         
-        prose("An intelligent learning system that adapts to your knowledge and optimizes your learning path using graph-based cognitive models.")
-            .alignment(TextAlignment::Middle),
+        prose("An intelligent learning system that adapts to your knowledge and optimizes your learning path using graph-based cognitive models."),
         
         card("Login", flex((
             labeled_input(
@@ -201,8 +200,20 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 })
                 .collect::<Vec<_>>();
             
-            flex(option_buttons)
-                .direction(Axis::Vertical)
+            flex((
+                flex(option_buttons)
+                    .direction(Axis::Vertical),
+                data.enable_hints.then(|| {
+                    button("Get Hint", |data: &mut AppData| {
+                        data.request_hint();
+                    })
+                }),
+                data.current_hint.as_ref().map(|hint| {
+                    card("Hint", prose(hint))
+                        .map(|widget| widget)
+                }),
+            ))
+            .direction(Axis::Vertical)
         };
         
         card("Current Task", flex((
@@ -391,14 +402,32 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             .direction(Axis::Vertical))
     };
     
+    let advanced_stats = if data.session_responses.len() > 5 {
+        flex((
+            response_time_histogram(&data.session_responses.iter()
+                .map(|r| r.response_time_ms as u128)
+                .collect::<Vec<_>>()),
+            learning_curve_display(&data.session_responses),
+            error_analysis_display(&data.session_responses),
+        ))
+        .direction(Axis::Horizontal)
+    } else {
+        flex((
+            label("Advanced statistics will appear after completing more tasks")
+                .color(Color::rgb8(128, 128, 128)),
+        ))
+        .direction(Axis::Vertical)
+    };
+
     flex((
         label("Performance Dashboard")
-            .brush(Color::from_rgb8(0, 128, 255))
-            .alignment(TextAlignment::Middle),
+            .color(Color::rgb8(0, 128, 255)),
         
         overall_metrics,
         learning_metrics,
         proficiencies,
+        data.current_learner.as_ref().map(|learner| strategy_analysis_display(learner)),
+        advanced_stats,
         recent_display,
         
         flex((

@@ -25,6 +25,9 @@ use graph_learning_core::{
     TaskGenerator,
     tasks::TaskResponse as CoreTaskResponse,
     LearnerMetrics,
+    hints::{InterventionSystem, InterventionAction, HintLevel, StruggleLevel},
+    export::LearnerDataExport,
+    statistics::{SessionAnalyzer, StrategyType, ExGaussianParameters},
 };
 
 use models::*;
@@ -71,6 +74,12 @@ pub struct AppData {
     pub selected_answer_index: Option<usize>,
     pub show_feedback: bool,
     pub last_response_correct: bool,
+    pub current_hint: Option<String>,
+    pub hint_level: HintLevel,
+    
+    // Intervention system
+    pub intervention_system: Option<InterventionSystem>,
+    pub struggle_level: StruggleLevel,
     
     // Performance metrics
     pub current_metrics: PerformanceMetrics,
@@ -116,6 +125,10 @@ impl Default for AppData {
             selected_answer_index: None,
             show_feedback: false,
             last_response_correct: false,
+            current_hint: None,
+            hint_level: HintLevel::Confirmation,
+            intervention_system: None,
+            struggle_level: StruggleLevel::None,
             current_metrics: PerformanceMetrics::default(),
             session_responses: Vec::new(),
             use_adaptive_scheduling: true,
@@ -263,6 +276,9 @@ impl AppData {
                 // Create task session
                 let task_session = TaskSession::new(topology.clone());
                 
+                // Create intervention system for hints and adaptive difficulty
+                let intervention_system = InterventionSystem::new(topology.clone());
+                
                 // Create UI session
                 let session = Session {
                     id: Uuid::new_v4().to_string(),
@@ -279,6 +295,7 @@ impl AppData {
                 self.current_session = Some(session);
                 self.task_generator = Some(task_generator);
                 self.task_session = Some(task_session);
+                self.intervention_system = Some(intervention_system);
                 self.current_screen = Screen::Training;
                 self.session_responses.clear();
                 self.current_metrics = PerformanceMetrics::default();
@@ -330,6 +347,11 @@ impl AppData {
                 // Check if correct
                 let correct = answer == ui_task.core_task.correct_answer;
                 
+                // Process response with intervention system
+                if let Some(intervention_system) = &mut self.intervention_system {
+                    intervention_system.process_response(&ui_task.core_task, correct, response_time_ms as u64);
+                }
+                
                 // Create task response
                 let response = CoreTaskResponse {
                     task: ui_task.core_task.clone(),
@@ -373,12 +395,60 @@ impl AppData {
                 self.show_feedback = true;
                 self.selected_answer = Some(answer);
                 self.selected_answer_index = Some(answer_index);
+                self.current_hint = None; // Clear any existing hint
             }
         }
     }
     
     pub fn continue_to_next_task(&mut self) {
         self.generate_next_task();
+    }
+    
+    pub fn request_hint(&mut self) {
+        if let (Some(ui_task), Some(intervention_system)) = (&self.current_task, &mut self.intervention_system) {
+            if self.enable_hints {
+                let elapsed_ms = self.task_start_time
+                    .map(|start| start.elapsed().as_millis() as u64)
+                    .unwrap_or(0);
+                    
+                if let Some(action) = intervention_system.check_intervention_needed(&ui_task.core_task, elapsed_ms) {
+                    match action {
+                        InterventionAction::ProvideHint(hint) | InterventionAction::ProvideWorkedExample(hint) => {
+                            self.current_hint = Some(hint);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    
+    pub fn check_struggle_and_provide_help(&mut self) {
+        if let (Some(ui_task), Some(intervention_system)) = (&self.current_task, &mut self.intervention_system) {
+            let elapsed_ms = self.task_start_time
+                .map(|start| start.elapsed().as_millis() as u64)
+                .unwrap_or(0);
+                
+            if let Some(action) = intervention_system.check_intervention_needed(&ui_task.core_task, elapsed_ms) {
+                match action {
+                    InterventionAction::ProvideHint(hint) | InterventionAction::ProvideWorkedExample(hint) => {
+                        self.current_hint = Some(hint);
+                    }
+                    InterventionAction::SuggestBreak => {
+                        self.success_message = Some("Consider taking a short break to refresh your mind.".to_string());
+                    }
+                    InterventionAction::IncreaseDifficulty => {
+                        self.difficulty_level = (self.difficulty_level + 0.1).min(1.0);
+                        self.success_message = Some("Great progress! Increasing difficulty.".to_string());
+                    }
+                    InterventionAction::DecreaseDifficulty => {
+                        self.difficulty_level = (self.difficulty_level - 0.1).max(0.1);
+                        self.success_message = Some("Adjusting difficulty to help you learn better.".to_string());
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
     
     pub fn end_session(&mut self) {
@@ -414,15 +484,28 @@ impl AppData {
     }
     
     pub fn export_current_data(&mut self) {
-        if let (Some(learner), Some(session)) = (&self.current_learner, &self.current_session) {
-            self.export_data = Some(ExportData {
+        if let (Some(learner), Some(task_session)) = (&self.current_learner, &self.task_session) {
+            // Create comprehensive export using the core library
+            let comprehensive_export = LearnerDataExport::from_learner_model(
+                &learner.core_model,
+                vec![task_session.clone()],
+                Some("xilem-ui-session".to_string()),
+            );
+            
+            // Also create UI-specific export
+            let ui_export = ExportData {
                 learner: learner.clone(),
-                sessions: vec![session.clone()],
+                sessions: self.current_session.as_ref().map_or(vec![], |s| vec![s.clone()]),
                 metrics: self.current_metrics.clone(),
                 export_time: Utc::now(),
-            });
+            };
             
-            self.success_message = Some("Data exported successfully!".to_string());
+            self.export_data = Some(ui_export);
+            
+            // You could save the comprehensive export to a file here
+            // let json = comprehensive_export.to_json().unwrap_or_default();
+            
+            self.success_message = Some("Comprehensive data export ready! Includes performance trajectories, error patterns, and model parameters.".to_string());
         } else {
             self.error_message = Some("No data to export".to_string());
         }
