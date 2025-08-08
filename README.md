@@ -49,6 +49,81 @@ The core innovation is using **Expected Information Gain (EIG)** to select tasks
 - **Exploration-exploitation balance** (ε-greedy)
 - **Spaced repetition** with optimal review scheduling
 
+
+## Testing
+
+### Running Tests
+
+The project includes comprehensive test suites for all components. Use the provided test runner script for convenience:
+
+```bash
+# Run all tests
+./scripts/test.sh
+
+# Test specific components
+./scripts/test.sh core        # Core library tests
+./scripts/test.sh ui          # UI application tests
+./scripts/test.sh backend     # Backend server tests
+./scripts/test.sh demo        # Demo integration tests
+
+# Run tests with output
+./scripts/test.sh demo --nocapture
+
+# Generate test coverage report
+./scripts/test.sh coverage
+```
+
+### Test Categories
+
+#### Unit Tests
+- Core algorithm correctness
+- Model update logic
+- Task generation
+- Performance metric calculations
+
+#### Integration Tests
+- Demo showcase flow (`tests/demo_integration.rs`)
+- Deterministic demo behavior with seeded RNG
+- Session lifecycle management
+- Domain selection and topology creation
+
+#### Deterministic Testing
+The demo mode supports seeded RNG for reproducible behavior:
+
+```rust
+// Run demo with specific seed for reproducibility
+app_data.demo_showcase_with_seed(Some(42));
+```
+
+### Continuous Integration
+
+The project uses GitHub Actions for CI/CD:
+
+- **Test Suite**: Runs on Ubuntu, macOS, and Windows
+- **Rust Versions**: Tests against stable and beta
+- **Code Quality**: Formatting (rustfmt) and linting (clippy)
+- **Security**: Automated vulnerability scanning with cargo-audit
+- **Coverage**: Test coverage reporting with tarpaulin
+
+CI runs automatically on:
+- Push to `main` or `develop` branches
+- Pull requests
+
+### Local Development Testing
+
+For rapid development iteration:
+
+```bash
+# Watch mode - reruns tests on file changes
+./scripts/test.sh watch
+
+# Quick tests only (unit tests, no integration)
+./scripts/test.sh quick
+
+# Run benchmarks
+./scripts/test.sh bench
+```
+
 ### 📝 Comprehensive Task Battery
 - **Pairwise comparisons** ("Is A before B?")
 - **Successor/predecessor** queries with bidirectional training

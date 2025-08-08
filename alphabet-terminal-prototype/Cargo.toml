@@ -4,6 +4,10 @@ version = { workspace = true }
 edition = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
+description = "Adaptive graph-coded learning system for cognitive modeling"
+repository = "https://github.com/yourusername/alphabet-terminal-prototype"
+homepage = "https://github.com/yourusername/alphabet-terminal-prototype"
+readme = "../README.md"
 
 [lib]
 name = "graph_learning_core"
@@ -21,6 +25,21 @@ path = "src/bin/test_implementation.rs"
 name = "mock_backend"
 path = "src/bin/mock_backend.rs"
 required-features = ["backend-server"]
+
+# Package metadata for distribution
+[package.metadata.dist]
+# Specify this package should be distributed
+dist = true
+
+[package.metadata.dist.dependencies.apt]
+# Dependencies for Debian/Ubuntu
+libc6 = "*"
+libssl3 = "*"
+
+[package.metadata.dist.dependencies.yum]
+# Dependencies for RHEL/Fedora
+glibc = "*"
+openssl = "*"
 
 [dependencies]
 crossterm = { version = "0.27", optional = true }

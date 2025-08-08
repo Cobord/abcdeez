@@ -1,6 +1,20 @@
 [package]
 name = "xilem_example_desktop"
 edition.workspace = true
+version = "0.1.0"
+description = "Desktop application for graph learning"
+license = "MIT OR Apache-2.0"
+
+# Distribution metadata
+[package.metadata.dist]
+# Specify this binary should be distributed
+dist = true
+
+[package.metadata.wix]
+upgrade-guid = "A2B3C4D5-E6F7-8901-2345-678901234567"
+path-guid = "B3C4D5E6-F789-0123-4567-890123456789"
+license = false
+eula = false
 
 [dependencies]
 graph_learning_app = { path = "../app" }

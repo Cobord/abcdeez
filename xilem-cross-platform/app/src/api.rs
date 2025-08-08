@@ -85,6 +85,72 @@ impl ApiClient {
         Ok(user)
     }
 
+    // OAuth Authentication endpoints
+    pub async fn apple_signin(
+        &self,
+        identity_token: String,
+        authorization_code: Option<String>,
+        user_info: Option<serde_json::Value>,
+    ) -> Result<User> {
+        let request = AppleSignInRequest {
+            identity_token,
+            authorization_code,
+            user_info,
+        };
+        let response: TokenResponse = self.post("/api/auth/apple/signin", &request).await?;
+
+        // Store the access token
+        self.set_auth_token(response.access_token).await;
+
+        // Return the user info from the response
+        Ok(User {
+            id: response.user.id,
+            username: response.user.username,
+            email: response.user.email,
+            password_hash: String::new(), // OAuth users don't have password hashes
+            apple_user_id: None, // Will be populated server-side
+            github_user_id: None,
+            oauth_provider_id: None,
+            auth_provider: "apple".to_string(),
+            is_private_email: None,
+            created_at: response.user.created_at,
+            updated_at: response.user.updated_at,
+        })
+    }
+
+    pub async fn github_oauth_callback(
+        &self,
+        provider: String,
+        code: String,
+        state: String,
+    ) -> Result<User> {
+        let request = OAuthCallbackRequest { provider, code, state };
+        let response: TokenResponse = self.post("/api/auth/oauth/callback", &request).await?;
+
+        // Store the access token
+        self.set_auth_token(response.access_token).await;
+
+        // Return the user info from the response
+        Ok(User {
+            id: response.user.id,
+            username: response.user.username,
+            email: response.user.email,
+            password_hash: String::new(),
+            apple_user_id: None,
+            github_user_id: None,
+            oauth_provider_id: None,
+            auth_provider: "github".to_string(),
+            is_private_email: Some(false),
+            created_at: response.user.created_at,
+            updated_at: response.user.updated_at,
+        })
+    }
+
+    pub async fn get_oauth_authorization_url(&self, provider: &str) -> Result<OAuthAuthUrlResponse> {
+        self.get(&format!("/api/auth/oauth/{}/authorize", provider))
+            .await
+    }
+
     pub async fn register(
         &self,
         username: String,

@@ -23,3 +23,19 @@ rand = "0.8"
 
 # Include the alphabet-terminal-prototype library
 graph-learning-core = { path = "../../alphabet-terminal-prototype", package = "graph-learning-core" }
+
+# Visualization dependencies
+plotters = { version = "0.3", default-features = false, features = [
+    "bitmap_backend",
+    "bitmap_encoder",
+    "chrono",
+] }
+image = "0.24"
+imageproc = "0.23"
+rusttype = "0.9"
+
+# Offline storage dependencies
+rusqlite = { version = "0.30", features = ["bundled", "chrono", "serde_json"] }
+async-trait = "0.1"
+thiserror = "1.0"
+tempfile = "3.8"

@@ -22,6 +22,18 @@ pub struct Config {
     pub tracing_endpoint: Option<String>,
     pub health_check_interval_seconds: u32,
     pub performance_monitoring_enabled: bool,
+    
+    // OAuth Providers configuration
+    pub apple_client_id: String,
+    pub apple_team_id: String,
+    pub apple_key_id: String,
+    pub apple_private_key_path: String,
+    pub apple_redirect_uri: String,
+    
+    // GitHub OAuth configuration
+    pub github_client_id: String,
+    pub github_client_secret: String,
+    pub github_redirect_uri: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -45,7 +57,7 @@ impl Config {
                 .parse()
                 .expect("PORT must be a number"),
             jwt_secret: env::var("JWT_SECRET")
-                .unwrap_or_else(|_| "development_secret_change_in_production".to_string()),
+                .expect("JWT_SECRET environment variable is required"),
             jwt_expiration_hours: env::var("JWT_EXPIRATION_HOURS")
                 .unwrap_or_else(|_| "24".to_string())
                 .parse()
@@ -99,11 +111,88 @@ impl Config {
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
                 .expect("PERFORMANCE_MONITORING_ENABLED must be a boolean"),
+            
+            // OAuth Providers configuration
+            apple_client_id: env::var("APPLE_CLIENT_ID")
+                .expect("APPLE_CLIENT_ID environment variable is required"),
+            apple_team_id: env::var("APPLE_TEAM_ID")
+                .expect("APPLE_TEAM_ID environment variable is required"),
+            apple_key_id: env::var("APPLE_KEY_ID")
+                .expect("APPLE_KEY_ID environment variable is required"),
+            apple_private_key_path: env::var("APPLE_PRIVATE_KEY_PATH")
+                .expect("APPLE_PRIVATE_KEY_PATH environment variable is required"),
+            apple_redirect_uri: env::var("APPLE_REDIRECT_URI")
+                .unwrap_or_else(|_| "https://api.yourapp.com/api/auth/apple/callback".to_string()),
+            
+            // GitHub OAuth configuration
+            github_client_id: env::var("GITHUB_CLIENT_ID")
+                .expect("GITHUB_CLIENT_ID environment variable is required"),
+            github_client_secret: env::var("GITHUB_CLIENT_SECRET")
+                .expect("GITHUB_CLIENT_SECRET environment variable is required"),
+            github_redirect_uri: env::var("GITHUB_REDIRECT_URI")
+                .unwrap_or_else(|_| "https://api.yourapp.com/api/auth/github/callback".to_string()),
         })
     }
 
     pub fn is_production(&self) -> bool {
         self.environment == Environment::Production
+    }
+    
+    pub fn validate_production_safety(&self) -> Result<(), String> {
+        if !self.is_production() {
+            return Ok(());
+        }
+
+        if self.cors_origin == "*" {
+            return Err("Wildcard CORS not allowed in production".to_string());
+        }
+
+        if self.jwt_secret.len() < 32 {
+            return Err("JWT secret too weak for production".to_string());
+        }
+
+        if self.jwt_secret == "development_secret_change_in_production" {
+            return Err("Default JWT secret not allowed in production".to_string());
+        }
+
+        if self.database_url.starts_with("sqlite://") && !self.database_url.contains("?mode=ro") {
+            return Err("SQLite databases should be read-only in production".to_string());
+        }
+
+        // Validate OAuth providers configuration in production
+        if self.apple_client_id.is_empty() {
+            return Err("Apple Client ID must be configured for production".to_string());
+        }
+        
+        if self.apple_team_id.len() != 10 {
+            return Err("Apple Team ID must be exactly 10 characters".to_string());
+        }
+        
+        if self.apple_key_id.len() != 10 {
+            return Err("Apple Key ID must be exactly 10 characters".to_string());
+        }
+        
+        if !std::path::Path::new(&self.apple_private_key_path).exists() {
+            return Err("Apple private key file not found".to_string());
+        }
+        
+        if !self.apple_redirect_uri.starts_with("https://") {
+            return Err("Apple redirect URI must use HTTPS in production".to_string());
+        }
+        
+        if self.github_client_id.is_empty() {
+            return Err("GitHub Client ID must be configured for production".to_string());
+        }
+        
+        if self.github_client_secret.is_empty() {
+            return Err("GitHub Client Secret must be configured for production".to_string());
+        }
+        
+        if !self.github_redirect_uri.starts_with("https://") {
+            return Err("GitHub redirect URI must use HTTPS in production".to_string());
+        }
+
+        Ok(())
     }
 }
 

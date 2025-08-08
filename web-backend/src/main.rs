@@ -14,6 +14,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
+    http::{header, Method},
     middleware as axum_middleware,
     routing::{delete, get, patch, post},
     Router,
@@ -43,7 +44,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load configuration
     let config = Config::from_env()?;
-    info!("Starting web backend with config: {:?}", config);
+    
+    // Validate production safety
+    if let Err(e) = config.validate_production_safety() {
+        error!("Production safety validation failed: {}", e);
+        return Err(e.into());
+    }
+    
+    info!("Starting web backend - Environment: {:?}, Port: {}", 
+        config.environment, config.port);
 
     // Initialize database
     let db_pool = db::init_pool(&config.database_url).await?;
@@ -56,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cache_conn = crate::cache::connection_manager();
 
     // Create app state
-    let app_state = Arc::new(AppState::new(db_pool, cache_conn, config.clone()));
+    let app_state = Arc::new(AppState::new(db_pool, cache_conn, Arc::new(config.clone())));
 
     // Build API router
     let api_routes = Router::new()
@@ -66,6 +75,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/auth/refresh", post(auth::refresh))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
+        
+        // OAuth routes
+        .route("/auth/oauth/:provider/authorize", get(auth::oauth_authorization_url))
+        .route("/auth/oauth/callback", post(auth::oauth_callback))
+        .route("/auth/apple/signin", post(auth::apple_signin))
         // Learner routes (protected)
         .route("/learners", post(learner::create))
         .route("/learners/:id", get(learner::get))
@@ -121,6 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/admin/audit", get(admin::audit_trail))
         .route("/admin/jobs", get(admin::list_jobs))
         .route("/admin/jobs", post(admin::trigger_job))
+        .route("/admin/oauth-validation", post(admin::trigger_oauth_validation))
         .route("/admin/config", post(admin::update_config))
         .route("/admin/audit-report", get(admin::audit_report))
         // Apply admin-only middleware to admin routes
@@ -172,7 +187,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             app_state.clone(),
             security_headers,
         ))
-        .layer(CorsLayer::permissive())
+        .layer({
+            let cors = if config.cors_origin == "*" {
+                CorsLayer::permissive()
+            } else {
+                CorsLayer::new()
+                    .allow_origin(config.cors_origin.parse::<axum::http::HeaderValue>()
+                        .expect("Invalid CORS origin"))
+                    .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH])
+                    .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
+            };
+            cors
+        })
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .with_state(app_state.clone());
@@ -187,6 +213,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     tokio::spawn(async move {
         performance::start_performance_monitor(performance_monitor_state).await;
+    });
+
+    // Start background job workers
+    let batch_job_worker_state = app_state.clone();
+    let oauth_validator_state = app_state.clone();
+    
+    // Start main batch job worker
+    tokio::spawn(async move {
+        batch_job_worker_state.batch_job_service.start_worker().await;
+    });
+    
+    // Start OAuth credential validation scheduler
+    tokio::spawn(async move {
+        oauth_validator_state.batch_job_service.start_oauth_validation_scheduler().await;
     });
 
     // Start server

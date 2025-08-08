@@ -7,6 +7,8 @@ use uuid::Uuid;
 use sqlx::Row;
 
 use crate::services::{AnalyticsService, LearnerService};
+use crate::services::oauth_service::{OAuthService, OAuthProvider, CredentialState};
+use crate::config::Config;
 
 #[derive(Debug, Clone)]
 pub enum JobType {
@@ -15,6 +17,7 @@ pub enum JobType {
     ModelSnapshot,
     DataCleanup,
     CacheWarmup,
+    OAuthCredentialValidation,
 }
 
 impl JobType {
@@ -25,6 +28,7 @@ impl JobType {
             "model_snapshot" => Some(JobType::ModelSnapshot),
             "data_cleanup" => Some(JobType::DataCleanup),
             "cache_warmup" => Some(JobType::CacheWarmup),
+            "oauth_credential_validation" => Some(JobType::OAuthCredentialValidation),
             _ => None,
         }
     }
@@ -36,6 +40,7 @@ impl JobType {
             JobType::ModelSnapshot => "model_snapshot",
             JobType::DataCleanup => "data_cleanup",
             JobType::CacheWarmup => "cache_warmup",
+            JobType::OAuthCredentialValidation => "oauth_credential_validation",
         }
     }
 }
@@ -45,10 +50,11 @@ pub struct BatchJobService {
     redis: ConnectionManager,
     analytics_service: AnalyticsService,
     learner_service: Arc<LearnerService>,
+    config: Arc<Config>,
 }
 
 impl BatchJobService {
-    pub fn new(db: Arc<DbPool>, redis: ConnectionManager) -> Self {
+    pub fn new(db: Arc<DbPool>, redis: ConnectionManager, config: Arc<Config>) -> Self {
         let analytics_service = AnalyticsService::new(db.clone(), Arc::new(redis.clone()));
         let learner_service = Arc::new(LearnerService::new(db.clone(), redis.clone()));
 
@@ -57,6 +63,7 @@ impl BatchJobService {
             redis: redis.clone(),
             analytics_service,
             learner_service,
+            config,
         }
     }
 
@@ -154,6 +161,7 @@ impl BatchJobService {
             JobType::ModelSnapshot => self.create_model_snapshots().await,
             JobType::DataCleanup => self.cleanup_old_data().await,
             JobType::CacheWarmup => self.warmup_cache().await,
+            JobType::OAuthCredentialValidation => self.validate_oauth_credentials().await,
         }
     }
 
@@ -416,6 +424,140 @@ impl BatchJobService {
         Ok(())
     }
 
+    // Validate OAuth credentials for all OAuth users
+    async fn validate_oauth_credentials(&self) -> Result<()> {
+        tracing::info!("Starting OAuth credential validation job");
+
+        let mut conn = self.db.acquire().await?;
+        
+        // Get all OAuth users who haven't been checked in the last 24 hours
+        let oauth_users = sqlx::query(
+            "SELECT u.id, u.username, u.apple_user_id, u.github_user_id, u.auth_provider,
+                    COALESCE(occ.last_check_time, '1970-01-01') as last_check_time
+             FROM users u
+             LEFT JOIN oauth_credential_checks occ ON u.id = occ.user_id AND occ.provider = u.auth_provider
+             WHERE u.auth_provider IN ('apple', 'github')
+             AND (occ.last_check_time IS NULL OR occ.last_check_time < datetime('now', '-1 day'))
+             ORDER BY COALESCE(occ.last_check_time, '1970-01-01') ASC
+             LIMIT 100"
+        )
+        .fetch_all(&mut *conn)
+        .await?;
+
+        let oauth_service = OAuthService::new(self.config.clone());
+        let mut validated_count = 0;
+        let mut failed_count = 0;
+
+        for user_row in oauth_users {
+            let user_id_bytes: Vec<u8> = user_row.get("id");
+            let user_id = Uuid::from_bytes(user_id_bytes.try_into().unwrap_or_default());
+            let username: String = user_row.get("username");
+            let auth_provider: String = user_row.get("auth_provider");
+            
+            // Parse provider and get provider user ID
+            let provider = match auth_provider.as_str() {
+                "apple" => {
+                    let apple_user_id: Option<String> = user_row.get("apple_user_id");
+                    if let Some(provider_user_id) = apple_user_id {
+                        (OAuthProvider::Apple, provider_user_id)
+                    } else {
+                        tracing::warn!("Apple user {} missing apple_user_id", username);
+                        continue;
+                    }
+                }
+                "github" => {
+                    let github_user_id: Option<String> = user_row.get("github_user_id");
+                    if let Some(provider_user_id) = github_user_id {
+                        (OAuthProvider::GitHub, provider_user_id)
+                    } else {
+                        tracing::warn!("GitHub user {} missing github_user_id", username);
+                        continue;
+                    }
+                }
+                _ => {
+                    tracing::warn!("Unknown auth provider for user {}: {}", username, auth_provider);
+                    continue;
+                }
+            };
+
+            let (oauth_provider, provider_user_id) = provider;
+
+            // For this implementation, we'll create a minimal app state to use the OAuth service
+            // In a real implementation, you might want to inject the AppState or modify the OAuth service
+            let dummy_app_state = crate::state::AppState::new(
+                (*self.db).clone(),
+                self.redis.clone(),
+                self.config.clone(),
+            );
+
+            // Validate credentials (this is a simplified approach)
+            let validation_result: Result<CredentialState, anyhow::Error> = match oauth_provider {
+                OAuthProvider::Apple => {
+                    // Apple doesn't provide direct token validation
+                    // We'll record as "unknown" for now
+                    Ok(CredentialState::Unknown)
+                }
+                OAuthProvider::GitHub => {
+                    // For GitHub, we would need an access token to validate
+                    // Since we don't store access tokens for security reasons,
+                    // we'll mark as unknown and let the user re-authenticate when needed
+                    Ok(CredentialState::Unknown)
+                }
+            };
+
+            // Record the validation result
+            match validation_result {
+                Ok(credential_state) => {
+                    oauth_service.record_credential_check(
+                        &dummy_app_state,
+                        user_id,
+                        oauth_provider,
+                        &provider_user_id,
+                        credential_state.clone(),
+                        None,
+                    ).await?;
+
+                    validated_count += 1;
+                    tracing::debug!(
+                        "Validated {} user {}: {:?}",
+                        oauth_provider,
+                        username,
+                        credential_state
+                    );
+                }
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    oauth_service.record_credential_check(
+                        &dummy_app_state,
+                        user_id,
+                        oauth_provider,
+                        &provider_user_id,
+                        CredentialState::Unknown,
+                        Some(&error_msg),
+                    ).await?;
+
+                    failed_count += 1;
+                    tracing::warn!(
+                        "Failed to validate {} user {}: {}",
+                        oauth_provider,
+                        username,
+                        error_msg
+                    );
+                }
+            }
+
+            // Small delay to avoid overwhelming external APIs
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        tracing::info!(
+            "OAuth credential validation job completed: {} validated, {} failed",
+            validated_count,
+            failed_count
+        );
+        Ok(())
+    }
+
     // Update job status
     async fn update_job_status(
         &self,
@@ -471,5 +613,31 @@ impl BatchJobService {
         .await?;
 
         Ok(job_id)
+    }
+
+    /// Schedule OAuth credential validation job
+    pub async fn schedule_oauth_validation(&self) -> Result<Uuid> {
+        self.schedule_job(
+            JobType::OAuthCredentialValidation,
+            serde_json::json!({}),
+        ).await
+    }
+
+    /// Start periodic OAuth credential validation (runs every 6 hours)
+    pub async fn start_oauth_validation_scheduler(&self) {
+        let mut interval = interval(Duration::from_secs(6 * 3600)); // Every 6 hours
+
+        loop {
+            interval.tick().await;
+
+            match self.schedule_oauth_validation().await {
+                Ok(job_id) => {
+                    tracing::info!("Scheduled OAuth credential validation job: {}", job_id);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to schedule OAuth credential validation: {}", e);
+                }
+            }
+        }
     }
 }

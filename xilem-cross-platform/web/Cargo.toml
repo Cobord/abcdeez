@@ -1,0 +1,38 @@
+[package]
+name = "graph_learning_web"
+version = "0.1.0"
+publish = false
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Core library
+graph-learning-core = { path = "../../alphabet-terminal-prototype", package = "graph-learning-core" }
+
+# Web platform
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlButtonElement",
+    "HtmlDivElement",
+    "HtmlInputElement",
+    "Window",
+    "Storage",
+    "Event",
+    "MouseEvent",
+    "console"
+] }
+console_error_panic_hook = "0.1"
+wee_alloc = "0.4"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Utils
+js-sys = "0.3"
+getrandom = { version = "0.2", features = ["js"] }

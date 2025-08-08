@@ -1,10 +1,11 @@
-name: Deploy Book to GitHub Pages
+name: Deploy Books to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
       - 'alphabet-terminal-prototype/book/**'
+      - 'xilem-cross-platform/user-manual/**'
       - '.github/workflows/book-simple.yml'
   workflow_dispatch:
 
@@ -14,7 +15,8 @@ permissions:
   id-token: write
 
 env:
-  BOOK_DIR: alphabet-terminal-prototype/book
+  TECHNICAL_BOOK_DIR: alphabet-terminal-prototype/book
+  USER_MANUAL_DIR: xilem-cross-platform/user-manual
 
 jobs:
   deploy:

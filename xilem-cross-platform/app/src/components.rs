@@ -1,10 +1,12 @@
 use xilem::{
-    view::{button, flex, label, prose, textbox, Axis},
+    view::{button, flex, label, prose, Axis},
     Color, TextAlignment, WidgetView,
 };
 
 use crate::models::*;
 use crate::AppData;
+use crate::{models::*, visualizations::*, AppData};
+use graph_learning_core::tasks::TaskResponse;
 use std::sync::Arc;
 
 // Reusable card component

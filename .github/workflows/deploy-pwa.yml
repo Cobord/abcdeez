@@ -1,0 +1,284 @@
+name: Deploy PWA to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'xilem-cross-platform/app/**'
+      - 'xilem-cross-platform/web/**'
+      - '.github/workflows/deploy-pwa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: |
+          curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Install trunk
+        run: |
+          cargo install --locked trunk
+          cargo install --locked wasm-bindgen-cli
+
+      - name: Create PWA build directory
+        run: mkdir -p dist
+
+      - name: Build Xilem Web App
+        run: |
+          cd xilem-cross-platform/web
+          # Build the wasm app
+          wasm-pack build --target web --out-dir pkg
+          
+          # Copy PWA assets
+          cp ../app/index.html ../../dist/ || echo "No index.html found"
+          cp ../app/offline.html ../../dist/
+          cp ../app/manifest.json ../../dist/
+          cp ../app/src/service_worker.js ../../dist/
+          
+          # Copy the built wasm artifacts
+          cp -r pkg ../../dist/
+          
+          # Create a simple index.html if it doesn't exist
+          if [ ! -f ../../dist/index.html ]; then
+            cat > ../../dist/index.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Adaptive Learning System - A cognitive science-based learning platform">
+    <title>Graph Learning System</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#667eea">
+    <link rel="apple-touch-icon" href="/images/icon-192.png">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        #app {
+            min-height: 100vh;
+        }
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            color: white;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <h2>Loading Graph Learning System...</h2>
+            <noscript>
+                <p>This application requires JavaScript to be enabled.</p>
+            </noscript>
+        </div>
+    </div>
+    
+    <script>
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service_worker.js')
+                    .then(reg => console.log('Service Worker registered'))
+                    .catch(err => console.error('Service Worker registration failed:', err));
+            });
+        }
+    </script>
+    
+    <!-- Load the wasm module -->
+    <script type="module">
+        import init from './pkg/graph_learning_web.js';
+        
+        async function run() {
+            await init();
+            console.log('WASM module loaded');
+        }
+        
+        run().catch(console.error);
+    </script>
+</body>
+</html>
+EOF
+          fi
+
+      - name: Create demo page
+        run: |
+          cat > dist/demo.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Learning - Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2d3748;
+            margin-bottom: 20px;
+        }
+        .demo-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .demo-link {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #333;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .demo-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .demo-link h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>🎓 Graph Learning System - Demo</h1>
+            <p>Experience the adaptive learning system with these interactive demos:</p>
+            
+            <div class="demo-links">
+                <a href="/?demo=quick_tour" class="demo-link">
+                    <h3>🚀 Quick Tour</h3>
+                    <p>A 5-minute introduction to the system's features and capabilities</p>
+                </a>
+                
+                <a href="/?demo=alphabet" class="demo-link">
+                    <h3>🔤 Alphabet Training</h3>
+                    <p>Try the letter sequence learning module</p>
+                </a>
+                
+                <a href="/?demo=adaptive" class="demo-link">
+                    <h3>🧠 Adaptive Algorithm</h3>
+                    <p>See how the system adapts to your learning patterns</p>
+                </a>
+                
+                <a href="/?demo=metrics" class="demo-link">
+                    <h3>📊 Live Metrics</h3>
+                    <p>Watch real-time performance metrics and visualizations</p>
+                </a>
+            </div>
+            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+                <h2>Features</h2>
+                <ul>
+                    <li>✅ Works offline with Progressive Web App support</li>
+                    <li>✅ Adaptive task selection based on your performance</li>
+                    <li>✅ Real-time performance tracking</li>
+                    <li>✅ Multiple learning domains</li>
+                    <li>✅ Cross-platform support (Web, Desktop, Mobile)</li>
+                </ul>
+            </div>
+            
+            <div style="margin-top: 30px; text-align: center;">
+                <a href="/" style="display: inline-block; padding: 12px 24px; background: #667eea; color: white; text-decoration: none; border-radius: 6px;">
+                    Launch Full App
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+EOF
+
+      - name: Create placeholder icons
+        run: |
+          mkdir -p dist/images
+          # Create simple placeholder SVG icons
+          for size in 72 96 128 144 152 192 384 512; do
+            cat > dist/images/icon-${size}.png << EOF
+<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${size}" height="${size}" fill="#667eea"/>
+  <text x="50%" y="50%" fill="white" font-size="${size}px" text-anchor="middle" dy=".3em">G</text>
+</svg>
+EOF
+          done
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

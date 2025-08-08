@@ -651,3 +651,38 @@ pub async fn audit_report(
     
     Ok(Json(report))
 }
+
+// Trigger OAuth credential validation job specifically
+pub async fn trigger_oauth_validation(
+    State(state): State<Arc<AppState>>,
+    claims: Extension<Claims>,
+) -> AppResult<Json<serde_json::Value>> {
+    // Use the BatchJobService to schedule the job
+    let job_id = state.batch_job_service.schedule_oauth_validation().await
+        .map_err(|_| AppError::InternalServerError)?;
+
+    // Log the action
+    AuditService::log_event(
+        &state.db_pool,
+        Some(claims.sub),
+        "create".to_string(),
+        "admin".to_string(),
+        format!("oauth_validation_job_{}", job_id),
+        Some(serde_json::json!({
+            "job_type": "oauth_credential_validation",
+            "triggered_by": "admin_endpoint",
+            "admin_user": claims.username
+        })),
+        None,
+        None,
+    )
+    .await
+    .ok();
+
+    Ok(Json(serde_json::json!({
+        "job_id": job_id,
+        "job_type": "oauth_credential_validation",
+        "status": "scheduled",
+        "message": "OAuth credential validation job scheduled successfully"
+    })))
+}

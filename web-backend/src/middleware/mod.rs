@@ -5,7 +5,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use jsonwebtoken::{decode, DecodingKey, Validation};
+use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -35,7 +35,13 @@ pub async fn auth_middleware(
 ) -> Result<Response, AppError> {
     // Skip auth for certain paths
     let path = request.uri().path();
-    if path.starts_with("/api/auth/") && !path.ends_with("/me") || path.starts_with("/health/") {
+    let public_paths = vec![
+        "/api/auth/register",
+        "/api/auth/login", 
+        "/api/auth/refresh",
+    ];
+    
+    if public_paths.contains(&path) || path.starts_with("/health/") {
         return Ok(next.run(request).await);
     }
 
@@ -50,11 +56,12 @@ pub async fn auth_middleware(
         .strip_prefix("Bearer ")
         .ok_or(AppError::Unauthorized)?;
 
-    // Enhanced token validation
-    let mut validation = Validation::default();
+    // Enhanced token validation with explicit algorithm
+    let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = true;
     validation.validate_nbf = true;
     validation.leeway = 60; // Allow 60 seconds clock skew
+    validation.algorithms = vec![Algorithm::HS256]; // Only allow HS256
 
     let token_data = decode::<Claims>(
         token,

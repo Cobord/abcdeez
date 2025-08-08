@@ -4,6 +4,7 @@ members = [
     "app",
     "desktop",
     "mobile",
+    "web",
 ]
 
 [workspace.package]

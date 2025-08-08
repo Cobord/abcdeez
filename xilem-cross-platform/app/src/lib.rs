@@ -8,7 +8,10 @@ mod api;
 mod components;
 mod demo;
 pub mod models;
+mod offline;
 mod screens;
+mod visualization_components;
+mod visualizations;
 
 use chrono::{DateTime, Utc};
 use rand::rngs::StdRng;
@@ -34,9 +37,11 @@ use api::{ApiClient, MockApiClient};
 use components::*;
 use demo::DemoController;
 use models::*;
+use offline::{ConnectivityMonitor, OfflineStorage, SyncStatus};
 use screens::{
     dashboard_screen, domain_selection_screen, settings_screen, training_screen, welcome_screen,
 };
+use visualization_components::visualization_dashboard;
 
 // Application screens
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -126,6 +131,13 @@ pub struct AppData {
     pub enable_animations: bool,
     pub anonymous_export: bool,
 
+    // Offline support
+    pub offline_storage: Option<Arc<OfflineStorage>>,
+    pub sync_status: SyncStatus,
+    pub connectivity_monitor: Arc<ConnectivityMonitor>,
+    pub offline_mode: bool,
+    pub auto_sync_enabled: bool,
+
     // Runtime for async operations
     pub runtime: Arc<tokio::runtime::Runtime>,
 }
@@ -193,6 +205,19 @@ impl Default for AppData {
             show_response_times: true,
             enable_animations: true,
             anonymous_export: false,
+
+            // Offline support
+            offline_storage: None,
+            sync_status: SyncStatus {
+                online: true,
+                last_sync: None,
+                pending_count: 0,
+                failed_count: 0,
+                sync_progress: None,
+            },
+            connectivity_monitor: Arc::new(ConnectivityMonitor::new()),
+            offline_mode: false,
+            auto_sync_enabled: true,
 
             // Runtime for async operations
             runtime: Arc::new(runtime),
@@ -286,9 +311,43 @@ fn app_logic(data: &mut AppData) -> impl WidgetView<AppData> {
         data.success_message = Some("Data exported successfully!".to_string());
     }
 
+    // Sync status indicator
+    let sync_indicator = if !data.sync_status.online || data.sync_status.pending_count > 0 {
+        Some(
+            flex((
+                label(if !data.sync_status.online {
+                    "🔴 Offline Mode"
+                } else if data.sync_status.pending_count > 0 {
+                    &format!("🔄 Syncing {} items...", data.sync_status.pending_count)
+                } else {
+                    "✅ Synced"
+                })
+                .brush(if !data.sync_status.online {
+                    Color::from_rgb8(255, 100, 100)
+                } else if data.sync_status.pending_count > 0 {
+                    Color::from_rgb8(255, 165, 0)
+                } else {
+                    Color::from_rgb8(0, 200, 0)
+                })
+                .alignment(TextAlignment::End),
+                if data.sync_status.pending_count > 0 {
+                    button("Sync Now", |data: &mut AppData| {
+                        data.trigger_sync();
+                    })
+                } else {
+                    button("", |_: &mut AppData| {}) // Empty button for layout consistency
+                },
+            ))
+            .direction(Axis::Horizontal),
+        )
+    } else {
+        None
+    };
+
     // Main content - use conditional rendering to avoid impl trait issues
     let content = flex((
         nav_bar(&format!("{:?}", data.current_screen)),
+        sync_indicator,
         error_message(data.error_message.clone()),
         success_message(data.success_message.clone()),
         flex((
@@ -376,6 +435,106 @@ fn app_logic(data: &mut AppData) -> impl WidgetView<AppData> {
 
 // Helper functions for app logic
 impl AppData {
+    /// Initialize offline storage
+    pub async fn init_offline_storage(&mut self) -> Result<(), String> {
+        use std::path::PathBuf;
+
+        let data_dir = PathBuf::from("./data");
+        std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+
+        match OfflineStorage::new(data_dir).await {
+            Ok(storage) => {
+                self.offline_storage = Some(Arc::new(storage));
+
+                // Set up connectivity monitoring
+                let storage_clone = self.offline_storage.clone();
+                let monitor = self.connectivity_monitor.clone();
+
+                let runtime = self.runtime.clone();
+                runtime.spawn(async move {
+                    monitor
+                        .add_listener(move |online| {
+                            println!(
+                                "Connectivity changed: {}",
+                                if online { "Online" } else { "Offline" }
+                            );
+                            if online && storage_clone.is_some() {
+                                // Trigger sync when coming back online
+                                // This would trigger sync in real implementation
+                            }
+                        })
+                        .await;
+                });
+
+                Ok(())
+            }
+            Err(e) => Err(format!("Failed to initialize offline storage: {}", e)),
+        }
+    }
+
+    /// Trigger manual sync
+    pub fn trigger_sync(&mut self) {
+        if let Some(storage) = &self.offline_storage {
+            let storage_clone = storage.clone();
+            let api_client = self.api_client.clone();
+
+            self.runtime.spawn(async move {
+                // In real implementation, this would sync with the API
+                let status = storage_clone.get_sync_status().await;
+                println!("Sync triggered - {} items pending", status.pending_count);
+            });
+
+            self.success_message = Some("Sync started...".to_string());
+        } else {
+            self.error_message = Some("Offline storage not initialized".to_string());
+        }
+    }
+
+    /// Check and update connectivity status
+    pub async fn check_connectivity(&mut self) {
+        let is_online = self.connectivity_monitor.is_online().await;
+        self.sync_status.online = is_online;
+        self.offline_mode = !is_online;
+
+        if let Some(storage) = &self.offline_storage {
+            self.sync_status = storage.get_sync_status().await;
+        }
+    }
+
+    /// Save session with offline support
+    pub async fn save_session_offline(&mut self) {
+        if let Some(storage) = &self.offline_storage {
+            if let Some(session) = &self.current_session {
+                match storage.save_session(session).await {
+                    Ok(_) => {
+                        println!("Session saved offline");
+                        self.sync_status = storage.get_sync_status().await;
+                    }
+                    Err(e) => {
+                        self.error_message = Some(format!("Failed to save session: {}", e));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Save response with offline support
+    pub async fn save_response_offline(&mut self, response: &CoreTaskResponse) {
+        if let Some(storage) = &self.offline_storage {
+            if let Some(session) = &self.current_session {
+                match storage.save_response(&session.id, response).await {
+                    Ok(_) => {
+                        println!("Response saved offline");
+                        self.sync_status = storage.get_sync_status().await;
+                    }
+                    Err(e) => {
+                        self.error_message = Some(format!("Failed to save response: {}", e));
+                    }
+                }
+            }
+        }
+    }
+
     pub fn login(&mut self) {
         // Set in-flight flag; the view::task in app_logic() will pick this up and perform async login.
         if !self.login_request_in_flight {

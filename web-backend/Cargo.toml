@@ -29,6 +29,11 @@ serde_json = { workspace = true }
 jsonwebtoken = "9.3"
 argon2 = "0.5"
 rand = { workspace = true }
+regex = "1.10"
+
+# Apple Sign In
+# apple-signin = "0.4"  # Temporarily disabled - version not found
+base64 = "0.22"
 
 # UUID and Time
 uuid = { workspace = true, features = ["v4", "serde"] }
@@ -55,6 +60,8 @@ thiserror = { workspace = true }
 
 # HTTP client (for external APIs)
 reqwest = { version = "0.12", features = ["json"] }
+url = "2.5"
+urlencoding = "2.1"
 
 # Environment variables
 dotenvy = "0.15"

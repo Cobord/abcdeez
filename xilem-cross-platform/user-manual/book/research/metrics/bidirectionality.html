@@ -1,0 +1,494 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Bidirectionality Index - Adaptive Learning System User Manual</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../../highlight.css">
+        <link rel="stylesheet" href="../../tomorrow-night.css">
+        <link rel="stylesheet" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body>
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var html = document.querySelector('html');
+            var sidebar = null;
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../../introduction.html">Introduction</a></li><li class="spacer"></li><li class="chapter-item expanded affix "><li class="part-title">Part I: General User Guide</li><li class="chapter-item expanded "><a href="../../general/getting-started.html"><strong aria-hidden="true">1.</strong> Getting Started</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../general/system-requirements.html"><strong aria-hidden="true">1.1.</strong> System Requirements</a></li><li class="chapter-item expanded "><a href="../../general/installation.html"><strong aria-hidden="true">1.2.</strong> Installation</a></li><li class="chapter-item expanded "><a href="../../general/account-creation.html"><strong aria-hidden="true">1.3.</strong> Creating Your Account</a></li><li class="chapter-item expanded "><a href="../../general/first-setup.html"><strong aria-hidden="true">1.4.</strong> First Time Setup</a></li></ol></li><li class="chapter-item expanded "><a href="../../general/core-features.html"><strong aria-hidden="true">2.</strong> Core Features</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../general/domains.html"><strong aria-hidden="true">2.1.</strong> Learning Domains</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../general/domains/alphabet.html"><strong aria-hidden="true">2.1.1.</strong> Alphabet Sequence</a></li><li class="chapter-item expanded "><a href="../../general/domains/days.html"><strong aria-hidden="true">2.1.2.</strong> Days of the Week</a></li><li class="chapter-item expanded "><a href="../../general/domains/music.html"><strong aria-hidden="true">2.1.3.</strong> Musical Notes</a></li><li class="chapter-item expanded "><a href="../../general/domains/math.html"><strong aria-hidden="true">2.1.4.</strong> Mathematics</a></li></ol></li><li class="chapter-item expanded "><a href="../../general/training.html"><strong aria-hidden="true">2.2.</strong> Training Sessions</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../general/training/starting.html"><strong aria-hidden="true">2.2.1.</strong> Starting a Session</a></li><li class="chapter-item expanded "><a href="../../general/training/tasks.html"><strong aria-hidden="true">2.2.2.</strong> Task Types</a></li><li class="chapter-item expanded "><a href="../../general/training/answering.html"><strong aria-hidden="true">2.2.3.</strong> Answering Questions</a></li><li class="chapter-item expanded "><a href="../../general/training/hints.html"><strong aria-hidden="true">2.2.4.</strong> Using Hints</a></li><li class="chapter-item expanded "><a href="../../general/training/management.html"><strong aria-hidden="true">2.2.5.</strong> Session Management</a></li></ol></li><li class="chapter-item expanded "><a href="../../general/dashboard.html"><strong aria-hidden="true">2.3.</strong> Performance Dashboard</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../general/dashboard/metrics.html"><strong aria-hidden="true">2.3.1.</strong> Metrics Overview</a></li><li class="chapter-item expanded "><a href="../../general/dashboard/progress.html"><strong aria-hidden="true">2.3.2.</strong> Progress Tracking</a></li><li class="chapter-item expanded "><a href="../../general/dashboard/analytics.html"><strong aria-hidden="true">2.3.3.</strong> Learning Analytics</a></li></ol></li></ol></li><li class="chapter-item expanded "><a href="../../general/demos.html"><strong aria-hidden="true">3.</strong> Guided Demos</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../general/demos/quick-tour.html"><strong aria-hidden="true">3.1.</strong> Quick Tour</a></li><li class="chapter-item expanded "><a href="../../general/demos/training-demo.html"><strong aria-hidden="true">3.2.</strong> Training Demo</a></li><li class="chapter-item expanded "><a href="../../general/demos/using-demos.html"><strong aria-hidden="true">3.3.</strong> Using Demo Mode</a></li></ol></li><li class="chapter-item expanded "><a href="../../general/settings.html"><strong aria-hidden="true">4.</strong> Settings & Preferences</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../general/settings/learning.html"><strong aria-hidden="true">4.1.</strong> Learning Preferences</a></li><li class="chapter-item expanded "><a href="../../general/settings/display.html"><strong aria-hidden="true">4.2.</strong> Display Options</a></li><li class="chapter-item expanded "><a href="../../general/settings/demos.html"><strong aria-hidden="true">4.3.</strong> Demo Preferences</a></li><li class="chapter-item expanded "><a href="../../general/settings/data.html"><strong aria-hidden="true">4.4.</strong> Data Management</a></li></ol></li><li class="chapter-item expanded "><a href="../../general/tips.html"><strong aria-hidden="true">5.</strong> Tips & Best Practices</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../general/tips/strategies.html"><strong aria-hidden="true">5.1.</strong> Effective Learning Strategies</a></li><li class="chapter-item expanded "><a href="../../general/tips/metrics.html"><strong aria-hidden="true">5.2.</strong> Understanding Your Metrics</a></li><li class="chapter-item expanded "><a href="../../general/tips/hints.html"><strong aria-hidden="true">5.3.</strong> When to Use Hints</a></li><li class="chapter-item expanded "><a href="../../general/tips/difficulty.html"><strong aria-hidden="true">5.4.</strong> Setting Difficulty Levels</a></li><li class="spacer"></li></ol></li><li class="chapter-item expanded "><li class="part-title">Part II: Researcher Guide</li><li class="chapter-item expanded "><a href="../../research/overview.html"><strong aria-hidden="true">6.</strong> Research Overview</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../research/architecture.html"><strong aria-hidden="true">6.1.</strong> System Architecture</a></li><li class="chapter-item expanded "><a href="../../research/theory.html"><strong aria-hidden="true">6.2.</strong> Theoretical Foundation</a></li><li class="chapter-item expanded "><a href="../../research/cognitive-science.html"><strong aria-hidden="true">6.3.</strong> Cognitive Science Background</a></li></ol></li><li class="chapter-item expanded "><a href="../../research/experiments.html"><strong aria-hidden="true">7.</strong> Experimental Design</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../research/experiments/setup.html"><strong aria-hidden="true">7.1.</strong> Setting Up Studies</a></li><li class="chapter-item expanded "><a href="../../research/experiments/participants.html"><strong aria-hidden="true">7.2.</strong> Participant Management</a></li><li class="chapter-item expanded "><a href="../../research/experiments/data-collection.html"><strong aria-hidden="true">7.3.</strong> Data Collection</a></li><li class="chapter-item expanded "><a href="../../research/experiments/conditions.html"><strong aria-hidden="true">7.4.</strong> Controlled Conditions</a></li></ol></li><li class="chapter-item expanded "><a href="../../research/metrics.html"><strong aria-hidden="true">8.</strong> Advanced Metrics</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../research/metrics/bidirectionality.html" class="active"><strong aria-hidden="true">8.1.</strong> Bidirectionality Index</a></li><li class="chapter-item expanded "><a href="../../research/metrics/distance.html"><strong aria-hidden="true">8.2.</strong> Symbolic Distance Effect</a></li><li class="chapter-item expanded "><a href="../../research/metrics/chunks.html"><strong aria-hidden="true">8.3.</strong> Chunk Boundary Analysis</a></li><li class="chapter-item expanded "><a href="../../research/metrics/response-time.html"><strong aria-hidden="true">8.4.</strong> Response Time Modeling</a></li><li class="chapter-item expanded "><a href="../../research/metrics/ex-gaussian.html"><strong aria-hidden="true">8.5.</strong> Ex-Gaussian Parameters</a></li></ol></li><li class="chapter-item expanded "><a href="../../research/algorithms.html"><strong aria-hidden="true">9.</strong> Adaptive Algorithms</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../research/algorithms/selection.html"><strong aria-hidden="true">9.1.</strong> Task Selection Strategy</a></li><li class="chapter-item expanded "><a href="../../research/algorithms/difficulty.html"><strong aria-hidden="true">9.2.</strong> Difficulty Adjustment</a></li><li class="chapter-item expanded "><a href="../../research/algorithms/hints.html"><strong aria-hidden="true">9.3.</strong> Hint Generation</a></li><li class="chapter-item expanded "><a href="../../research/algorithms/interventions.html"><strong aria-hidden="true">9.4.</strong> Intervention System</a></li></ol></li><li class="chapter-item expanded "><a href="../../research/analysis.html"><strong aria-hidden="true">10.</strong> Data Analysis</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../research/analysis/export.html"><strong aria-hidden="true">10.1.</strong> Export Formats</a></li><li class="chapter-item expanded "><a href="../../research/analysis/statistics.html"><strong aria-hidden="true">10.2.</strong> Statistical Methods</a></li><li class="chapter-item expanded "><a href="../../research/analysis/visualization.html"><strong aria-hidden="true">10.3.</strong> Visualization Tools</a></li><li class="chapter-item expanded "><a href="../../research/analysis/python.html"><strong aria-hidden="true">10.4.</strong> Python Integration</a></li><li class="chapter-item expanded "><a href="../../research/analysis/r-integration.html"><strong aria-hidden="true">10.5.</strong> R Integration</a></li></ol></li><li class="chapter-item expanded "><a href="../../research/tools.html"><strong aria-hidden="true">11.</strong> Research Tools</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../research/tools/deterministic.html"><strong aria-hidden="true">11.1.</strong> Deterministic Demo Mode</a></li><li class="chapter-item expanded "><a href="../../research/tools/replay.html"><strong aria-hidden="true">11.2.</strong> Replay System</a></li><li class="chapter-item expanded "><a href="../../research/tools/ab-testing.html"><strong aria-hidden="true">11.3.</strong> A/B Testing</a></li><li class="chapter-item expanded "><a href="../../research/tools/topologies.html"><strong aria-hidden="true">11.4.</strong> Custom Topologies</a></li></ol></li><li class="chapter-item expanded "><a href="../../research/case-studies.html"><strong aria-hidden="true">12.</strong> Case Studies</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../research/cases/alphabet.html"><strong aria-hidden="true">12.1.</strong> Alphabet Learning Study</a></li><li class="chapter-item expanded "><a href="../../research/cases/music.html"><strong aria-hidden="true">12.2.</strong> Musical Sequence Learning</a></li><li class="chapter-item expanded "><a href="../../research/cases/math.html"><strong aria-hidden="true">12.3.</strong> Mathematical Operations</a></li><li class="chapter-item expanded "><a href="../../research/cases/transfer.html"><strong aria-hidden="true">12.4.</strong> Cross-Domain Transfer</a></li></ol></li><li class="chapter-item expanded "><a href="../../research/api.html"><strong aria-hidden="true">13.</strong> API Documentation</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../research/api/endpoints.html"><strong aria-hidden="true">13.1.</strong> REST Endpoints</a></li><li class="chapter-item expanded "><a href="../../research/api/models.html"><strong aria-hidden="true">13.2.</strong> Data Models</a></li><li class="chapter-item expanded "><a href="../../research/api/auth.html"><strong aria-hidden="true">13.3.</strong> Authentication</a></li><li class="chapter-item expanded "><a href="../../research/api/batch.html"><strong aria-hidden="true">13.4.</strong> Batch Operations</a></li></ol></li><li class="chapter-item expanded "><a href="../../research/publishing.html"><strong aria-hidden="true">14.</strong> Publishing Results</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../research/publishing/privacy.html"><strong aria-hidden="true">14.1.</strong> Data Privacy</a></li><li class="chapter-item expanded "><a href="../../research/publishing/reproducibility.html"><strong aria-hidden="true">14.2.</strong> Reproducibility</a></li><li class="chapter-item expanded "><a href="../../research/publishing/citation.html"><strong aria-hidden="true">14.3.</strong> Citation Guidelines</a></li><li class="spacer"></li></ol></li><li class="chapter-item expanded "><li class="part-title">Appendices</li><li class="chapter-item expanded "><a href="../../appendix/troubleshooting.html"><strong aria-hidden="true">15.</strong> Troubleshooting</a></li><li class="chapter-item expanded "><a href="../../appendix/faq.html"><strong aria-hidden="true">16.</strong> FAQ</a></li><li class="chapter-item expanded "><a href="../../appendix/glossary.html"><strong aria-hidden="true">17.</strong> Glossary</a></li><li class="chapter-item expanded "><a href="../../appendix/shortcuts.html"><strong aria-hidden="true">18.</strong> Keyboard Shortcuts</a></li><li class="chapter-item expanded "><a href="../../appendix/changelog.html"><strong aria-hidden="true">19.</strong> Version History</a></li><li class="chapter-item expanded "><a href="../../appendix/contributing.html"><strong aria-hidden="true">20.</strong> Contributing</a></li><li class="chapter-item expanded "><a href="../../appendix/license.html"><strong aria-hidden="true">21.</strong> License</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Adaptive Learning System User Manual</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="bidirectionality-index"><a class="header" href="#bidirectionality-index">Bidirectionality Index</a></h1>
+<p>The Bidirectionality Index is a core cognitive metric in the Adaptive Learning System that quantifies the asymmetry between forward and backward recall in sequential learning. This metric provides crucial insights into how learners organize and retrieve sequential information.</p>
+<h2 id="theoretical-background"><a class="header" href="#theoretical-background">Theoretical Background</a></h2>
+<h3 id="cognitive-foundation"><a class="header" href="#cognitive-foundation">Cognitive Foundation</a></h3>
+<p>Sequential knowledge is not always symmetrical. Consider these examples:</p>
+<ul>
+<li><strong>Alphabet</strong>: Most people can easily recite &quot;A, B, C, D...&quot; but struggle with &quot;...D, C, B, A&quot;</li>
+<li><strong>Days of Week</strong>: &quot;Monday, Tuesday, Wednesday&quot; flows naturally, but &quot;Wednesday, Tuesday, Monday&quot; requires effort</li>
+<li><strong>Numbers</strong>: Counting forward (1, 2, 3) is automatic, counting backward (3, 2, 1) is deliberate</li>
+</ul>
+<p>This asymmetry reveals fundamental properties of how sequential information is encoded and retrieved in memory.</p>
+<h3 id="historical-context"><a class="header" href="#historical-context">Historical Context</a></h3>
+<p>The concept builds on several research traditions:</p>
+<ol>
+<li><strong>Serial Position Effects</strong> (Ebbinghaus, 1885): Memory strength varies by position</li>
+<li><strong>Directional Associations</strong> (Murdock, 1962): Forward associations stronger than backward</li>
+<li><strong>Cognitive Maps</strong> (Tolman, 1948): Mental representations have preferred directions</li>
+<li><strong>Sequential Learning</strong> (Restle, 1970): Pattern detection in ordered stimuli</li>
+</ol>
+<h2 id="mathematical-definition"><a class="header" href="#mathematical-definition">Mathematical Definition</a></h2>
+<h3 id="basic-formula"><a class="header" href="#basic-formula">Basic Formula</a></h3>
+<p>The Bidirectionality Index (BI) is calculated as:</p>
+<pre><code>BI = (P_forward - P_backward) / (P_forward + P_backward)
+</code></pre>
+<p>Where:</p>
+<ul>
+<li><code>P_forward</code> = Proportion correct on forward tasks</li>
+<li><code>P_backward</code> = Proportion correct on backward tasks</li>
+</ul>
+<h3 id="range-and-interpretation"><a class="header" href="#range-and-interpretation">Range and Interpretation</a></h3>
+<ul>
+<li><strong>Range</strong>: -1.0 to +1.0</li>
+<li><strong>+1.0</strong>: Perfect forward recall, no backward recall</li>
+<li><strong>0.0</strong>: Equal performance in both directions</li>
+<li><strong>-1.0</strong>: Perfect backward recall, no forward recall (rare)</li>
+</ul>
+<h3 id="statistical-properties"><a class="header" href="#statistical-properties">Statistical Properties</a></h3>
+<pre><code class="language-python">def calculate_bidirectionality(responses):
+    &quot;&quot;&quot;
+    Calculate bidirectionality index with confidence intervals
+    
+    Args:
+        responses: List of task responses with direction labels
+    
+    Returns:
+        dict: BI value, confidence interval, and significance
+    &quot;&quot;&quot;
+    forward = [r for r in responses if r.direction == 'forward']
+    backward = [r for r in responses if r.direction == 'backward']
+    
+    # Performance metrics
+    p_f = np.mean([r.correct for r in forward])
+    p_b = np.mean([r.correct for r in backward])
+    
+    # Bidirectionality index
+    bi = (p_f - p_b) / (p_f + p_b) if (p_f + p_b) &gt; 0 else 0
+    
+    # Standard error (using delta method)
+    n_f, n_b = len(forward), len(backward)
+    se_f = np.sqrt(p_f * (1 - p_f) / n_f)
+    se_b = np.sqrt(p_b * (1 - p_b) / n_b)
+    
+    # Approximate confidence interval
+    se_bi = np.sqrt((4 * p_b**2 * se_f**2 + 4 * p_f**2 * se_b**2) / 
+                    (p_f + p_b)**4)
+    
+    ci_lower = bi - 1.96 * se_bi
+    ci_upper = bi + 1.96 * se_bi
+    
+    # Significance test (two-proportion z-test)
+    z_score = (p_f - p_b) / np.sqrt(se_f**2 + se_b**2)
+    p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
+    
+    return {
+        'bi': bi,
+        'ci_95': (ci_lower, ci_upper),
+        'p_value': p_value,
+        'n_forward': n_f,
+        'n_backward': n_b,
+        'effect_size': abs(p_f - p_b)
+    }
+</code></pre>
+<h2 id="task-examples"><a class="header" href="#task-examples">Task Examples</a></h2>
+<h3 id="forward-tasks"><a class="header" href="#forward-tasks">Forward Tasks</a></h3>
+<p>Tasks that follow the natural sequence order:</p>
+<ol>
+<li><strong>Next Item</strong>: &quot;What comes after C?&quot; → &quot;D&quot;</li>
+<li><strong>Sequence Completion</strong>: &quot;A, B, ?&quot; → &quot;C&quot;</li>
+<li><strong>Order Judgment</strong>: &quot;Does B come before D?&quot; → &quot;Yes&quot;</li>
+<li><strong>Distance Estimation</strong>: &quot;How many letters between A and E?&quot; → &quot;3&quot;</li>
+</ol>
+<h3 id="backward-tasks"><a class="header" href="#backward-tasks">Backward Tasks</a></h3>
+<p>Tasks that reverse the natural sequence order:</p>
+<ol>
+<li><strong>Previous Item</strong>: &quot;What comes before C?&quot; → &quot;B&quot;</li>
+<li><strong>Reverse Completion</strong>: &quot;?, D, E&quot; → &quot;C&quot;</li>
+<li><strong>Reverse Order</strong>: &quot;Does D come before B?&quot; → &quot;No&quot;</li>
+<li><strong>Backward Distance</strong>: &quot;How many letters back from E to A?&quot; → &quot;4&quot;</li>
+</ol>
+<h2 id="interpretation-guidelines"><a class="header" href="#interpretation-guidelines">Interpretation Guidelines</a></h2>
+<h3 id="typical-values-by-domain"><a class="header" href="#typical-values-by-domain">Typical Values by Domain</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Domain</th><th>Typical BI</th><th>Interpretation</th></tr></thead><tbody>
+<tr><td>Alphabet</td><td>0.15-0.35</td><td>Moderate forward bias</td></tr>
+<tr><td>Days of Week</td><td>0.05-0.20</td><td>Slight forward bias (cyclic)</td></tr>
+<tr><td>Numbers</td><td>0.10-0.25</td><td>Forward counting advantage</td></tr>
+<tr><td>Music Notes</td><td>0.20-0.40</td><td>Strong scale direction</td></tr>
+</tbody></table>
+</div>
+<h3 id="developmental-patterns"><a class="header" href="#developmental-patterns">Developmental Patterns</a></h3>
+<pre><code class="language-python"># Age-related changes in bidirectionality
+age_patterns = {
+    '5-7 years': 0.40,   # Strong forward bias
+    '8-10 years': 0.30,  # Reducing asymmetry
+    '11-13 years': 0.20, # Developing flexibility
+    '14-16 years': 0.15, # Near-adult levels
+    'Adults': 0.10       # Flexible retrieval
+}
+</code></pre>
+<h3 id="learning-trajectories"><a class="header" href="#learning-trajectories">Learning Trajectories</a></h3>
+<p>The BI typically changes over learning:</p>
+<ol>
+<li><strong>Early Learning</strong> (BI ≈ 0.5): Strong forward bias, backward retrieval difficult</li>
+<li><strong>Intermediate</strong> (BI ≈ 0.3): Improving backward access</li>
+<li><strong>Advanced</strong> (BI ≈ 0.1): Flexible bidirectional retrieval</li>
+<li><strong>Expert</strong> (BI ≈ 0.0): Equal facility in both directions</li>
+</ol>
+<h2 id="research-applications"><a class="header" href="#research-applications">Research Applications</a></h2>
+<h3 id="1-learning-strategy-detection"><a class="header" href="#1-learning-strategy-detection">1. Learning Strategy Detection</a></h3>
+<p>Different learning strategies produce distinct BI signatures:</p>
+<pre><code class="language-python">def classify_strategy(bi_trajectory):
+    &quot;&quot;&quot;Identify learning strategy from BI changes&quot;&quot;&quot;
+    
+    if bi_trajectory.slope &lt; -0.05:
+        return &quot;active_reversal&quot;  # Practicing backward retrieval
+    elif bi_trajectory.variance &lt; 0.01:
+        return &quot;rote_forward&quot;  # Memorizing forward only
+    elif bi_trajectory.final &lt; 0.1:
+        return &quot;flexible_encoding&quot;  # Building bidirectional links
+    else:
+        return &quot;standard_progression&quot;
+</code></pre>
+<h3 id="2-individual-differences"><a class="header" href="#2-individual-differences">2. Individual Differences</a></h3>
+<p>BI correlates with cognitive abilities:</p>
+<ul>
+<li><strong>Working Memory</strong>: Lower BI → Higher WM capacity (r = -0.35)</li>
+<li><strong>Cognitive Flexibility</strong>: Lower BI → Better task switching (r = -0.42)</li>
+<li><strong>Age</strong>: Lower BI → Older/more experienced (r = -0.28)</li>
+<li><strong>Expertise</strong>: Lower BI → Domain expertise (r = -0.51)</li>
+</ul>
+<h3 id="3-clinical-assessment"><a class="header" href="#3-clinical-assessment">3. Clinical Assessment</a></h3>
+<p>Abnormal BI values may indicate:</p>
+<ul>
+<li><strong>High BI (&gt;0.5)</strong>: Rigid sequential processing</li>
+<li><strong>Negative BI (&lt;0)</strong>: Unusual encoding strategies</li>
+<li><strong>Unstable BI</strong>: Inconsistent retrieval processes</li>
+<li><strong>No change with practice</strong>: Learning difficulties</li>
+</ul>
+<h2 id="experimental-manipulations"><a class="header" href="#experimental-manipulations">Experimental Manipulations</a></h2>
+<h3 id="testing-bidirectionality"><a class="header" href="#testing-bidirectionality">Testing Bidirectionality</a></h3>
+<h4 id="balanced-design"><a class="header" href="#balanced-design">Balanced Design</a></h4>
+<pre><code class="language-python">def generate_balanced_trials(n_trials=100):
+    &quot;&quot;&quot;Create equal forward and backward trials&quot;&quot;&quot;
+    
+    trials = []
+    for i in range(n_trials // 2):
+        trials.append(create_forward_trial())
+        trials.append(create_backward_trial())
+    
+    random.shuffle(trials)
+    return trials
+</code></pre>
+<h4 id="blocked-vs-interleaved"><a class="header" href="#blocked-vs-interleaved">Blocked vs. Interleaved</a></h4>
+<ul>
+<li><strong>Blocked</strong>: All forward, then all backward</li>
+<li><strong>Interleaved</strong>: Random mixing</li>
+<li><strong>Adaptive</strong>: Based on performance</li>
+</ul>
+<h3 id="interventions-to-improve-bi"><a class="header" href="#interventions-to-improve-bi">Interventions to Improve BI</a></h3>
+<ol>
+<li><strong>Reverse Practice</strong>: Explicitly train backward retrieval</li>
+<li><strong>Bidirectional Encoding</strong>: Learn sequences in both directions</li>
+<li><strong>Mental Rotation</strong>: Visualize sequence reversals</li>
+<li><strong>Chunk Reorganization</strong>: Create flexible chunk boundaries</li>
+</ol>
+<h2 id="statistical-considerations"><a class="header" href="#statistical-considerations">Statistical Considerations</a></h2>
+<h3 id="sample-size-requirements"><a class="header" href="#sample-size-requirements">Sample Size Requirements</a></h3>
+<p>For detecting meaningful BI differences:</p>
+<pre><code class="language-python">def calculate_sample_size(effect_size=0.2, power=0.8, alpha=0.05):
+    &quot;&quot;&quot;Calculate required N for BI comparisons&quot;&quot;&quot;
+    
+    from statsmodels.stats.power import TTestPower
+    
+    analysis = TTestPower()
+    n = analysis.solve_power(
+        effect_size=effect_size,
+        power=power,
+        alpha=alpha,
+        ratio=1.0,  # Equal forward/backward trials
+        alternative='two-sided'
+    )
+    
+    return int(np.ceil(n))
+
+# Typical requirements:
+# Small effect (d=0.2): N=394 trials
+# Medium effect (d=0.5): N=64 trials  
+# Large effect (d=0.8): N=26 trials
+</code></pre>
+<h3 id="reliability-analysis"><a class="header" href="#reliability-analysis">Reliability Analysis</a></h3>
+<pre><code class="language-python">def assess_bi_reliability(session_data):
+    &quot;&quot;&quot;Calculate split-half reliability of BI&quot;&quot;&quot;
+    
+    # Split trials into halves
+    first_half = session_data[:len(session_data)//2]
+    second_half = session_data[len(session_data)//2:]
+    
+    # Calculate BI for each half
+    bi_1 = calculate_bidirectionality(first_half)['bi']
+    bi_2 = calculate_bidirectionality(second_half)['bi']
+    
+    # Correlation between halves
+    reliability = np.corrcoef(bi_1, bi_2)[0, 1]
+    
+    # Spearman-Brown correction
+    adjusted = (2 * reliability) / (1 + reliability)
+    
+    return adjusted
+</code></pre>
+<h2 id="visualization-techniques"><a class="header" href="#visualization-techniques">Visualization Techniques</a></h2>
+<h3 id="bi-over-time"><a class="header" href="#bi-over-time">BI Over Time</a></h3>
+<pre><code class="language-python">def plot_bi_trajectory(session_data):
+    &quot;&quot;&quot;Visualize BI changes during learning&quot;&quot;&quot;
+    
+    window_size = 20  # trials
+    bi_values = []
+    
+    for i in range(window_size, len(session_data)):
+        window = session_data[i-window_size:i]
+        bi = calculate_bidirectionality(window)['bi']
+        bi_values.append(bi)
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(bi_values, 'b-', linewidth=2)
+    plt.axhline(y=0, color='r', linestyle='--', alpha=0.5)
+    plt.xlabel('Trial Window')
+    plt.ylabel('Bidirectionality Index')
+    plt.title('Learning Trajectory: Bidirectional Access')
+    plt.grid(True, alpha=0.3)
+</code></pre>
+<h3 id="direction-comparison"><a class="header" href="#direction-comparison">Direction Comparison</a></h3>
+<pre><code class="language-python">def plot_direction_comparison(forward_acc, backward_acc):
+    &quot;&quot;&quot;Compare forward vs backward performance&quot;&quot;&quot;
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    
+    # Accuracy comparison
+    ax1.bar(['Forward', 'Backward'], 
+            [forward_acc, backward_acc],
+            color=['green', 'orange'])
+    ax1.set_ylabel('Accuracy')
+    ax1.set_title('Directional Performance')
+    
+    # BI visualization
+    bi = (forward_acc - backward_acc) / (forward_acc + backward_acc)
+    ax2.barh(['BI'], [bi], color='blue')
+    ax2.set_xlim(-1, 1)
+    ax2.axvline(x=0, color='black', linestyle='-', alpha=0.3)
+    ax2.set_xlabel('Bidirectionality Index')
+    ax2.set_title(f'BI = {bi:.3f}')
+</code></pre>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="for-researchers"><a class="header" href="#for-researchers">For Researchers</a></h3>
+<ol>
+<li><strong>Ensure Adequate Sampling</strong>: Minimum 20 trials per direction</li>
+<li><strong>Control for Difficulty</strong>: Match forward/backward task complexity</li>
+<li><strong>Consider Order Effects</strong>: Counterbalance presentation</li>
+<li><strong>Monitor Fatigue</strong>: BI can decline with tiredness</li>
+<li><strong>Report Confidence Intervals</strong>: Not just point estimates</li>
+</ol>
+<h3 id="for-educators"><a class="header" href="#for-educators">For Educators</a></h3>
+<ol>
+<li><strong>Target BI Reduction</strong>: Aim for flexible retrieval (BI &lt; 0.2)</li>
+<li><strong>Practice Both Directions</strong>: Don't neglect backward practice</li>
+<li><strong>Use BI for Placement</strong>: High BI suggests need for basics</li>
+<li><strong>Track Progress</strong>: Decreasing BI indicates mastery</li>
+<li><strong>Individualize Training</strong>: Some learners need more reversal practice</li>
+</ol>
+<h2 id="references"><a class="header" href="#references">References</a></h2>
+<ul>
+<li>Kahana, M. J. (2002). Associative symmetry and memory theory. <em>Memory &amp; Cognition</em>, 30(6), 823-840.</li>
+<li>Li, S. C., &amp; Lewandowsky, S. (1995). Forward and backward recall: Different retrieval processes. <em>JEP: LMC</em>, 21(4), 837.</li>
+<li>Reber, P. J., &amp; Kotovsky, K. (1997). Implicit learning in problem solving: The role of working memory capacity. <em>JEP: General</em>, 126(2), 178.</li>
+<li>Yang, L., &amp; Lewandowsky, S. (2004). Knowledge partitioning in categorization: Constraints on exemplar models. <em>JEP: LMC</em>, 30(5), 1045.</li>
+</ul>
+<hr />
+<p><em>Next: <a href="./distance.html">Symbolic Distance Effect</a> - Understanding the role of item separation in sequential learning</em></p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../research/metrics.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next" href="../../research/metrics/distance.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../research/metrics.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next" href="../../research/metrics/distance.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
