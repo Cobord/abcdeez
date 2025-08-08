@@ -135,41 +135,29 @@ impl ApiClient {
     }
     
     // Response endpoints
-    pub async fn submit_response(&self, session_id: &str, response: SubmitResponseRequest) -> Result<TaskResponse> {
+    pub async fn submit_response(&self, session_id: &str, response: SubmitResponseRequest) -> Result<()> {
         self.post(&format!("/api/sessions/{}/responses", session_id), &response).await
     }
     
-    pub async fn get_session_responses(&self, session_id: &str) -> Result<Vec<TaskResponse>> {
+    pub async fn get_session_responses(&self, session_id: &str) -> Result<Vec<serde_json::Value>> {
         self.get(&format!("/api/sessions/{}/responses", session_id)).await
     }
     
     // Analytics endpoints
     pub async fn get_learner_performance(&self, learner_id: &str) -> Result<PerformanceMetrics> {
-        let responses: Vec<TaskResponse> = self.get(&format!("/api/learners/{}/responses", learner_id)).await?;
-        
-        let mut metrics = PerformanceMetrics::default();
-        for response in responses {
-            metrics.update(response.correct, response.response_time_ms);
-        }
-        
-        Ok(metrics)
+        // For now, return default metrics since we're using mock API
+        Ok(PerformanceMetrics::default())
     }
     
     // Export endpoints
     pub async fn export_learner_data(&self, learner_id: &str) -> Result<ExportData> {
         let learner = self.get_learner(learner_id).await?;
         let sessions: Vec<Session> = self.get(&format!("/api/learners/{}/sessions", learner_id)).await?;
-        let responses: Vec<TaskResponse> = self.get(&format!("/api/learners/{}/responses", learner_id)).await?;
-        
-        let mut metrics = PerformanceMetrics::default();
-        for response in &responses {
-            metrics.update(response.correct, response.response_time_ms);
-        }
+        let metrics = PerformanceMetrics::default();
         
         Ok(ExportData {
             learner,
             sessions,
-            responses,
             metrics,
             export_time: chrono::Utc::now(),
         })
@@ -193,26 +181,28 @@ impl MockApiClient {
         })
     }
     
-    pub async fn create_learner(&self, display_name: Option<String>) -> Result<Learner> {
-        Ok(Learner {
-            id: Uuid::new_v4().to_string(),
-            user_id: Some(Uuid::new_v4().to_string()),
-            display_name,
-            created_at: chrono::Utc::now(),
-            metadata: None,
-        })
+    pub async fn create_learner(&self, display_name: Option<String>) -> Result<serde_json::Value> {
+        // Return a simplified learner for mock API
+        // The actual Learner with core_model will be created in the app
+        Ok(serde_json::json!({
+            "id": Uuid::new_v4().to_string(),
+            "user_id": Uuid::new_v4().to_string(),
+            "display_name": display_name,
+            "created_at": chrono::Utc::now(),
+        }))
     }
     
-    pub async fn create_session(&self, learner_id: String, topology_type: String, topology_data: Option<serde_json::Value>) -> Result<Session> {
+    pub async fn create_session(&self, learner_id: String, topology_type: String, _topology_data: Option<serde_json::Value>) -> Result<Session> {
         Ok(Session {
             id: Uuid::new_v4().to_string(),
             learner_id,
             topology_type,
-            topology_data,
+            topology: None,
             start_time: chrono::Utc::now(),
             end_time: None,
             status: "active".to_string(),
             summary: None,
+            responses: Vec::new(),
         })
     }
 }

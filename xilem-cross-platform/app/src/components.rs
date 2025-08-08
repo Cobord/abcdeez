@@ -21,13 +21,13 @@ where
 }
 
 // Progress bar component
-pub fn progress_bar(progress: f64, label: String) -> impl WidgetView<AppData> {
+pub fn progress_bar(progress: f64, label_text: String) -> impl WidgetView<AppData> {
     let width = 300.0;
     let height = 20.0;
     let filled_width = (width * progress.min(1.0).max(0.0)) as i32;
     
     flex((
-        label(label.clone())
+        label(label_text)
             .alignment(TextAlignment::Middle),
         // Simple text-based progress visualization
         label(format!("[{}{}] {:.1}%", 
@@ -54,34 +54,21 @@ pub fn metric_display(label_text: &str, value: String, color: Color) -> impl Wid
     .direction(Axis::Horizontal)
 }
 
-// Task card component for displaying questions
-pub fn task_card(task: &Task) -> impl WidgetView<AppData> {
-    match task {
-        Task::Alphabet(alphabet_task) => {
-            flex((
-                label(format!("What position is '{}' in the alphabet?", alphabet_task.letter))
-                    .alignment(TextAlignment::Middle),
-                label("Select your answer below")
-                    .brush(Color::from_rgb8(128, 128, 128))
-                    .alignment(TextAlignment::Middle),
-            ))
-            .direction(Axis::Vertical)
-        },
-        Task::Music(music_task) => {
-            flex((
-                label(&music_task.prompt)
-                    .alignment(TextAlignment::Middle),
-                label(&music_task.task_type)
-                    .brush(Color::from_rgb8(128, 128, 128))
-                    .alignment(TextAlignment::Middle),
-            ))
-            .direction(Axis::Vertical)
-        },
-        Task::Custom(_) => {
-            label("Custom task")
+// Task card component for displaying questions (using UITask from models)
+pub fn task_card(task: &UITask) -> impl WidgetView<AppData> {
+    flex((
+        label(task.display_prompt.clone())
+            .alignment(TextAlignment::Middle),
+        if let Some(hint) = &task.hint {
+            label(hint.clone())
+                .brush(Color::from_rgb8(128, 128, 128))
                 .alignment(TextAlignment::Middle)
-        }
-    }
+        } else {
+            label("")
+                .alignment(TextAlignment::Middle)
+        },
+    ))
+    .direction(Axis::Vertical)
 }
 
 // Answer options component
@@ -145,6 +132,7 @@ pub fn domain_card(domain: &Domain, selected: bool) -> impl WidgetView<AppData> 
             .alignment(TextAlignment::Middle),
         label(match domain {
             Domain::Alphabet => "Learn letter positions and sequences",
+            Domain::DaysOfWeek => "Master the order of days in a week",
             Domain::Music => "Master intervals, scales, and theory",
             Domain::Mathematics => "Practice arithmetic and patterns",
             Domain::Custom(_) => "Custom learning domain",
@@ -204,8 +192,8 @@ pub fn nav_bar(current_screen: &str) -> impl WidgetView<AppData> {
         button("Dashboard", |data: &mut AppData| {
             data.current_screen = crate::Screen::Dashboard;
         }),
-        button("Export", |data: &mut AppData| {
-            data.current_screen = crate::Screen::Export;
+        button("Settings", |data: &mut AppData| {
+            data.current_screen = crate::Screen::Settings;
         }),
     ))
     .direction(Axis::Horizontal)
@@ -233,4 +221,22 @@ pub fn success_message(message: Option<String>) -> impl WidgetView<AppData> {
         label("")
             .alignment(TextAlignment::Middle)
     }
+}
+
+// Checkbox component (using button as a workaround since xilem doesn't have native checkbox yet)
+pub fn checkbox(
+    checked: bool,
+    label_text: &str,
+    on_change: impl Fn(&mut AppData, bool) + 'static
+) -> impl WidgetView<AppData> {
+    let checkbox_display = if checked { "[✓]" } else { "[ ]" };
+    
+    flex((
+        button(checkbox_display, move |data: &mut AppData| {
+            on_change(data, !checked);
+        }),
+        label(label_text)
+            .alignment(TextAlignment::Start),
+    ))
+    .direction(Axis::Horizontal)
 }

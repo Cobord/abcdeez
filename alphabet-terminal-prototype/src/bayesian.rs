@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use statrs::distribution::{Normal, ContinuousCDF};
+use rand::prelude::*;
+use rand_distr;
 
 /// Bayesian Expected Information Gain implementation for adaptive task selection
 /// Based on the paper's equation: EIG = E[KL(p(θ|D_t) || p(θ|D_t, Response to q))]
@@ -30,7 +31,11 @@ impl PosteriorDistribution {
     }
 
     pub fn entropy(&self) -> f64 {
-        // Entropy of a Gaussian: H = 0.5 * ln(2πe * σ²)
+        // Differential entropy of a Gaussian: H = 0.5 * ln(2πeσ²) = 0.5 * ln(2πe) + ln(σ)
+        // Simplified: H = 0.5 * ln(2π * e * σ²)
+        if self.variance <= 0.0 {
+            return 0.0;
+        }
         0.5 * (2.0 * std::f64::consts::PI * std::f64::consts::E * self.variance).ln()
     }
 
@@ -68,6 +73,24 @@ pub struct ResponseData {
     pub task: crate::tasks::Task,
     pub correct: bool,
     pub response_time: f64,
+}
+
+/// A sampled model from the posterior for Monte Carlo simulation
+struct SampledModel {
+    positions: HashMap<String, f64>,
+    proficiencies: HashMap<String, f64>,
+}
+
+impl SampledModel {
+    /// Predict success probability given sampled parameters
+    fn predict_success_probability(&self, task: &crate::tasks::Task) -> f64 {
+        // Get operation proficiency for this task
+        let op_key = format!("{:?}", task.operation);
+        let proficiency = self.proficiencies.get(&op_key).unwrap_or(&0.0);
+        
+        // Convert to probability using sigmoid
+        1.0 / (1.0 + (-proficiency).exp())
+    }
 }
 
 impl BayesianLearnerModel {
@@ -117,16 +140,112 @@ impl BayesianLearnerModel {
         }
     }
 
-    /// Calculate Expected Information Gain for a given task
+    /// Calculate Expected Information Gain for a given task using Monte Carlo simulation
+    /// EIG = E[KL(p(θ|D_t) || p(θ|D_t, Response to q))]
     pub fn calculate_eig(&self, task: &crate::tasks::Task) -> f64 {
-        // Simulate possible outcomes (correct/incorrect)
-        let p_correct = self.predict_accuracy(task);
+        self.monte_carlo_eig(task, 1000)
+    }
+    
+    /// Monte Carlo simulation for Expected Information Gain
+    /// Samples from the posterior predictive distribution
+    pub fn monte_carlo_eig(&self, task: &crate::tasks::Task, n_samples: usize) -> f64 {
+        use rand::prelude::*;
         
-        // Calculate expected KL divergence
-        let eig_correct = p_correct * self.calculate_kl_if_correct(task);
-        let eig_incorrect = (1.0 - p_correct) * self.calculate_kl_if_incorrect(task);
+        let mut rng = thread_rng();
+        let mut total_eig = 0.0;
         
-        eig_correct + eig_incorrect
+        for _ in 0..n_samples {
+            // Sample from current posterior beliefs
+            let sampled_model = self.sample_from_posterior(&mut rng);
+            
+            // Simulate response given sampled parameters
+            let response_prob = sampled_model.predict_success_probability(task);
+            let simulated_correct = rng.gen::<f64>() < response_prob;
+            
+            // Calculate KL divergence for this simulated outcome
+            let kl = if simulated_correct {
+                self.calculate_kl_if_correct_monte_carlo(task, &sampled_model)
+            } else {
+                self.calculate_kl_if_incorrect_monte_carlo(task, &sampled_model)
+            };
+            
+            total_eig += kl;
+        }
+        
+        total_eig / n_samples as f64
+    }
+    
+    /// Sample a model from the current posterior distributions
+    fn sample_from_posterior(&self, rng: &mut impl Rng) -> SampledModel {
+        use rand_distr::Normal;
+        
+        let mut sampled_positions = HashMap::new();
+        for (key, posterior) in &self.node_positions {
+            let dist = Normal::new(posterior.mean, posterior.variance.sqrt())
+                .unwrap_or(Normal::new(0.0, 1.0).unwrap());
+            sampled_positions.insert(key.clone(), dist.sample(rng));
+        }
+        
+        let mut sampled_proficiencies = HashMap::new();
+        for (key, posterior) in &self.operation_proficiencies {
+            let dist = Normal::new(posterior.mean, posterior.variance.sqrt())
+                .unwrap_or(Normal::new(0.0, 1.0).unwrap());
+            sampled_proficiencies.insert(key.clone(), dist.sample(rng));
+        }
+        
+        SampledModel {
+            positions: sampled_positions,
+            proficiencies: sampled_proficiencies,
+        }
+    }
+    
+    /// Calculate KL divergence for correct response in Monte Carlo
+    fn calculate_kl_if_correct_monte_carlo(&self, task: &crate::tasks::Task, sampled: &SampledModel) -> f64 {
+        // Create updated posterior given correct response
+        let mut updated_model = self.clone();
+        updated_model.update_with_response(ResponseData {
+            task: task.clone(),
+            correct: true,
+            response_time: 1000.0, // Default for simulation
+        });
+        
+        // Calculate KL divergence between current and updated posteriors
+        self.kl_divergence_to(&updated_model)
+    }
+    
+    /// Calculate KL divergence for incorrect response in Monte Carlo
+    fn calculate_kl_if_incorrect_monte_carlo(&self, task: &crate::tasks::Task, sampled: &SampledModel) -> f64 {
+        // Create updated posterior given incorrect response
+        let mut updated_model = self.clone();
+        updated_model.update_with_response(ResponseData {
+            task: task.clone(),
+            correct: false,
+            response_time: 2000.0, // Default for simulation
+        });
+        
+        // Calculate KL divergence between current and updated posteriors
+        self.kl_divergence_to(&updated_model)
+    }
+    
+    /// Calculate total KL divergence to another model
+    fn kl_divergence_to(&self, other: &BayesianLearnerModel) -> f64 {
+        let mut total_kl = 0.0;
+        
+        // KL for node positions
+        for (key, pos) in &self.node_positions {
+            if let Some(other_pos) = other.node_positions.get(key) {
+                total_kl += pos.kl_divergence(other_pos);
+            }
+        }
+        
+        // KL for operation proficiencies
+        for (key, prof) in &self.operation_proficiencies {
+            if let Some(other_prof) = other.operation_proficiencies.get(key) {
+                total_kl += prof.kl_divergence(other_prof);
+            }
+        }
+        
+        total_kl
     }
 
     fn predict_accuracy(&self, task: &crate::tasks::Task) -> f64 {

@@ -14,7 +14,7 @@ name = "graph-learning-cli"
 path = "src/main.rs"
 
 [dependencies]
-crossterm = "0.27"
+crossterm = { version = "0.27", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 rand = { workspace = true }

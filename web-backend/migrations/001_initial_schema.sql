@@ -1,78 +1,51 @@
--- Users for authentication
+-- Users and Authentication
 CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-    username TEXT NOT NULL UNIQUE,
-    email TEXT NOT NULL UNIQUE,
+    id BLOB PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL,
+    metadata TEXT
 );
 
--- Learners (can be linked to users or anonymous)
+-- Learners (can be anonymous)
 CREATE TABLE IF NOT EXISTS learners (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-    user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+    id BLOB PRIMARY KEY,
+    user_id BLOB REFERENCES users(id),
     display_name TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    metadata JSON
+    created_at TIMESTAMP NOT NULL,
+    last_active TIMESTAMP,
+    total_practice_time_seconds INTEGER DEFAULT 0,
+    metadata TEXT
 );
 
--- Training sessions
+-- Training Sessions
 CREATE TABLE IF NOT EXISTS sessions (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-    learner_id TEXT NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+    id BLOB PRIMARY KEY,
+    learner_id BLOB NOT NULL REFERENCES learners(id),
     topology_type TEXT NOT NULL,
-    topology_data JSON,
-    start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    topology_data TEXT NOT NULL,
+    start_time TIMESTAMP NOT NULL,
     end_time TIMESTAMP,
-    status TEXT DEFAULT 'active', -- active, completed, abandoned
-    summary JSON
+    status TEXT NOT NULL,
+    summary TEXT
 );
 
--- Task responses
+-- Individual Task Responses (Event Store)
 CREATE TABLE IF NOT EXISTS responses (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    id BLOB PRIMARY KEY,
+    session_id BLOB NOT NULL REFERENCES sessions(id),
+    sequence_number INTEGER NOT NULL,
     task_type TEXT NOT NULL,
-    task_data JSON NOT NULL,
+    task_data TEXT NOT NULL,
     user_answer TEXT,
-    correct BOOLEAN NOT NULL,
+    correct INTEGER NOT NULL,
     response_time_ms INTEGER NOT NULL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    hint_level INTEGER,
+    timestamp TIMESTAMP NOT NULL
 );
 
--- Model snapshots for analysis
-CREATE TABLE IF NOT EXISTS model_snapshots (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-    learner_id TEXT NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    parameters JSON NOT NULL,
-    metrics JSON
-);
-
--- Experiments for research
-CREATE TABLE IF NOT EXISTS experiments (
-    id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-    name TEXT NOT NULL,
-    description TEXT,
-    config JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_by TEXT REFERENCES users(id)
-);
-
--- Link learners to experiments
-CREATE TABLE IF NOT EXISTS experiment_participants (
-    experiment_id TEXT NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
-    learner_id TEXT NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    metadata JSON,
-    PRIMARY KEY (experiment_id, learner_id)
-);
-
--- Indexes for performance
-CREATE INDEX idx_sessions_learner ON sessions(learner_id);
-CREATE INDEX idx_sessions_status ON sessions(status);
-CREATE INDEX idx_responses_session ON responses(session_id);
-CREATE INDEX idx_responses_timestamp ON responses(timestamp);
-CREATE INDEX idx_model_snapshots_learner ON model_snapshots(learner_id);
-CREATE INDEX idx_model_snapshots_timestamp ON model_snapshots(timestamp);
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_sessions_learner ON sessions(learner_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+CREATE INDEX IF NOT EXISTS idx_responses_session ON responses(session_id, sequence_number);

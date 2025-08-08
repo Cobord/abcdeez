@@ -19,3 +19,7 @@ tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+rand = "0.8"
+
+# Include the alphabet-terminal-prototype library
+graph-learning-core = { path = "../../alphabet-terminal-prototype", package = "graph-learning-core" }

@@ -1,7 +1,19 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use graph_learning_core::{
+    LearnerModel as CoreLearnerModel,
+    LearnerMetrics as CoreLearnerMetrics,
+    Task as CoreTask,
+    TaskType as CoreTaskType,
+    tasks::TaskResponse as CoreTaskResponse,
+    OperationType,
+    Topology,
+    TopologyType,
+};
 
-// Core data structures
+// UI-specific wrapper types that bridge between the core library and the UI
+
+// Core data structures for authentication
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: String,
@@ -10,43 +22,36 @@ pub struct User {
     pub token: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Wrapper for core LearnerModel with UI-specific fields
+#[derive(Debug, Clone)]
 pub struct Learner {
     pub id: String,
     pub user_id: Option<String>,
     pub display_name: Option<String>,
     pub created_at: DateTime<Utc>,
+    pub core_model: CoreLearnerModel, // The actual learner model from the library
     pub metadata: Option<serde_json::Value>,
 }
 
+// Session management
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
     pub id: String,
     pub learner_id: String,
     pub topology_type: String,
-    pub topology_data: Option<serde_json::Value>,
+    pub topology: Option<Topology>,
     pub start_time: DateTime<Utc>,
     pub end_time: Option<DateTime<Utc>>,
     pub status: String,
     pub summary: Option<serde_json::Value>,
+    pub responses: Vec<CoreTaskResponse>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskResponse {
-    pub id: String,
-    pub session_id: String,
-    pub task_type: String,
-    pub task_data: serde_json::Value,
-    pub user_answer: Option<String>,
-    pub correct: bool,
-    pub response_time_ms: i32,
-    pub timestamp: DateTime<Utc>,
-}
-
-// Domain types
+// Domain types for UI
 #[derive(Debug, Clone, PartialEq)]
 pub enum Domain {
     Alphabet,
+    DaysOfWeek,
     Music,
     Mathematics,
     Custom(String),
@@ -56,6 +61,7 @@ impl Domain {
     pub fn as_str(&self) -> &str {
         match self {
             Domain::Alphabet => "alphabet",
+            Domain::DaysOfWeek => "days_of_week",
             Domain::Music => "music",
             Domain::Mathematics => "mathematics",
             Domain::Custom(s) => s,
@@ -64,48 +70,79 @@ impl Domain {
     
     pub fn display_name(&self) -> &str {
         match self {
-            Domain::Alphabet => "Alphabet Recognition",
+            Domain::Alphabet => "Alphabet (A-Z)",
+            Domain::DaysOfWeek => "Days of the Week",
             Domain::Music => "Music Theory",
             Domain::Mathematics => "Mathematics",
             Domain::Custom(s) => s,
         }
     }
+    
+    pub fn description(&self) -> &str {
+        match self {
+            Domain::Alphabet => "Learn letter positions, sequences, and relationships",
+            Domain::DaysOfWeek => "Master the order and relationships between days",
+            Domain::Music => "Understand intervals, scales, and chord progressions",
+            Domain::Mathematics => "Practice arithmetic operations and number patterns",
+            Domain::Custom(_) => "Custom learning domain",
+        }
+    }
+    
+    pub fn to_topology_type(&self) -> TopologyType {
+        match self {
+            Domain::Alphabet => TopologyType::Linear,
+            Domain::DaysOfWeek => TopologyType::Cyclic,
+            Domain::Music => TopologyType::PartialOrder,
+            Domain::Mathematics => TopologyType::GeneralGraph,
+            Domain::Custom(_) => TopologyType::Linear,
+        }
+    }
 }
 
-// Task types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AlphabetTask {
-    pub letter: char,
-    pub position: usize,
-    pub options: Vec<char>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MusicTask {
-    pub task_type: String,
-    pub prompt: String,
-    pub correct_answer: String,
-    pub options: Vec<String>,
-    pub difficulty: f64,
-    pub musical_context: serde_json::Value,
-}
-
+// UI-specific task wrapper that includes the core task
 #[derive(Debug, Clone)]
-pub enum Task {
-    Alphabet(AlphabetTask),
-    Music(MusicTask),
-    Custom(serde_json::Value),
+pub struct UITask {
+    pub core_task: CoreTask,
+    pub display_prompt: String,
+    pub display_options: Vec<String>,
+    pub hint: Option<String>,
+    pub feedback_message: Option<String>,
 }
 
-// Performance metrics
+impl UITask {
+    pub fn from_core_task(task: CoreTask) -> Self {
+        let (display_prompt, display_options) = Self::format_task_for_ui(&task);
+        
+        UITask {
+            core_task: task,
+            display_prompt,
+            display_options,
+            hint: None,
+            feedback_message: None,
+        }
+    }
+    
+    fn format_task_for_ui(task: &CoreTask) -> (String, Vec<String>) {
+        // Format the task prompt and options based on task type
+        let prompt = task.prompt.clone();
+        let options = task.options.clone();
+        
+        (prompt, options)
+    }
+}
+
+// Performance metrics with UI-specific fields
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PerformanceMetrics {
+    pub core_metrics: Option<CoreLearnerMetrics>,
     pub total_responses: usize,
     pub correct_responses: usize,
     pub average_response_time_ms: f64,
     pub accuracy_rate: f64,
     pub recent_accuracy: f64,  // Last 10 responses
     pub improvement_rate: f64,
+    pub streak_count: usize,
+    pub best_streak: usize,
 }
 
 impl PerformanceMetrics {
@@ -113,6 +150,12 @@ impl PerformanceMetrics {
         self.total_responses += 1;
         if correct {
             self.correct_responses += 1;
+            self.streak_count += 1;
+            if self.streak_count > self.best_streak {
+                self.best_streak = self.streak_count;
+            }
+        } else {
+            self.streak_count = 0;
         }
         
         // Update average response time
@@ -124,9 +167,13 @@ impl PerformanceMetrics {
         // Update accuracy rate
         self.accuracy_rate = self.correct_responses as f64 / self.total_responses as f64;
     }
+    
+    pub fn update_from_core_metrics(&mut self, metrics: &CoreLearnerMetrics) {
+        self.core_metrics = Some(metrics.clone());
+    }
 }
 
-// Request/Response DTOs
+// Request/Response DTOs for API communication
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginRequest {
     pub username: String,
@@ -161,7 +208,34 @@ pub struct SubmitResponseRequest {
 pub struct ExportData {
     pub learner: Learner,
     pub sessions: Vec<Session>,
-    pub responses: Vec<TaskResponse>,
     pub metrics: PerformanceMetrics,
     pub export_time: DateTime<Utc>,
+}
+
+// Serialization helpers for Learner (since it contains non-serializable CoreLearnerModel)
+impl Serialize for Learner {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("Learner", 5)?;
+        state.serialize_field("id", &self.id)?;
+        state.serialize_field("user_id", &self.user_id)?;
+        state.serialize_field("display_name", &self.display_name)?;
+        state.serialize_field("created_at", &self.created_at)?;
+        state.serialize_field("metadata", &self.metadata)?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Learner {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // For now, we can't deserialize a Learner with a CoreLearnerModel
+        // This would need to be handled by reconstructing from stored data
+        unimplemented!("Learner deserialization requires topology information")
+    }
 }

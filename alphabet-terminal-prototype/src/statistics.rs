@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use statrs::distribution::{ContinuousCDF, Exp, Normal};
+use statrs::distribution::{ContinuousCDF, Normal};
 use statrs::statistics::Statistics;
 use std::collections::HashMap;
 
@@ -133,21 +133,31 @@ impl ExGaussianModel {
     }
 
     pub fn pdf(&self, x: f64) -> f64 {
-        if self.params.tau <= 0.0 {
+        if self.params.tau <= 0.0 || self.params.sigma <= 0.0 {
             return 0.0;
         }
 
-        let normal = Normal::new(self.params.mu, self.params.sigma).unwrap();
-        let _exp = Exp::new(1.0 / self.params.tau).unwrap();
-
-        let z = (x - self.params.mu) / self.params.sigma;
-        let exp_term = (-1.0 / self.params.tau) * (x - self.params.mu - self.params.sigma.powi(2) / (2.0 * self.params.tau));
+        // Ex-Gaussian PDF is the convolution of a Gaussian and an exponential
+        // f(x) = (λ/2) * exp(λ/2 * (2μ + λσ² - 2x)) * erfc((μ + λσ² - x)/(√2 * σ))
+        let lambda = 1.0 / self.params.tau;
+        let normal = Normal::new(0.0, 1.0).unwrap();
         
-        if exp_term < -20.0 {
+        // Calculate the argument for the exponential term
+        let exp_arg = (lambda / 2.0) * (2.0 * self.params.mu + lambda * self.params.sigma.powi(2) - 2.0 * x);
+        
+        // Prevent numerical overflow
+        if exp_arg < -20.0 {
             return 0.0;
         }
-
-        (1.0 / self.params.tau) * exp_term.exp() * normal.cdf(z)
+        
+        // Calculate the argument for the complementary error function
+        let erfc_arg = (self.params.mu + lambda * self.params.sigma.powi(2) - x) / (self.params.sigma * std::f64::consts::SQRT_2);
+        
+        // Use the CDF of standard normal to compute erfc
+        // erfc(z) = 2 * (1 - Φ(z)) where Φ is the CDF of N(0,1)
+        let erfc_val = 2.0 * (1.0 - normal.cdf(erfc_arg));
+        
+        (lambda / 2.0) * exp_arg.exp() * erfc_val
     }
 
     pub fn mean(&self) -> f64 {

@@ -1,6 +1,62 @@
 [package]
 name = "web-backend"
-version = "0.1.0"
-edition = "2024"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
 
 [dependencies]
+# Core library
+graph-learning-core = { path = "../alphabet-terminal-prototype" }
+
+# Web framework
+axum = { version = "0.7", features = ["ws", "macros"] }
+axum-extra = { version = "0.9", features = ["cookie", "typed-header"] }
+tower = { version = "0.5", features = ["util", "timeout"] }
+tower-http = { version = "0.6", features = ["cors", "compression-gzip", "trace"] }
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "postgres", "uuid", "chrono", "json"] }
+
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Authentication & Security
+jsonwebtoken = "9.3"
+argon2 = "0.5"
+rand = { workspace = true }
+
+# UUID and Time
+uuid = { workspace = true, features = ["v4", "serde"] }
+chrono = { workspace = true }
+
+# WebSocket
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+
+# Redis cache
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+
+# Logging & Monitoring
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+opentelemetry = { version = "0.27", features = ["trace"] }
+opentelemetry-otlp = "0.27"
+prometheus = "0.13"
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# HTTP client (for external APIs)
+reqwest = { version = "0.12", features = ["json"] }
+
+# Environment variables
+dotenvy = "0.15"
+
+# Differential privacy
+statrs = { workspace = true }

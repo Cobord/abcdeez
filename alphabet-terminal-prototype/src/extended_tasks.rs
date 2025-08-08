@@ -3,7 +3,7 @@ use crate::tasks::{Task, TaskType};
 use crate::topology::Topology;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Extended task types to complete paper specifications
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -11,12 +11,14 @@ pub enum ExtendedTaskType {
     // Missing from paper section 4.1
     BetweenQuery { a: String, b: String, c: String },
     BoundaryBridging { start: String, count: usize, boundaries: Vec<usize> },
+    ReverseNTreadmill { start: String, n: usize, steps: usize },
     
     // Missing from paper section 4.2
     DirectionalComparison { a: String, b: String, backward: bool },
     
     // Missing from paper section 4.3
     InsertionAdaptation { item: String, after: String, before: String },
+    LinearExtensionGeneration { partial_order: Vec<(String, String)> },
     
     // Missing from paper section 4.4
     NextStepPrediction { current: String, goal: String },
@@ -68,6 +70,94 @@ impl ExtendedTaskGenerator {
             topology,
             semantic_attributes,
             macros,
+        }
+    }
+    
+    /// Generate a Reverse-N Treadmill Drill task
+    /// The learner must recite N items backward, then continue for 'steps' iterations
+    pub fn generate_reverse_n_treadmill(&self, start: String, n: usize, steps: usize) -> Task {
+        let prompt = format!(
+            "Starting from '{}', go back {} items, then continue backwards for {} more steps. What is the final item?",
+            start, n, steps
+        );
+        
+        let mut current = start.clone();
+        let mut path = vec![current.clone()];
+        
+        // First go back N items
+        for _ in 0..n {
+            if let Some(pred) = self.topology.get_predecessor(&current) {
+                if let Some(node) = self.topology.get_node_by_id(&pred) {
+                    current = node.label.clone();
+                    path.push(current.clone());
+                }
+            } else {
+                break;
+            }
+        }
+        
+        // Then continue for 'steps' more iterations
+        for _ in 0..steps {
+            if let Some(pred) = self.topology.get_predecessor(&current) {
+                if let Some(node) = self.topology.get_node_by_id(&pred) {
+                    current = node.label.clone();
+                    path.push(current.clone());
+                }
+            } else {
+                // Handle wraparound for cyclic topologies
+                if matches!(self.topology.topology_type, crate::topology::TopologyType::Cyclic) {
+                    // Wrap to the end
+                    if let Some(last_node) = self.topology.nodes.last() {
+                        current = last_node.label.clone();
+                        path.push(current.clone());
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+        
+        let correct_answer = current.clone();
+        
+        // Generate distractors based on common errors
+        let mut options = vec![correct_answer.clone()];
+        
+        // Error 1: Off by one (stopped one early)
+        if path.len() > 1 {
+            options.push(path[path.len() - 2].clone());
+        }
+        
+        // Error 2: Went forward instead of backward
+        let mut forward_current = start.clone();
+        for _ in 0..(n + steps) {
+            if let Some(succ) = self.topology.get_successor(&forward_current) {
+                if let Some(node) = self.topology.get_node_by_id(&succ) {
+                    forward_current = node.label.clone();
+                }
+            }
+        }
+        if !options.contains(&forward_current) {
+            options.push(forward_current);
+        }
+        
+        // Error 3: Confusion about total steps
+        if path.len() > n && n > 0 {
+            options.push(path[n].clone());
+        }
+        
+        options.shuffle(&mut rand::thread_rng());
+        
+        Task {
+            task_type: TaskType::Segment { 
+                start: start.clone(), 
+                count: n + steps, 
+                reverse: true 
+            },
+            prompt,
+            correct_answer,
+            options,
+            difficulty: 0.7 + (n as f64 + steps as f64) * 0.02, // Harder with more steps
+            operation: OperationType::Segment(n + steps, true),
         }
     }
     
@@ -228,6 +318,116 @@ impl ExtendedTaskGenerator {
             }
         }
         false
+    }
+    
+    /// Generate all valid linear extensions (topological sorts) of a partial order
+    pub fn generate_linear_extension_task(&self, partial_order: Vec<(String, String)>) -> Task {
+        let prompt = format!(
+            "Given the partial order constraints {:?}, which of the following is a valid linear extension?",
+            partial_order
+        );
+        
+        // Build adjacency list for topological sort
+        let mut adj_list: HashMap<String, Vec<String>> = HashMap::new();
+        let mut in_degree: HashMap<String, usize> = HashMap::new();
+        let mut all_nodes: HashSet<String> = HashSet::new();
+        
+        for (before, after) in &partial_order {
+            adj_list.entry(before.clone()).or_insert_with(Vec::new).push(after.clone());
+            *in_degree.entry(after.clone()).or_insert(0) += 1;
+            in_degree.entry(before.clone()).or_insert(0);
+            all_nodes.insert(before.clone());
+            all_nodes.insert(after.clone());
+        }
+        
+        // Generate one valid linear extension using Kahn's algorithm
+        let valid_extension = self.kahns_topological_sort(&adj_list, &in_degree, &all_nodes);
+        
+        // Generate invalid options by violating constraints
+        let mut options = vec![valid_extension.join(", ")];
+        
+        // Invalid option 1: Reverse a constraint
+        if !partial_order.is_empty() {
+            let (before, after) = &partial_order[0];
+            let mut invalid = valid_extension.clone();
+            if let (Some(pos1), Some(pos2)) = (
+                invalid.iter().position(|x| x == before),
+                invalid.iter().position(|x| x == after)
+            ) {
+                if pos1 < pos2 {
+                    invalid.swap(pos1, pos2);
+                    options.push(invalid.join(", "));
+                }
+            }
+        }
+        
+        // Invalid option 2: Random permutation
+        let mut random_perm: Vec<String> = all_nodes.iter().cloned().collect();
+        random_perm.shuffle(&mut rand::thread_rng());
+        options.push(random_perm.join(", "));
+        
+        // Invalid option 3: Reverse the valid extension
+        let mut reversed = valid_extension.clone();
+        reversed.reverse();
+        options.push(reversed.join(", "));
+        
+        options.shuffle(&mut rand::thread_rng());
+        let correct_answer = valid_extension.join(", ");
+        
+        Task {
+            task_type: TaskType::MissingItem { 
+                before: partial_order.first().map(|p| p.0.clone()).unwrap_or_default(),
+                after: partial_order.last().map(|p| p.1.clone()).unwrap_or_default(),
+            },
+            prompt,
+            correct_answer,
+            options,
+            difficulty: 0.7 + partial_order.len() as f64 * 0.05,
+            operation: OperationType::PairwiseOrder,
+        }
+    }
+    
+    fn kahns_topological_sort(
+        &self, 
+        adj_list: &HashMap<String, Vec<String>>, 
+        in_degree: &HashMap<String, usize>,
+        all_nodes: &HashSet<String>
+    ) -> Vec<String> {
+        use std::collections::VecDeque;
+        
+        let mut result = Vec::new();
+        let mut queue = VecDeque::new();
+        let mut in_degree_copy = in_degree.clone();
+        
+        // Find all nodes with in-degree 0
+        for node in all_nodes {
+            if *in_degree_copy.get(node).unwrap_or(&0) == 0 {
+                queue.push_back(node.clone());
+            }
+        }
+        
+        while let Some(node) = queue.pop_front() {
+            result.push(node.clone());
+            
+            if let Some(neighbors) = adj_list.get(&node) {
+                for neighbor in neighbors {
+                    if let Some(degree) = in_degree_copy.get_mut(neighbor) {
+                        *degree -= 1;
+                        if *degree == 0 {
+                            queue.push_back(neighbor.clone());
+                        }
+                    }
+                }
+            }
+        }
+        
+        // If we couldn't sort all nodes, there's a cycle
+        if result.len() != all_nodes.len() {
+            // Return nodes in any order as fallback
+            all_nodes.iter().cloned().collect()
+        } else {
+            result
+        }
     }
     
     pub fn generate_insertion_adaptation(&self, item: String, after: String, before: String) -> Task {

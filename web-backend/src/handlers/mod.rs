@@ -1,6 +1,7 @@
 pub mod auth;
-pub mod learners;
-pub mod sessions;
+pub mod learner;
+pub mod session;
+pub mod task;
 pub mod analytics;
-pub mod predictions;
+pub mod experiment;
 pub mod music;

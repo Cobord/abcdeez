@@ -173,6 +173,114 @@ impl BoundaryTrainer {
         }
     }
     
+    /// Generate a boundary navigation task that requires explicit boundary awareness
+    pub fn generate_boundary_navigation_task(&self) -> Task {
+        // Select two boundaries to navigate between
+        let boundary1 = &self.boundaries[rand::random::<usize>() % self.boundaries.len()];
+        let boundary2 = &self.boundaries[rand::random::<usize>() % self.boundaries.len()];
+        
+        let start_pos = boundary1.position.min(boundary2.position);
+        let end_pos = boundary1.position.max(boundary2.position);
+        
+        let start_node = &self.topology.nodes[start_pos];
+        let end_node = &self.topology.nodes[end_pos.min(self.topology.nodes.len() - 1)];
+        
+        let prompt = format!(
+            "Navigate from '{}' to '{}', explicitly noting each boundary you cross. \
+             How many chunk boundaries are crossed?",
+            start_node.label, end_node.label
+        );
+        
+        // Count boundaries crossed
+        let mut boundaries_crossed: usize = 0;
+        for boundary in &self.boundaries {
+            if boundary.position > start_pos && boundary.position <= end_pos {
+                boundaries_crossed += 1;
+            }
+        }
+        
+        let correct_answer = boundaries_crossed.to_string();
+        
+        // Generate distractors
+        let mut options = vec![
+            correct_answer.clone(),
+            (boundaries_crossed + 1).to_string(),
+            boundaries_crossed.saturating_sub(1).to_string(),
+            "0".to_string(),
+        ];
+        options.sort();
+        options.dedup();
+        
+        Task {
+            task_type: TaskType::Segment {
+                start: start_node.label.clone(),
+                count: (end_pos - start_pos),
+                reverse: false,
+            },
+            prompt,
+            correct_answer,
+            options,
+            difficulty: 0.6 + boundaries_crossed as f64 * 0.1,
+            operation: OperationType::Segment(8, false),
+        }
+    }
+    
+    /// Generate a task that trains rapid boundary crossing
+    pub fn generate_rapid_boundary_crossing_task(&self) -> Task {
+        // Find the strongest boundary
+        let strongest_boundary = self.boundaries.iter()
+            .max_by(|a, b| a.strength.partial_cmp(&b.strength).unwrap())
+            .unwrap();
+        
+        // Create a task that requires crossing this boundary multiple times
+        let start_idx = (strongest_boundary.position as i32 - 2).max(0) as usize;
+        let oscillation_count = 3; // Number of times to cross back and forth
+        
+        let mut path = Vec::new();
+        let mut current_idx = start_idx;
+        
+        for i in 0..oscillation_count * 2 {
+            if i % 2 == 0 {
+                // Forward across boundary
+                for j in 0..4 {
+                    if current_idx + j < self.topology.nodes.len() {
+                        path.push(self.topology.nodes[current_idx + j].label.clone());
+                    }
+                }
+                current_idx = (current_idx + 4).min(self.topology.nodes.len() - 1);
+            } else {
+                // Backward across boundary
+                for j in 0..4 {
+                    if current_idx >= j {
+                        path.push(self.topology.nodes[current_idx - j].label.clone());
+                    }
+                }
+                current_idx = current_idx.saturating_sub(4);
+            }
+        }
+        
+        let prompt = format!(
+            "Starting from '{}', oscillate across the boundary at position {} three times. \
+             What is the sequence of the first 8 items?",
+            self.topology.nodes[start_idx].label, strongest_boundary.position
+        );
+        
+        let correct_answer = path[..8.min(path.len())].join(", ");
+        
+        Task {
+            task_type: TaskType::Segment {
+                start: self.topology.nodes[start_idx].label.clone(),
+                count: 8,
+                reverse: false,
+            },
+            prompt,
+            correct_answer,
+            options: vec![],
+            difficulty: 0.8 + strongest_boundary.strength * 0.1,
+            operation: OperationType::Segment(8, false),
+        }
+    }
+    
     fn generate_hierarchical_boundary_task(&self, level: usize) -> Task {
         let default_boundaries = vec![6, 13, 19];
         let boundaries = self.hierarchical_boundaries.get(&level)
@@ -221,7 +329,7 @@ impl BoundaryTrainer {
         let end = &self.topology.nodes[end_idx].label;
         
         // Count boundaries crossed
-        let mut boundaries_crossed = 0;
+        let mut boundaries_crossed: usize = 0;
         for boundary in &self.boundaries {
             if boundary.position > start_idx && boundary.position < end_idx {
                 boundaries_crossed += 1;
