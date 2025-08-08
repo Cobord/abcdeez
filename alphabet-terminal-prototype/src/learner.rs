@@ -8,7 +8,7 @@ pub struct LatentNodeEmbedding {
     pub uncertainty: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum OperationType {
     Successor,
     Predecessor,

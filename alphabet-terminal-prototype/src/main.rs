@@ -1,22 +1,6 @@
-mod topology;
-mod learner;
-mod tasks;
-mod adaptive;
-mod ui;
-mod demo;
-mod statistics;
-mod bayesian;
-mod extended_tasks;
-mod music;
-mod export;
-mod navigation;
-mod boundaries;
-mod prediction;
-mod hints;
-
 use std::env;
 use std::io;
-use ui::TerminalApp;
+use graph_learning_core::{demo,ui::TerminalApp};
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
