@@ -97,7 +97,7 @@ pub async fn register(
         "INSERT INTO users (id, username, email, password_hash, created_at, updated_at, metadata)
          VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(&user_id_bytes)
+    .bind(user_id_bytes.as_ref())
     .bind(&req.username)
     .bind(&req.email)
     .bind(&password_hash)

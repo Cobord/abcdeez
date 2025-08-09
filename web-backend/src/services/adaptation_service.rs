@@ -245,28 +245,28 @@ impl AdaptationService {
     
     fn simulate_model_update(&self, model: &mut graph_learning_core::LearnerModel, task: &Task, response_correct: bool) {
         // Simulate how the model would update given this task and response
-        let operation_type = &task.operation;
+        let operation_type = format!("{:?}", task.operation); // Convert enum to string
         let difficulty = task.difficulty;
         
         // Simple Bayesian update simulation
         // In practice, this would use the actual Bayesian update mechanism
-        if let Some(embedding) = model.node_embeddings.get_mut(operation_type) {
+        if let Some(embedding) = model.node_embeddings.get_mut(&operation_type) {
             // Update proficiency based on response
             let learning_rate = 0.1; // Could be adaptive
             
             if response_correct {
-                // Correct response increases proficiency, decreases uncertainty
-                embedding.proficiency += learning_rate * (1.0 - embedding.proficiency);
+                // Correct response increases position (mastery), decreases uncertainty
+                embedding.position += learning_rate * (1.0 - embedding.position);
                 embedding.uncertainty *= (1.0 - learning_rate * 0.5);
             } else {
-                // Incorrect response decreases proficiency, may increase uncertainty
-                embedding.proficiency *= (1.0 - learning_rate * 0.5);
+                // Incorrect response decreases position, may increase uncertainty
+                embedding.position *= (1.0 - learning_rate * 0.5);
                 embedding.uncertainty = (embedding.uncertainty + learning_rate * 0.1).min(1.0);
             }
             
             // Apply difficulty-based adjustments
             let difficulty_factor = (difficulty - 0.5) * 0.1;
-            embedding.proficiency = (embedding.proficiency + difficulty_factor).max(0.0).min(1.0);
+            embedding.position = (embedding.position + difficulty_factor).max(0.0).min(1.0);
         }
     }
 

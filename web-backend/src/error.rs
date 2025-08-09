@@ -154,4 +154,10 @@ impl From<graph_learning_core::Error> for AppError {
     }
 }
 
+impl From<serde_json::Error> for AppError {
+    fn from(err: serde_json::Error) -> Self {
+        AppError::ValidationError(format!("JSON parsing error: {}", err))
+    }
+}
+
 pub type AppResult<T> = Result<T, AppError>;

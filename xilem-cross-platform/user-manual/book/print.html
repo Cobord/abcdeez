@@ -1258,7 +1258,1145 @@ age_patterns = {
 <div style="break-before: page; page-break-before: always;"></div><h1 id="statistical-methods"><a class="header" href="#statistical-methods">Statistical Methods</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="visualization-tools"><a class="header" href="#visualization-tools">Visualization Tools</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="python-integration"><a class="header" href="#python-integration">Python Integration</a></h1>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="r-integration"><a class="header" href="#r-integration">R Integration</a></h1>
+<p>The abcdeez Python client library provides comprehensive programmatic access to the Adaptive Learning System for data collection, analysis, and research workflows.</p>
+<h2 id="installation-1"><a class="header" href="#installation-1">Installation</a></h2>
+<h3 id="basic-installation"><a class="header" href="#basic-installation">Basic Installation</a></h3>
+<pre><code class="language-bash">pip install abcdeez
+</code></pre>
+<h3 id="development-installation"><a class="header" href="#development-installation">Development Installation</a></h3>
+<pre><code class="language-bash"># For async support
+pip install abcdeez[async]
+
+# For development
+pip install abcdeez[dev]
+
+# For analysis extras (pandas, scipy, matplotlib)
+pip install abcdeez[analysis]
+</code></pre>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
+<h3 id="basic-authentication-and-session-management"><a class="header" href="#basic-authentication-and-session-management">Basic Authentication and Session Management</a></h3>
+<pre><code class="language-python">from abcdeez import GraphLearningClient
+from abcdeez.models import SessionConfig
+
+# Initialize client
+client = GraphLearningClient(base_url=&quot;https://abcdeez.fg-goose.online/api/v1&quot;)
+
+# Register new user or login
+user = client.register(&quot;researcher@university.edu&quot;, &quot;secure_password&quot;, &quot;Dr. Jane Researcher&quot;)
+# Or login to existing account
+user = client.login(&quot;researcher@university.edu&quot;, &quot;secure_password&quot;)
+
+# Create learning session with configuration
+config = SessionConfig(
+    difficulty=0.5,
+    hint_probability=0.1,
+    max_trials=200,
+    domain_specific_params={'adaptive_scheduling': True}
+)
+session = client.create_session(&quot;alphabet&quot;, config)
+
+print(f&quot;Created session: {session.session_id}&quot;)
+</code></pre>
+<h3 id="data-collection-1"><a class="header" href="#data-collection-1">Data Collection</a></h3>
+<pre><code class="language-python"># Run interactive learning session
+def collect_session_data(client, session_id, n_trials=50):
+    responses = []
+    
+    for trial in range(n_trials):
+        # Get next adaptive task
+        task = client.get_next_task(session_id)
+        
+        # Present task to participant (your experiment code here)
+        print(f&quot;Task {trial+1}: {task.stimulus}&quot;)
+        print(f&quot;Choices: {task.choices}&quot;)
+        
+        # Simulate or collect actual response
+        response = input(&quot;Response: &quot;)
+        start_time = time.time()
+        # ... present task to participant ...
+        response_time = (time.time() - start_time) * 1000  # ms
+        
+        # Submit response
+        result = client.submit_response(
+            session_id,
+            task.task_id,
+            response=response,
+            response_time=response_time
+        )
+        
+        responses.append({
+            'trial': trial + 1,
+            'stimulus': task.stimulus,
+            'response': response,
+            'correct': result['correct'],
+            'rt_ms': response_time
+        })
+        
+        print(f&quot;Correct: {result['correct']}&quot;)
+    
+    return responses
+
+# Collect data
+session_data = collect_session_data(client, session.session_id)
+</code></pre>
+<h3 id="batch-operations-for-offline-studies"><a class="header" href="#batch-operations-for-offline-studies">Batch Operations for Offline Studies</a></h3>
+<pre><code class="language-python"># Collect trials offline, then batch submit
+def batch_experiment(client, session_id, offline_data):
+    &quot;&quot;&quot;
+    Submit pre-collected experimental data in batches.
+    Useful for offline studies or imported data.
+    &quot;&quot;&quot;
+    trials = []
+    
+    for trial_data in offline_data:
+        trials.append({
+            &quot;stimulus&quot;: trial_data['stimulus'],
+            &quot;response&quot;: trial_data['response'], 
+            &quot;response_time&quot;: trial_data['rt_ms'],
+            &quot;correct&quot;: trial_data['correct'],
+            &quot;client_timestamp&quot;: trial_data['timestamp'].isoformat(),
+            &quot;trial_metadata&quot;: {
+                &quot;condition&quot;: trial_data.get('condition'),
+                &quot;block&quot;: trial_data.get('block')
+            }
+        })
+    
+    # Submit in batches of 100
+    for i in range(0, len(trials), 100):
+        batch = trials[i:i+100]
+        result = client.batch_submit_trials(session_id, batch)
+        print(f&quot;Batch {i//100 + 1}: {result['accepted']}/{len(batch)} trials accepted&quot;)
+
+# Usage
+batch_experiment(client, session.session_id, your_offline_data)
+</code></pre>
+<h2 id="data-analysis-1"><a class="header" href="#data-analysis-1">Data Analysis</a></h2>
+<h3 id="export-and-basic-analysis"><a class="header" href="#export-and-basic-analysis">Export and Basic Analysis</a></h3>
+<pre><code class="language-python">import pandas as pd
+import numpy as np
+from abcdeez.analysis import analyze_session, plot_performance
+
+# Export session data
+data = client.export_data(
+    format=&quot;json&quot;,
+    include=[&quot;sessions&quot;, &quot;trials&quot;, &quot;analytics&quot;],
+    from_date=datetime(2024, 1, 1),
+    to_date=datetime.now()
+)
+
+# Convert to DataFrame
+df = pd.DataFrame(data['trials'])
+
+# Basic descriptive statistics
+print(&quot;Session Summary:&quot;)
+print(f&quot;Total trials: {len(df)}&quot;)
+print(f&quot;Overall accuracy: {df['correct'].mean():.3f}&quot;)
+print(f&quot;Mean RT: {df['response_time_ms'].mean():.1f}ms&quot;)
+print(f&quot;Median RT: {df['response_time_ms'].median():.1f}ms&quot;)
+
+# Accuracy by trial block
+df['trial_block'] = pd.cut(df['trial_number'], bins=10)
+accuracy_by_block = df.groupby('trial_block')['correct'].mean()
+print(&quot;\nLearning curve (accuracy by trial block):&quot;)
+print(accuracy_by_block)
+</code></pre>
+<h3 id="advanced-analytics"><a class="header" href="#advanced-analytics">Advanced Analytics</a></h3>
+<pre><code class="language-python">from abcdeez.analysis import (
+    calculate_learning_curves,
+    detect_strategy_shifts,
+    analyze_symbolic_distance,
+    compute_transfer_metrics
+)
+
+# Learning curve analysis
+learning_curves = calculate_learning_curves(df, window_size=20)
+
+# Strategy detection (serial scan vs. direct access)
+strategy_analysis = detect_strategy_shifts(
+    df[df['task_type'] == 'PairwiseOrder'],
+    window_size=50
+)
+
+print(f&quot;Detected strategy shifts: {len(strategy_analysis['shift_points'])}&quot;)
+print(f&quot;Final strategy: {strategy_analysis['final_strategy']}&quot;)
+
+# Symbolic distance effect analysis
+if 'symbolic_distance' in df.columns:
+    distance_effect = analyze_symbolic_distance(df)
+    print(f&quot;Distance effect slope: {distance_effect['slope']:.4f}&quot;)
+    print(f&quot;R² = {distance_effect['r_squared']:.3f}&quot;)
+
+# Transfer learning metrics
+transfer_metrics = compute_transfer_metrics(df, baseline_domain='alphabet')
+print(f&quot;Transfer efficiency: {transfer_metrics['efficiency']:.3f}&quot;)
+</code></pre>
+<h3 id="visualization"><a class="header" href="#visualization">Visualization</a></h3>
+<pre><code class="language-python">import matplotlib.pyplot as plt
+import seaborn as sns
+from abcdeez.visualization import (
+    plot_learning_curve,
+    plot_rt_distributions,
+    plot_strategy_evolution,
+    plot_distance_effects
+)
+
+# Learning curve with confidence intervals
+fig, ax = plt.subplots(1, 1, figsize=(10, 6))
+plot_learning_curve(df, ax=ax, confidence_interval=True)
+ax.set_title('Learning Curve - Accuracy Over Trials')
+plt.show()
+
+# Response time distributions by condition
+plot_rt_distributions(df, group_by='task_type', log_scale=True)
+
+# Strategy evolution over time
+if strategy_analysis['temporal_data']:
+    plot_strategy_evolution(strategy_analysis['temporal_data'])
+
+# Distance effects (if applicable)
+pairwise_data = df[df['task_type'] == 'PairwiseOrder']
+if not pairwise_data.empty:
+    plot_distance_effects(pairwise_data, phases=['early', 'middle', 'late'])
+</code></pre>
+<h2 id="async-client-for-high-throughput-studies"><a class="header" href="#async-client-for-high-throughput-studies">Async Client for High-Throughput Studies</a></h2>
+<pre><code class="language-python">import asyncio
+from abcdeez.async_client import AsyncGraphLearningClient
+
+async def run_concurrent_sessions():
+    &quot;&quot;&quot;Run multiple sessions concurrently for large-scale studies.&quot;&quot;&quot;
+    
+    async with AsyncGraphLearningClient() as client:
+        await client.login(&quot;researcher@university.edu&quot;, &quot;password&quot;)
+        
+        # Create multiple sessions for different conditions
+        sessions = await asyncio.gather(
+            client.create_session(&quot;alphabet&quot;, SessionConfig(difficulty=0.3)),
+            client.create_session(&quot;alphabet&quot;, SessionConfig(difficulty=0.5)),
+            client.create_session(&quot;alphabet&quot;, SessionConfig(difficulty=0.7)),
+            client.create_session(&quot;music&quot;, SessionConfig(difficulty=0.5))
+        )
+        
+        # Process sessions concurrently
+        async def run_session(session, n_trials=100):
+            responses = []
+            for _ in range(n_trials):
+                task = await client.get_next_task(session.session_id)
+                # Simulate automated response or connect to experiment software
+                response = simulate_participant_response(task)
+                result = await client.submit_response(
+                    session.session_id,
+                    task.task_id,
+                    response['answer'],
+                    response['rt_ms']
+                )
+                responses.append(result)
+            return responses
+        
+        # Run all sessions concurrently
+        all_results = await asyncio.gather(
+            *[run_session(session) for session in sessions]
+        )
+        
+        return all_results
+
+# Execute concurrent sessions
+results = asyncio.run(run_concurrent_sessions())
+</code></pre>
+<h2 id="command-line-interface"><a class="header" href="#command-line-interface">Command Line Interface</a></h2>
+<p>The abcdeez package includes a CLI for common research workflows:</p>
+<pre><code class="language-bash"># Login and store credentials
+abcdeez login --email researcher@university.edu
+
+# Create and run training session
+abcdeez session create --domain alphabet --difficulty 0.5 --trials 200
+
+# Interactive training mode
+abcdeez train --domain music --adaptive true
+
+# Export data for analysis
+abcdeez export --format csv --output study1_data.csv --from-date 2024-01-01
+
+# View analytics dashboard in terminal
+abcdeez analytics --period month --domain alphabet
+
+# Generate analysis report
+abcdeez report --input study1_data.csv --output study1_report.pdf
+</code></pre>
+<h2 id="integration-with-experimental-software"><a class="header" href="#integration-with-experimental-software">Integration with Experimental Software</a></h2>
+<h3 id="psychopy-integration"><a class="header" href="#psychopy-integration">PsychoPy Integration</a></h3>
+<pre><code class="language-python">from psychopy import visual, core, event
+from abcdeez import GraphLearningClient
+
+# Initialize PsychoPy and abcdeez
+win = visual.Window([800, 600])
+client = GraphLearningClient()
+client.login(&quot;researcher@university.edu&quot;, &quot;password&quot;)
+session = client.create_session(&quot;alphabet&quot;)
+
+def run_psychopy_trial(task):
+    # Display stimulus
+    stimulus_text = visual.TextStim(win, text=task.stimulus)
+    choice_texts = [visual.TextStim(win, text=choice, pos=(i*200-200, -100)) 
+                   for i, choice in enumerate(task.choices)]
+    
+    # Present stimuli
+    stimulus_text.draw()
+    for choice_text in choice_texts:
+        choice_text.draw()
+    win.flip()
+    
+    # Collect response
+    start_time = core.getTime()
+    keys = event.waitKeys(keyList=['1', '2', '3', '4'])
+    rt_ms = (core.getTime() - start_time) * 1000
+    
+    response = task.choices[int(keys[0]) - 1]
+    
+    return response, rt_ms
+
+# Run experiment
+for trial in range(100):
+    task = client.get_next_task(session.session_id)
+    response, rt_ms = run_psychopy_trial(task)
+    client.submit_response(session.session_id, task.task_id, response, rt_ms)
+</code></pre>
+<h3 id="jspsych-integration"><a class="header" href="#jspsych-integration">jsPsych Integration</a></h3>
+<pre><code class="language-python"># Export session configuration for web-based experiments
+def export_jspsych_config(client, domain, n_trials=200):
+    session = client.create_session(domain)
+    
+    tasks = []
+    for _ in range(n_trials):
+        task = client.get_next_task(session.session_id)
+        tasks.append({
+            'stimulus': task.stimulus,
+            'choices': task.choices,
+            'task_id': task.task_id,
+            'session_id': session.session_id
+        })
+    
+    return {
+        'session_id': session.session_id,
+        'tasks': tasks,
+        'submit_url': f&quot;{client.base_url}/sessions/{session.session_id}/tasks/&quot;
+    }
+
+# Generate configuration for jsPsych
+config = export_jspsych_config(client, &quot;alphabet&quot;, 150)
+
+# Save for use in web experiment
+import json
+with open('experiment_config.json', 'w') as f:
+    json.dump(config, f, indent=2)
+</code></pre>
+<h2 id="error-handling-and-best-practices"><a class="header" href="#error-handling-and-best-practices">Error Handling and Best Practices</a></h2>
+<pre><code class="language-python">from abcdeez.exceptions import (
+    AbcdeezError,
+    AuthenticationError,
+    RateLimitError,
+    ValidationError,
+    NetworkError
+)
+
+def robust_data_collection(client, session_id, max_trials=200):
+    &quot;&quot;&quot;Example of robust data collection with error handling.&quot;&quot;&quot;
+    
+    collected_trials = 0
+    max_retries = 3
+    
+    while collected_trials &lt; max_trials:
+        try:
+            # Get next task
+            task = client.get_next_task(session_id)
+            
+            # Present task (your experiment code here)
+            response, rt_ms = present_task_to_participant(task)
+            
+            # Submit with retry logic
+            for attempt in range(max_retries):
+                try:
+                    result = client.submit_response(
+                        session_id, task.task_id, response, rt_ms
+                    )
+                    collected_trials += 1
+                    print(f&quot;Trial {collected_trials}/{max_trials} completed&quot;)
+                    break
+                    
+                except RateLimitError as e:
+                    print(f&quot;Rate limited, waiting {e.retry_after} seconds...&quot;)
+                    time.sleep(e.retry_after)
+                    
+                except NetworkError:
+                    if attempt &lt; max_retries - 1:
+                        print(f&quot;Network error, retrying in {2**attempt} seconds...&quot;)
+                        time.sleep(2**attempt)
+                    else:
+                        print(&quot;Max retries exceeded, skipping trial&quot;)
+                        break
+                        
+        except ValidationError as e:
+            print(f&quot;Validation error: {e}. Check your input data.&quot;)
+            break
+            
+        except AuthenticationError:
+            print(&quot;Authentication failed. Please log in again.&quot;)
+            client.login(&quot;researcher@university.edu&quot;, &quot;password&quot;)
+            
+    return collected_trials
+
+# Usage with error handling
+trials_completed = robust_data_collection(client, session.session_id)
+print(f&quot;Successfully completed {trials_completed} trials&quot;)
+</code></pre>
+<h2 id="configuration-and-environment-setup"><a class="header" href="#configuration-and-environment-setup">Configuration and Environment Setup</a></h2>
+<h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
+<pre><code class="language-bash"># Set default configuration
+export ABCDEEZ_API_URL=&quot;https://abcdeez.fg-goose.online/api/v1&quot;
+export ABCDEEZ_API_KEY=&quot;your-research-api-key&quot;
+export ABCDEEZ_TIMEOUT=60
+export ABCDEEZ_RETRY_COUNT=5
+</code></pre>
+<h3 id="configuration-file"><a class="header" href="#configuration-file">Configuration File</a></h3>
+<p>Create <code>~/.abcdeez/config.json</code>:</p>
+<pre><code class="language-json">{
+  &quot;api_url&quot;: &quot;https://abcdeez.fg-goose.online/api/v1&quot;,
+  &quot;api_key&quot;: &quot;your-research-api-key&quot;,
+  &quot;timeout&quot;: 60,
+  &quot;retry_count&quot;: 5,
+  &quot;default_session_config&quot;: {
+    &quot;max_trials&quot;: 200,
+    &quot;hint_probability&quot;: 0.1,
+    &quot;adaptive_difficulty&quot;: true
+  },
+  &quot;analysis_settings&quot;: {
+    &quot;learning_curve_window&quot;: 20,
+    &quot;strategy_detection_window&quot;: 50,
+    &quot;outlier_threshold&quot;: 3.0
+  }
+}
+</code></pre>
+<h2 id="api-reference-summary"><a class="header" href="#api-reference-summary">API Reference Summary</a></h2>
+<h3 id="core-methods"><a class="header" href="#core-methods">Core Methods</a></h3>
+<ul>
+<li><code>register(email, password, display_name)</code> - Create new researcher account</li>
+<li><code>login(email, password)</code> - Authenticate</li>
+<li><code>create_session(domain, config)</code> - Start new learning session</li>
+<li><code>get_next_task(session_id)</code> - Get adaptive task</li>
+<li><code>submit_response(session_id, task_id, response, rt_ms)</code> - Submit response</li>
+<li><code>batch_submit_trials(session_id, trials)</code> - Bulk data submission</li>
+<li><code>export_data(format, include, from_date, to_date)</code> - Export research data</li>
+</ul>
+<h3 id="analytics-methods"><a class="header" href="#analytics-methods">Analytics Methods</a></h3>
+<ul>
+<li><code>get_analytics(user_id, from_date, to_date, domain)</code> - Detailed analytics</li>
+<li><code>get_leaderboard(domain, metric, period)</code> - Population comparison</li>
+<li><code>get_sessions(status, domain, date_range)</code> - Session management</li>
+</ul>
+<h3 id="models"><a class="header" href="#models">Models</a></h3>
+<ul>
+<li><code>User</code> - Researcher/participant account</li>
+<li><code>Session</code> - Learning session with configuration</li>
+<li><code>Task</code> - Adaptive learning task</li>
+<li><code>TaskResponse</code> - Response data with metadata</li>
+<li><code>Analytics</code> - Comprehensive learning metrics</li>
+<li><code>SessionConfig</code> - Experimental parameters</li>
+</ul>
+<p>For complete API documentation, see the <a href="research/analysis/../api/endpoints.html">REST Endpoints</a> section.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="r-statistical-analysis"><a class="header" href="#r-statistical-analysis">R Statistical Analysis</a></h1>
+<p>The Adaptive Learning System provides comprehensive R analysis scripts for statistical modeling, hypothesis testing, and publication-ready visualizations. The R analysis pipeline is designed for rigorous cognitive science research following best practices for reproducible science.</p>
+<h2 id="installation-and-setup"><a class="header" href="#installation-and-setup">Installation and Setup</a></h2>
+<h3 id="required-r-packages"><a class="header" href="#required-r-packages">Required R Packages</a></h3>
+<pre><code class="language-r"># Core data manipulation and visualization
+install.packages(c(
+  &quot;tidyverse&quot;,      # Data manipulation and visualization
+  &quot;lubridate&quot;,      # Date/time handling
+  &quot;jsonlite&quot;,       # JSON parsing
+  &quot;data.table&quot;      # High-performance data operations
+))
+
+# Statistical modeling packages  
+install.packages(c(
+  &quot;lme4&quot;,           # Linear mixed-effects models
+  &quot;lmerTest&quot;,       # p-values for mixed models
+  &quot;brms&quot;,           # Bayesian regression modeling
+  &quot;bayestestR&quot;,     # Bayesian analysis tools
+  &quot;performance&quot;,    # Model diagnostics
+  &quot;effectsize&quot;,     # Effect size calculations
+  &quot;emmeans&quot;,        # Estimated marginal means
+  &quot;multcomp&quot;        # Multiple comparisons
+))
+
+# Analysis and visualization
+install.packages(c(
+  &quot;ggpubr&quot;,         # Publication-ready plots
+  &quot;patchwork&quot;,      # Combining plots
+  &quot;viridis&quot;,        # Color scales
+  &quot;corrplot&quot;,       # Correlation matrices
+  &quot;psych&quot;,          # Psychological statistics
+  &quot;zoo&quot;,            # Time series analysis
+  &quot;pwr&quot;             # Power analysis
+))
+
+# Load all required libraries
+library(tidyverse)
+library(lme4)
+library(brms)
+library(ggpubr)
+</code></pre>
+<h3 id="project-structure"><a class="header" href="#project-structure">Project Structure</a></h3>
+<p>Create a standardized analysis directory structure:</p>
+<pre><code>analysis/
+├── data/
+│   ├── raw/              # Raw exported data
+│   └── processed/        # Cleaned and preprocessed data
+├── scripts/
+│   ├── 01_preprocessing.R
+│   ├── 02_hypothesis_tests.R
+│   ├── 03_visualizations.R
+│   └── 04_generate_report.R
+├── functions/
+│   ├── analysis_helpers.R
+│   └── plotting_functions.R
+└── output/
+    ├── figures/
+    ├── tables/
+    └── reports/
+</code></pre>
+<h2 id="data-import-and-preprocessing"><a class="header" href="#data-import-and-preprocessing">Data Import and Preprocessing</a></h2>
+<h3 id="load-data-from-api-export"><a class="header" href="#load-data-from-api-export">Load Data from API Export</a></h3>
+<pre><code class="language-r"># Import data exported from the Adaptive Learning System
+load_abcdeez_data &lt;- function(data_dir = &quot;data/raw/&quot;) {
+  
+  # Load main response data
+  responses_df &lt;- read_csv(file.path(data_dir, &quot;responses.csv&quot;))
+  
+  # Load participant metadata  
+  participants_df &lt;- read_csv(file.path(data_dir, &quot;participants.csv&quot;))
+  
+  # Load session summaries
+  sessions_df &lt;- read_csv(file.path(data_dir, &quot;sessions.csv&quot;))
+  
+  # Parse JSON task parameters
+  responses_df &lt;- responses_df %&gt;%
+    mutate(
+      task_params = map(task_json, ~ fromJSON(.x, flatten = TRUE))
+    )
+  
+  # Merge datasets
+  full_data &lt;- responses_df %&gt;%
+    left_join(participants_df, by = &quot;learner_id&quot;) %&gt;%
+    left_join(sessions_df, by = c(&quot;learner_id&quot;, &quot;session_id&quot;))
+  
+  return(full_data)
+}
+
+# Load data
+raw_data &lt;- load_abcdeez_data()
+</code></pre>
+<h3 id="data-cleaning-and-feature-engineering"><a class="header" href="#data-cleaning-and-feature-engineering">Data Cleaning and Feature Engineering</a></h3>
+<pre><code class="language-r"># Comprehensive data preprocessing pipeline
+preprocess_data &lt;- function(raw_data) {
+  
+  processed &lt;- raw_data %&gt;%
+    # Basic cleaning
+    filter(
+      !is.na(rt_ms), 
+      !is.na(correct),
+      rt_ms &gt;= 200,      # Remove implausibly fast responses
+      rt_ms &lt;= 10000     # Remove extremely slow responses
+    ) %&gt;%
+    
+    # Extract task-specific features
+    mutate(
+      # Parse task parameters from JSON
+      item_a = case_when(
+        task_type == &quot;PairwiseOrder&quot; ~ map_chr(task_params, ~ .x$a),
+        TRUE ~ NA_character_
+      ),
+      item_b = case_when(
+        task_type == &quot;PairwiseOrder&quot; ~ map_chr(task_params, ~ .x$b),
+        TRUE ~ NA_character_
+      ),
+      k_value = case_when(
+        task_type == &quot;KJump&quot; ~ map_dbl(task_params, ~ .x$k),
+        TRUE ~ NA_real_
+      ),
+      
+      # Calculate symbolic distances
+      symbolic_distance = case_when(
+        task_type == &quot;PairwiseOrder&quot; ~ abs(match(item_a, LETTERS) - match(item_b, LETTERS)),
+        task_type == &quot;KJump&quot; ~ abs(k_value),
+        task_type == &quot;Segment&quot; ~ map_dbl(task_params, ~ .x$count),
+        TRUE ~ 1
+      ),
+      
+      # Log-transform reaction times
+      log_rt = log(rt_ms),
+      
+      # Create trial blocks for learning curves
+      trial_block = cut(
+        trial_number, 
+        breaks = seq(0, max(trial_number), by = 20),
+        labels = FALSE
+      ),
+      
+      # Learning phases
+      learning_phase = case_when(
+        trial_number &lt;= 100 ~ &quot;early&quot;,
+        trial_number &lt;= 300 ~ &quot;middle&quot;, 
+        TRUE ~ &quot;late&quot;
+      ),
+      
+      # Chunk boundary analysis (every 7 letters)
+      crosses_boundary = case_when(
+        task_type == &quot;Segment&quot; ~ {
+          start_pos &lt;- match(map_chr(task_params, ~ .x$start), LETTERS)
+          segment_len &lt;- map_dbl(task_params, ~ .x$count)
+          (start_pos %/% 7) != ((start_pos + segment_len) %/% 7)
+        },
+        TRUE ~ FALSE
+      ),
+      
+      # Center predictors for modeling
+      symbolic_distance_c = scale(symbolic_distance, center = TRUE, scale = TRUE)[,1],
+      trial_number_c = scale(trial_number, center = TRUE, scale = TRUE)[,1]
+    ) %&gt;%
+    
+    # Arrange by participant and trial
+    arrange(learner_id, timestamp)
+  
+  return(processed)
+}
+
+# Apply preprocessing
+data &lt;- preprocess_data(raw_data)
+
+# Save processed data
+write_csv(data, &quot;data/processed/processed_responses.csv&quot;)
+</code></pre>
+<h2 id="statistical-analysis"><a class="header" href="#statistical-analysis">Statistical Analysis</a></h2>
+<h3 id="learning-curve-analysis"><a class="header" href="#learning-curve-analysis">Learning Curve Analysis</a></h3>
+<pre><code class="language-r"># Analyze learning trajectories with mixed-effects models
+analyze_learning_curves &lt;- function(data) {
+  
+  # Fit logistic growth curve model
+  learning_model &lt;- glmer(
+    correct ~ I(trial_number^0.5) * group + 
+      (1 + I(trial_number^0.5) | learner_id),
+    data = data,
+    family = binomial(),
+    control = glmerControl(optimizer = &quot;bobyqa&quot;)
+  )
+  
+  # Extract individual learning rates
+  learning_rates &lt;- coef(learning_model)$learner_id %&gt;%
+    rownames_to_column(&quot;learner_id&quot;) %&gt;%
+    rename(intercept = `(Intercept)`, 
+           learning_rate = `I(trial_number^0.5)`)
+  
+  # Group comparisons
+  learning_anova &lt;- anova(learning_model, type = &quot;III&quot;)
+  
+  # Effect sizes
+  learning_effects &lt;- effectsize::eta_squared(learning_anova)
+  
+  return(list(
+    model = learning_model,
+    rates = learning_rates,
+    anova = learning_anova,
+    effects = learning_effects
+  ))
+}
+
+# Run learning curve analysis
+learning_results &lt;- analyze_learning_curves(data)
+</code></pre>
+<h3 id="symbolic-distance-effect-analysis"><a class="header" href="#symbolic-distance-effect-analysis">Symbolic Distance Effect Analysis</a></h3>
+<pre><code class="language-r"># Test for representational shift (H1: Distance effect reduction)
+test_symbolic_distance_effect &lt;- function(data) {
+  
+  # Filter to pairwise comparison tasks
+  pairwise_data &lt;- data %&gt;%
+    filter(task_type == &quot;PairwiseOrder&quot;, !is.na(symbolic_distance))
+  
+  # Hierarchical model with three-way interaction
+  distance_model &lt;- lmer(
+    log_rt ~ symbolic_distance_c * group * trial_block + 
+      (1 + symbolic_distance_c | learner_id),
+    data = pairwise_data,
+    REML = FALSE,
+    control = lmerControl(optimizer = &quot;bobyqa&quot;)
+  )
+  
+  # Extract distance effect slopes over time
+  distance_slopes &lt;- pairwise_data %&gt;%
+    group_by(group, trial_block, learner_id) %&gt;%
+    summarise(
+      n_trials = n(),
+      .groups = &quot;drop&quot;
+    ) %&gt;%
+    filter(n_trials &gt;= 5) %&gt;%  # Ensure sufficient data
+    left_join(
+      pairwise_data %&gt;%
+        nest(data = -c(group, trial_block, learner_id)) %&gt;%
+        mutate(
+          model = map(data, ~ safely(lm)(log_rt ~ symbolic_distance_c, data = .x)),
+          slope = map_dbl(model, ~ .x$result$coefficients[2] %||% NA_real_)
+        ) %&gt;%
+        select(-data, -model),
+      by = c(&quot;group&quot;, &quot;trial_block&quot;, &quot;learner_id&quot;)
+    )
+  
+  # Test slope reduction over time
+  slope_change &lt;- distance_slopes %&gt;%
+    group_by(group, learner_id) %&gt;%
+    summarise(
+      early_slope = mean(slope[trial_block &lt;= 3], na.rm = TRUE),
+      late_slope = mean(slope[trial_block &gt;= 8], na.rm = TRUE),
+      slope_reduction = early_slope - late_slope,
+      .groups = &quot;drop&quot;
+    )
+  
+  # Group comparison of slope reduction
+  slope_test &lt;- t.test(
+    slope_reduction ~ group, 
+    data = slope_change[slope_change$group %in% c(&quot;adaptive&quot;, &quot;linear&quot;),]
+  )
+  
+  return(list(
+    model = distance_model,
+    slopes = distance_slopes,
+    slope_change = slope_change,
+    group_test = slope_test
+  ))
+}
+
+# Run symbolic distance analysis
+distance_results &lt;- test_symbolic_distance_effect(data)
+</code></pre>
+<h3 id="chunk-boundary-effect-analysis"><a class="header" href="#chunk-boundary-effect-analysis">Chunk Boundary Effect Analysis</a></h3>
+<pre><code class="language-r"># Test for chunk boundary effects (H2: Seam smoothing)
+analyze_chunk_boundaries &lt;- function(data) {
+  
+  segment_data &lt;- data %&gt;%
+    filter(task_type == &quot;Segment&quot;)
+  
+  # Accuracy model: boundary crossing penalty
+  boundary_accuracy_model &lt;- glmer(
+    correct ~ crosses_boundary * group * learning_phase + 
+      (1 + crosses_boundary | learner_id),
+    data = segment_data,
+    family = binomial(),
+    control = glmerControl(optimizer = &quot;bobyqa&quot;)
+  )
+  
+  # Reaction time model: boundary crossing cost
+  boundary_rt_model &lt;- lmer(
+    log_rt ~ crosses_boundary * group * learning_phase + 
+      (1 + crosses_boundary | learner_id),
+    data = segment_data,
+    REML = FALSE
+  )
+  
+  # Calculate boundary penalties
+  boundary_effects &lt;- segment_data %&gt;%
+    group_by(group, learning_phase, crosses_boundary) %&gt;%
+    summarise(
+      mean_accuracy = mean(correct, na.rm = TRUE),
+      mean_rt = mean(rt_ms, na.rm = TRUE),
+      se_accuracy = sd(correct, na.rm = TRUE) / sqrt(n()),
+      se_rt = sd(rt_ms, na.rm = TRUE) / sqrt(n()),
+      .groups = &quot;drop&quot;
+    ) %&gt;%
+    pivot_wider(
+      names_from = crosses_boundary,
+      values_from = c(mean_accuracy, mean_rt, se_accuracy, se_rt),
+      names_sep = &quot;_&quot;
+    ) %&gt;%
+    mutate(
+      accuracy_penalty = mean_accuracy_FALSE - mean_accuracy_TRUE,
+      rt_penalty = mean_rt_TRUE - mean_rt_FALSE
+    )
+  
+  return(list(
+    accuracy_model = boundary_accuracy_model,
+    rt_model = boundary_rt_model,
+    boundary_effects = boundary_effects
+  ))
+}
+
+# Run boundary analysis
+boundary_results &lt;- analyze_chunk_boundaries(data)
+</code></pre>
+<h3 id="strategy-detection-and-classification"><a class="header" href="#strategy-detection-and-classification">Strategy Detection and Classification</a></h3>
+<pre><code class="language-r"># Detect individual learning strategies
+detect_learning_strategies &lt;- function(data, window_size = 50) {
+  
+  # Focus on tasks with meaningful distance effects
+  strategy_data &lt;- data %&gt;%
+    filter(task_type %in% c(&quot;PairwiseOrder&quot;, &quot;KJump&quot;)) %&gt;%
+    group_by(learner_id) %&gt;%
+    mutate(window_id = (row_number() - 1) %/% window_size) %&gt;%
+    ungroup()
+  
+  # Calculate RT-distance correlations within windows
+  strategy_windows &lt;- strategy_data %&gt;%
+    group_by(learner_id, window_id) %&gt;%
+    filter(n() &gt;= 10) %&gt;%  # Minimum trials per window
+    summarise(
+      rt_distance_corr = cor(rt_ms, symbolic_distance, use = &quot;complete.obs&quot;),
+      mean_rt = mean(rt_ms, na.rm = TRUE),
+      accuracy = mean(correct, na.rm = TRUE),
+      trial_start = min(trial_number),
+      trial_end = max(trial_number),
+      n_trials = n(),
+      .groups = &quot;drop&quot;
+    ) %&gt;%
+    mutate(
+      # Classify strategy based on RT-distance correlation
+      strategy = case_when(
+        rt_distance_corr &gt;= 0.7 ~ &quot;serial_scan&quot;,
+        rt_distance_corr &gt;= 0.5 ~ &quot;mixed_serial&quot;, 
+        rt_distance_corr &gt;= 0.3 ~ &quot;transitioning&quot;,
+        rt_distance_corr &gt;= 0.1 ~ &quot;mixed_direct&quot;,
+        rt_distance_corr &gt; -0.1 ~ &quot;direct_access&quot;,
+        TRUE ~ &quot;inverse_distance&quot;  # Rare but theoretically possible
+      )
+    )
+  
+  # Strategy transitions over time
+  strategy_transitions &lt;- strategy_windows %&gt;%
+    arrange(learner_id, window_id) %&gt;%
+    group_by(learner_id) %&gt;%
+    mutate(
+      previous_strategy = lag(strategy),
+      strategy_change = strategy != previous_strategy
+    ) %&gt;%
+    ungroup()
+  
+  # Final strategy classification per participant
+  final_strategies &lt;- strategy_windows %&gt;%
+    group_by(learner_id) %&gt;%
+    slice_tail(n = 3) %&gt;%  # Last 3 windows
+    count(strategy) %&gt;%
+    slice_max(n) %&gt;%
+    select(learner_id, final_strategy = strategy)
+  
+  return(list(
+    windows = strategy_windows,
+    transitions = strategy_transitions,
+    final = final_strategies
+  ))
+}
+
+# Run strategy analysis
+strategy_results &lt;- detect_learning_strategies(data)
+</code></pre>
+<h2 id="bayesian-analysis"><a class="header" href="#bayesian-analysis">Bayesian Analysis</a></h2>
+<pre><code class="language-r"># Bayesian hierarchical modeling with brms
+run_bayesian_analysis &lt;- function(data) {
+  
+  # Set up parallel processing
+  options(mc.cores = parallel::detectCores())
+  
+  # Bayesian distance effect model
+  bayes_distance_model &lt;- brm(
+    log_rt ~ symbolic_distance_c * group * trial_block + 
+      (1 + symbolic_distance_c | learner_id),
+    data = filter(data, task_type == &quot;PairwiseOrder&quot;),
+    prior = c(
+      prior(normal(0, 0.5), class = b),
+      prior(exponential(1), class = sd),
+      prior(exponential(1), class = sigma)
+    ),
+    iter = 4000,
+    chains = 4,
+    cores = 4,
+    control = list(adapt_delta = 0.95)
+  )
+  
+  # Posterior summaries
+  posterior_summary &lt;- posterior_summary(bayes_distance_model)
+  
+  # Hypothesis testing
+  hypotheses &lt;- hypothesis(
+    bayes_distance_model,
+    c(&quot;symbolic_distance_c:groupadaptive &lt; symbolic_distance_c:grouplinear&quot;,
+      &quot;symbolic_distance_c:trial_block &lt; 0&quot;),
+    class = &quot;b&quot;
+  )
+  
+  # Bayes factors
+  bayes_factors &lt;- bayes_factor(bayes_distance_model)
+  
+  return(list(
+    model = bayes_distance_model,
+    summary = posterior_summary,
+    hypotheses = hypotheses,
+    bayes_factors = bayes_factors
+  ))
+}
+
+# Run Bayesian analysis (computationally intensive)
+# bayes_results &lt;- run_bayesian_analysis(data)
+</code></pre>
+<h2 id="visualization-functions"><a class="header" href="#visualization-functions">Visualization Functions</a></h2>
+<pre><code class="language-r"># Create publication-ready learning curve plots
+plot_learning_curves &lt;- function(data, group_var = &quot;group&quot;) {
+  
+  # Calculate learning trajectories with confidence intervals
+  learning_curves &lt;- data %&gt;%
+    group_by(!!sym(group_var), trial_block) %&gt;%
+    summarise(
+      accuracy = mean(correct, na.rm = TRUE),
+      se = sd(correct, na.rm = TRUE) / sqrt(n()),
+      ci_lower = accuracy - 1.96 * se,
+      ci_upper = accuracy + 1.96 * se,
+      trial_midpoint = mean(trial_number, na.rm = TRUE),
+      .groups = &quot;drop&quot;
+    )
+  
+  # Create plot
+  ggplot(learning_curves, aes(x = trial_midpoint, y = accuracy, 
+                             color = !!sym(group_var), fill = !!sym(group_var))) +
+    geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper), alpha = 0.3, color = NA) +
+    geom_line(size = 1.2) +
+    geom_point(size = 2) +
+    scale_color_viridis_d(end = 0.8) +
+    scale_fill_viridis_d(end = 0.8) +
+    labs(
+      x = &quot;Trial Number&quot;,
+      y = &quot;Accuracy&quot;,
+      color = str_to_title(group_var),
+      fill = str_to_title(group_var),
+      title = &quot;Learning Curves by Condition&quot;
+    ) +
+    theme_pubr() +
+    theme(legend.position = &quot;bottom&quot;)
+}
+
+# Plot symbolic distance effects over time
+plot_distance_effects &lt;- function(data, phases = c(&quot;early&quot;, &quot;middle&quot;, &quot;late&quot;)) {
+  
+  # Calculate distance effects by phase
+  distance_effects &lt;- data %&gt;%
+    filter(task_type == &quot;PairwiseOrder&quot;, learning_phase %in% phases) %&gt;%
+    group_by(group, learning_phase, symbolic_distance) %&gt;%
+    summarise(
+      mean_rt = mean(rt_ms, na.rm = TRUE),
+      se_rt = sd(rt_ms, na.rm = TRUE) / sqrt(n()),
+      .groups = &quot;drop&quot;
+    )
+  
+  # Create plot
+  ggplot(distance_effects, aes(x = symbolic_distance, y = mean_rt, 
+                              color = group, shape = learning_phase)) +
+    geom_point(size = 3, alpha = 0.8) +
+    geom_smooth(method = &quot;lm&quot;, se = TRUE, alpha = 0.2) +
+    scale_color_viridis_d(end = 0.8) +
+    labs(
+      x = &quot;Symbolic Distance&quot;,
+      y = &quot;Mean Reaction Time (ms)&quot;,
+      color = &quot;Group&quot;,
+      shape = &quot;Learning Phase&quot;,
+      title = &quot;Symbolic Distance Effect Evolution&quot;
+    ) +
+    theme_pubr() +
+    theme(legend.position = &quot;bottom&quot;)
+}
+
+# Strategy evolution visualization
+plot_strategy_evolution &lt;- function(strategy_data) {
+  
+  # Calculate strategy proportions over time
+  strategy_props &lt;- strategy_data$windows %&gt;%
+    group_by(window_id, strategy) %&gt;%
+    summarise(n = n(), .groups = &quot;drop&quot;) %&gt;%
+    group_by(window_id) %&gt;%
+    mutate(
+      prop = n / sum(n),
+      total = sum(n)
+    ) %&gt;%
+    ungroup()
+  
+  # Create stacked area plot
+  ggplot(strategy_props, aes(x = window_id, y = prop, fill = strategy)) +
+    geom_area(alpha = 0.8) +
+    scale_fill_viridis_d() +
+    scale_y_continuous(labels = scales::percent) +
+    labs(
+      x = &quot;Learning Window&quot;,
+      y = &quot;Proportion of Participants&quot;,
+      fill = &quot;Strategy&quot;,
+      title = &quot;Strategy Evolution Over Learning&quot;
+    ) +
+    theme_pubr() +
+    theme(legend.position = &quot;bottom&quot;)
+}
+
+# Generate all plots
+learning_plot &lt;- plot_learning_curves(data)
+distance_plot &lt;- plot_distance_effects(data)
+strategy_plot &lt;- plot_strategy_evolution(strategy_results)
+
+# Combine plots
+combined_plot &lt;- learning_plot / distance_plot / strategy_plot
+ggsave(&quot;output/figures/main_results.pdf&quot;, combined_plot, width = 12, height = 16)
+</code></pre>
+<h2 id="report-generation"><a class="header" href="#report-generation">Report Generation</a></h2>
+<pre><code class="language-r"># Generate comprehensive statistical report
+generate_analysis_report &lt;- function(data, results_list, output_file = &quot;analysis_report.html&quot;) {
+  
+  # Create summary statistics table
+  summary_stats &lt;- data %&gt;%
+    group_by(group) %&gt;%
+    summarise(
+      n_participants = n_distinct(learner_id),
+      n_trials = n(),
+      mean_accuracy = mean(correct, na.rm = TRUE),
+      se_accuracy = sd(correct, na.rm = TRUE) / sqrt(n()),
+      mean_rt = mean(rt_ms, na.rm = TRUE),
+      median_rt = median(rt_ms, na.rm = TRUE),
+      .groups = &quot;drop&quot;
+    )
+  
+  # Hypothesis test results
+  hypothesis_results &lt;- tibble(
+    hypothesis = c(&quot;H1: Distance Effect Reduction&quot;, 
+                   &quot;H2: Boundary Effect Attenuation&quot;,
+                   &quot;H3: Strategy Transition&quot;,
+                   &quot;H4: Transfer Efficiency&quot;),
+    p_value = c(
+      anova(results_list$distance$model)[&quot;symbolic_distance_c:group:trial_block&quot;, &quot;Pr(&gt;F)&quot;],
+      anova(results_list$boundary$rt_model)[&quot;crosses_boundary:group:learning_phase&quot;, &quot;Pr(&gt;F)&quot;],
+      NA,  # Strategy analysis doesn't have single p-value
+      NA   # Transfer analysis not implemented in this example
+    ),
+    effect_size = c(NA, NA, NA, NA),  # Calculate actual effect sizes
+    conclusion = c(&quot;&quot;, &quot;&quot;, &quot;&quot;, &quot;&quot;)
+  )
+  
+  # Save results
+  write_csv(summary_stats, &quot;output/tables/summary_statistics.csv&quot;)
+  write_csv(hypothesis_results, &quot;output/tables/hypothesis_tests.csv&quot;)
+  
+  return(list(
+    summary = summary_stats,
+    hypotheses = hypothesis_results
+  ))
+}
+
+# Generate report
+report_results &lt;- generate_analysis_report(data, list(
+  distance = distance_results,
+  boundary = boundary_results,
+  strategy = strategy_results
+))
+</code></pre>
+<h2 id="power-analysis-and-sample-size-planning"><a class="header" href="#power-analysis-and-sample-size-planning">Power Analysis and Sample Size Planning</a></h2>
+<pre><code class="language-r"># Post-hoc power analysis
+calculate_power_analysis &lt;- function(results) {
+  
+  # Extract effect sizes from models
+  distance_effect &lt;- summary(results$distance$model)$coefficients[&quot;symbolic_distance_c:groupadaptive&quot;, &quot;t value&quot;]
+  
+  # Power analysis for future studies
+  power_results &lt;- pwr.t.test(
+    d = 0.5,  # Expected effect size
+    sig.level = 0.05,
+    power = 0.80,
+    type = &quot;two.sample&quot;
+  )
+  
+  return(power_results)
+}
+
+# Run power analysis
+power_analysis &lt;- calculate_power_analysis(list(
+  distance = distance_results,
+  boundary = boundary_results
+))
+
+print(power_analysis)
+</code></pre>
+<h2 id="best-practices-and-recommendations"><a class="header" href="#best-practices-and-recommendations">Best Practices and Recommendations</a></h2>
+<h3 id="data-quality-checks"><a class="header" href="#data-quality-checks">Data Quality Checks</a></h3>
+<pre><code class="language-r"># Comprehensive data quality assessment
+assess_data_quality &lt;- function(data) {
+  
+  quality_report &lt;- list(
+    # Missing data patterns
+    missing_patterns = data %&gt;%
+      summarise_all(~sum(is.na(.))) %&gt;%
+      gather(variable, missing_count) %&gt;%
+      mutate(missing_prop = missing_count / nrow(data)),
+    
+    # Outlier detection
+    outliers = data %&gt;%
+      group_by(learner_id) %&gt;%
+      mutate(
+        rt_z = abs(scale(rt_ms)[,1]),
+        is_outlier = rt_z &gt; 3
+      ) %&gt;%
+      summarise(
+        n_outliers = sum(is_outlier),
+        prop_outliers = mean(is_outlier),
+        .groups = &quot;drop&quot;
+      ),
+    
+    # Completion rates
+    completion = data %&gt;%
+      group_by(learner_id, group) %&gt;%
+      summarise(
+        n_trials = n(),
+        completion_rate = n_trials / max(data$trial_number),
+        .groups = &quot;drop&quot;
+      )
+  )
+  
+  return(quality_report)
+}
+
+# Run quality assessment
+quality_report &lt;- assess_data_quality(data)
+</code></pre>
+<h3 id="reproducible-research-workflow"><a class="header" href="#reproducible-research-workflow">Reproducible Research Workflow</a></h3>
+<ol>
+<li><strong>Version Control</strong>: Use git for tracking analysis script changes</li>
+<li><strong>Documented Code</strong>: Include detailed comments explaining statistical choices</li>
+<li><strong>Random Seeds</strong>: Set seeds for reproducible results</li>
+<li><strong>Package Versions</strong>: Record package versions using <code>renv</code> or <code>packrat</code></li>
+<li><strong>Pre-registration</strong>: Follow pre-registered analysis plans when possible</li>
+</ol>
+<h3 id="statistical-reporting-standards"><a class="header" href="#statistical-reporting-standards">Statistical Reporting Standards</a></h3>
+<pre><code class="language-r"># Format results for publication
+format_results_for_publication &lt;- function(model) {
+  
+  # Extract key statistics
+  model_summary &lt;- summary(model)
+  
+  # Format with appropriate precision
+  formatted &lt;- model_summary$coefficients %&gt;%
+    as_tibble(rownames = &quot;term&quot;) %&gt;%
+    mutate(
+      estimate_formatted = sprintf(&quot;%.3f&quot;, Estimate),
+      se_formatted = sprintf(&quot;%.3f&quot;, `Std. Error`),
+      t_formatted = sprintf(&quot;%.2f&quot;, `t value`),
+      p_formatted = case_when(
+        `Pr(&gt;|t|)` &lt; 0.001 ~ &quot;&lt; .001&quot;,
+        `Pr(&gt;|t|)` &lt; 0.01 ~ sprintf(&quot;= %.3f&quot;, `Pr(&gt;|t|)`),
+        TRUE ~ sprintf(&quot;= %.2f&quot;, `Pr(&gt;|t|)`)
+      )
+    )
+  
+  return(formatted)
+}
+
+# Example: Format distance effect results
+distance_formatted &lt;- format_results_for_publication(distance_results$model)
+print(distance_formatted)
+</code></pre>
+<p>This comprehensive R analysis framework provides researchers with all the tools needed for rigorous analysis of adaptive learning data, from data preprocessing through publication-ready statistical modeling and visualization.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="research-tools"><a class="header" href="#research-tools">Research Tools</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="deterministic-demo-mode"><a class="header" href="#deterministic-demo-mode">Deterministic Demo Mode</a></h1>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="replay-system"><a class="header" href="#replay-system">Replay System</a></h1>

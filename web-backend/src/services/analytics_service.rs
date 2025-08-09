@@ -10,6 +10,12 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::utils::statistics::{
+    self, ExGaussianParams, TTestResult, AnovaResult, OutlierAnalysis,
+    analyze_response_times, t_test_two_sample, one_way_anova,
+    comprehensive_outlier_detection, bootstrap_confidence_interval
+};
+use crate::utils::math;
 use graph_learning_core::statistics::{DetailedStatistics, ExGaussianParameters, StrategyType};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -529,6 +535,307 @@ impl AnalyticsService {
         let learning_rate = base_rate * accuracy_factor * rt_factor * completion_factor;
         
         // Clamp to reasonable range
-        Ok(learning_rate.max(0.01).min(0.3))
+        Ok(math::clamp(learning_rate, 0.01, 0.3))
     }
+
+    /// Enhanced response time analysis using Ex-Gaussian modeling
+    pub async fn analyze_response_time_distribution(&self, learner_id: Option<Uuid>, task_type: Option<String>) -> Result<ResponseTimeAnalysisResult> {
+        let mut query = "SELECT response_time_ms FROM responses WHERE response_time_ms > 0".to_string();
+        let mut bindings = Vec::new();
+
+        if let Some(id) = learner_id {
+            query.push_str(" AND session_id IN (SELECT id FROM sessions WHERE learner_id = ?)");
+            bindings.push(id.as_bytes().to_vec());
+        }
+
+        if let Some(task) = task_type {
+            query.push_str(" AND task_type = ?");
+            bindings.push(task.into_bytes());
+        }
+
+        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+        let mut query_builder = sqlx::query(&query);
+        
+        for binding in &bindings {
+            query_builder = query_builder.bind(&binding[..]);
+        }
+        
+        let rows = query_builder
+            .fetch_all(&mut *conn)
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
+
+        let response_times: Vec<f64> = rows
+            .iter()
+            .map(|row| row.get::<i32, _>("response_time_ms") as f64)
+            .collect();
+
+        if response_times.is_empty() {
+            return Ok(ResponseTimeAnalysisResult {
+                n_samples: 0,
+                ex_gaussian_params: None,
+                outliers: OutlierAnalysis {
+                    iqr_outliers: Vec::new(),
+                    z_score_outliers: Vec::new(),
+                    modified_z_outliers: Vec::new(),
+                },
+                mean_ci: (0.0, 0.0),
+                statistical_summary: HashMap::new(),
+            });
+        }
+
+        let analysis = analyze_response_times(&response_times)
+            .map_err(|e| AppError::ValidationError(e.to_string()))?;
+
+        let mut statistical_summary = HashMap::new();
+        statistical_summary.insert("mean".to_string(), statistics::mean(&response_times));
+        statistical_summary.insert("median".to_string(), statistics::median(&response_times));
+        statistical_summary.insert("std_dev".to_string(), statistics::std_dev(&response_times));
+        statistical_summary.insert("skewness".to_string(), statistics::skewness(&response_times));
+        statistical_summary.insert("kurtosis".to_string(), statistics::kurtosis(&response_times));
+
+        Ok(ResponseTimeAnalysisResult {
+            n_samples: analysis.n_samples,
+            ex_gaussian_params: Some(analysis.params),
+            outliers: analysis.outliers,
+            mean_ci: analysis.mean_ci,
+            statistical_summary,
+        })
+    }
+
+    /// Compare response times between different conditions using t-tests
+    pub async fn compare_response_times(&self, condition1_id: Uuid, condition2_id: Uuid) -> Result<ComparisonResult> {
+        let times1 = self.get_condition_response_times(condition1_id).await?;
+        let times2 = self.get_condition_response_times(condition2_id).await?;
+
+        if times1.is_empty() || times2.is_empty() {
+            return Ok(ComparisonResult {
+                test_type: "t-test".to_string(),
+                condition1_n: times1.len(),
+                condition2_n: times2.len(),
+                statistic: 0.0,
+                p_value: 1.0,
+                significant: false,
+                effect_size: 0.0,
+                confidence_interval: None,
+            });
+        }
+
+        let t_test = t_test_two_sample(&times1, &times2, 0.05)
+            .map_err(|e| AppError::ValidationError(e.to_string()))?;
+
+        // Calculate Cohen's d effect size
+        let mean1 = statistics::mean(&times1);
+        let mean2 = statistics::mean(&times2);
+        let pooled_sd = ((statistics::variance(&times1) + statistics::variance(&times2)) / 2.0).sqrt();
+        let cohens_d = if pooled_sd > 0.0 { (mean1 - mean2) / pooled_sd } else { 0.0 };
+
+        Ok(ComparisonResult {
+            test_type: "t-test".to_string(),
+            condition1_n: times1.len(),
+            condition2_n: times2.len(),
+            statistic: t_test.t_statistic,
+            p_value: t_test.p_value,
+            significant: t_test.significant,
+            effect_size: cohens_d,
+            confidence_interval: Some(bootstrap_confidence_interval(&times1, statistics::mean, 0.95, 1000)),
+        })
+    }
+
+    /// Perform one-way ANOVA across multiple conditions
+    pub async fn compare_multiple_conditions(&self, condition_ids: &[Uuid]) -> Result<AnovaComparisonResult> {
+        let mut groups = Vec::new();
+        let mut condition_names = Vec::new();
+
+        for &condition_id in condition_ids {
+            let times = self.get_condition_response_times(condition_id).await?;
+            if !times.is_empty() {
+                groups.push(times);
+                condition_names.push(condition_id.to_string());
+            }
+        }
+
+        if groups.len() < 2 {
+            return Ok(AnovaComparisonResult {
+                condition_names,
+                f_statistic: 0.0,
+                df_between: 0.0,
+                df_within: 0.0,
+                p_value: 1.0,
+                significant: false,
+                post_hoc_comparisons: HashMap::new(),
+            });
+        }
+
+        let anova = one_way_anova(&groups, 0.05)
+            .map_err(|e| AppError::ValidationError(e.to_string()))?;
+
+        // Perform post-hoc pairwise comparisons if significant
+        let mut post_hoc_comparisons = HashMap::new();
+        if anova.significant {
+            for i in 0..groups.len() {
+                for j in (i + 1)..groups.len() {
+                    let comparison_key = format!("{}_{}", condition_names[i], condition_names[j]);
+                    if let Ok(t_test) = t_test_two_sample(&groups[i], &groups[j], 0.05 / (groups.len() * (groups.len() - 1) / 2) as f64) {
+                        post_hoc_comparisons.insert(comparison_key, PostHocComparison {
+                            group1: condition_names[i].clone(),
+                            group2: condition_names[j].clone(),
+                            p_value: t_test.p_value,
+                            significant: t_test.significant,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(AnovaComparisonResult {
+            condition_names,
+            f_statistic: anova.f_statistic,
+            df_between: anova.df_between,
+            df_within: anova.df_within,
+            p_value: anova.p_value,
+            significant: anova.significant,
+            post_hoc_comparisons,
+        })
+    }
+
+    /// Detect learning performance outliers across population
+    pub async fn detect_performance_outliers(&self, threshold_multiplier: f64) -> Result<OutlierDetectionResult> {
+        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+        
+        // Get accuracy data for all learners
+        let accuracy_rows = sqlx::query(
+            "SELECT l.id, AVG(CASE WHEN r.correct THEN 1.0 ELSE 0.0 END) as accuracy
+             FROM learners l
+             JOIN sessions s ON l.id = s.learner_id  
+             JOIN responses r ON s.id = r.session_id
+             GROUP BY l.id
+             HAVING COUNT(r.id) >= 10" // Minimum responses for reliable estimate
+        )
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+
+        let accuracies: Vec<f64> = accuracy_rows
+            .iter()
+            .map(|row| row.get::<f64, _>("accuracy"))
+            .collect();
+
+        if accuracies.is_empty() {
+            return Ok(OutlierDetectionResult {
+                outlier_learners: Vec::new(),
+                total_analyzed: 0,
+                outlier_threshold: threshold_multiplier,
+                method: "comprehensive".to_string(),
+            });
+        }
+
+        let outlier_analysis = comprehensive_outlier_detection(&accuracies);
+        
+        let mut outlier_learners = Vec::new();
+        for (i, row) in accuracy_rows.iter().enumerate() {
+            let accuracy = accuracies[i];
+            let is_outlier = outlier_analysis.z_score_outliers.contains(&accuracy) || 
+                           outlier_analysis.modified_z_outliers.contains(&accuracy);
+            if is_outlier {
+                let learner_id_bytes: Vec<u8> = row.get("id");
+                if let Ok(learner_id_array) = learner_id_bytes.try_into() {
+                    let learner_id: [u8; 16] = learner_id_array;
+                    outlier_learners.push(OutlierLearner {
+                        learner_id: Uuid::from_bytes(learner_id),
+                        accuracy,
+                        deviation_type: if outlier_analysis.z_score_outliers.contains(&accuracy) {
+                            "z_score".to_string()
+                        } else {
+                            "modified_z".to_string()
+                        },
+                    });
+                }
+            }
+        }
+
+        Ok(OutlierDetectionResult {
+            outlier_learners,
+            total_analyzed: accuracies.len(),
+            outlier_threshold: threshold_multiplier,
+            method: "comprehensive".to_string(),
+        })
+    }
+
+    // Helper method to get response times for a condition
+    async fn get_condition_response_times(&self, condition_id: Uuid) -> Result<Vec<f64>> {
+        let condition_id_bytes = condition_id.as_bytes();
+        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+        
+        let rows = sqlx::query(
+            "SELECT r.response_time_ms 
+             FROM responses r
+             JOIN sessions s ON r.session_id = s.id
+             WHERE s.learner_id = ? AND r.response_time_ms > 0"
+        )
+        .bind(&condition_id_bytes[..])
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+
+        Ok(rows.iter()
+           .map(|row| row.get::<i32, _>("response_time_ms") as f64)
+           .collect())
+    }
+}
+
+// New result types for enhanced analytics
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ResponseTimeAnalysisResult {
+    pub n_samples: usize,
+    pub ex_gaussian_params: Option<ExGaussianParams>,
+    pub outliers: OutlierAnalysis,
+    pub mean_ci: (f64, f64),
+    pub statistical_summary: HashMap<String, f64>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ComparisonResult {
+    pub test_type: String,
+    pub condition1_n: usize,
+    pub condition2_n: usize,
+    pub statistic: f64,
+    pub p_value: f64,
+    pub significant: bool,
+    pub effect_size: f64,
+    pub confidence_interval: Option<(f64, f64)>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AnovaComparisonResult {
+    pub condition_names: Vec<String>,
+    pub f_statistic: f64,
+    pub df_between: f64,
+    pub df_within: f64,
+    pub p_value: f64,
+    pub significant: bool,
+    pub post_hoc_comparisons: HashMap<String, PostHocComparison>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PostHocComparison {
+    pub group1: String,
+    pub group2: String,
+    pub p_value: f64,
+    pub significant: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct OutlierDetectionResult {
+    pub outlier_learners: Vec<OutlierLearner>,
+    pub total_analyzed: usize,
+    pub outlier_threshold: f64,
+    pub method: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct OutlierLearner {
+    pub learner_id: Uuid,
+    pub accuracy: f64,
+    pub deviation_type: String,
 }

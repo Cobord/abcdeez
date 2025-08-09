@@ -200,7 +200,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // WebSocket routes (separate as they need different handling)
     let ws_routes = Router::new()
         .route("/sessions/:id/live", get(websocket::session_handler))
-        .route("/analytics/live", get(websocket::analytics_handler));
+        .route("/analytics/ws", get(websocket::analytics_handler));
 
     // Health check and monitoring routes
     let health_routes = Router::new()

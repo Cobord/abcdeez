@@ -130,6 +130,178 @@ pub fn safe_logit(p: f64) -> f64 {
     safe_log(safe_p / (1.0 - safe_p))
 }
 
+/// Error function approximation (needed for Ex-Gaussian)
+pub fn error_function(x: f64) -> f64 {
+    // Abramowitz and Stegun approximation
+    let a1 = 0.254829592;
+    let a2 = -0.284496736;
+    let a3 = 1.421413741;
+    let a4 = -1.453152027;
+    let a5 = 1.061405429;
+    let p = 0.3275911;
+    
+    let sign = if x >= 0.0 { 1.0 } else { -1.0 };
+    let x = x.abs();
+    
+    let t = 1.0 / (1.0 + p * x);
+    let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
+    
+    sign * y
+}
+
+/// Complementary error function
+pub fn erfc(x: f64) -> f64 {
+    1.0 - error_function(x)
+}
+
+/// Inverse error function (approximation)
+pub fn inv_error_function(x: f64) -> f64 {
+    let x = clamp(x, -0.99999, 0.99999);
+    
+    // Rational approximation
+    let a = (8.0 * (f64::consts::PI - 3.0)) / (3.0 * f64::consts::PI * (4.0 - f64::consts::PI));
+    let ln_term = safe_log(1.0 - x * x);
+    
+    let sqrt_term = (2.0 / (f64::consts::PI * a) + ln_term / 2.0).powi(2) - ln_term / a;
+    let result = if sqrt_term >= 0.0 {
+        -2.0 / (f64::consts::PI * a) - ln_term / 2.0 + sqrt_term.sqrt()
+    } else {
+        0.0
+    };
+    
+    if x >= 0.0 { result.sqrt() } else { -result.sqrt() }
+}
+
+/// Gamma function approximation (Stirling's approximation for large values)
+pub fn gamma_function(x: f64) -> f64 {
+    if x < 0.5 {
+        // Use reflection formula: Γ(z)Γ(1-z) = π/sin(πz)
+        f64::consts::PI / (f64::consts::PI * x).sin() / gamma_function(1.0 - x)
+    } else if x < 1.5 {
+        gamma_function(x + 1.0) / x
+    } else if x < 12.0 {
+        // Lanczos approximation coefficients
+        let g = 7.0;
+        let coeff = [
+            0.99999999999980993,
+            676.5203681218851,
+            -1259.1392167224028,
+            771.32342877765313,
+            -176.61502916214059,
+            12.507343278686905,
+            -0.13857109526572012,
+            9.9843695780195716e-6,
+            1.5056327351493116e-7,
+        ];
+        
+        let z = x - 1.0;
+        let mut x = coeff[0];
+        for i in 1..coeff.len() {
+            x += coeff[i] / (z + i as f64);
+        }
+        
+        let t = z + g + 0.5;
+        (2.0 * f64::consts::PI).sqrt() * t.powf(z + 0.5) * (-t).exp() * x
+    } else {
+        // Stirling's approximation for large x
+        (2.0 * f64::consts::PI / x).sqrt() * (x / f64::consts::E).powf(x)
+    }
+}
+
+/// Natural logarithm of gamma function
+pub fn ln_gamma(x: f64) -> f64 {
+    if x <= 0.0 {
+        f64::NAN
+    } else {
+        gamma_function(x).ln()
+    }
+}
+
+/// Beta function: B(x,y) = Γ(x)Γ(y)/Γ(x+y)
+pub fn beta_function(x: f64, y: f64) -> f64 {
+    if x <= 0.0 || y <= 0.0 {
+        f64::NAN
+    } else {
+        gamma_function(x) * gamma_function(y) / gamma_function(x + y)
+    }
+}
+
+/// Regularized incomplete beta function (approximation)
+pub fn regularized_beta(x: f64, a: f64, b: f64) -> f64 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    if x >= 1.0 {
+        return 1.0;
+    }
+    
+    // Use continued fraction approximation
+    let bt = if x == 0.0 || x == 1.0 {
+        0.0
+    } else {
+        (ln_gamma(a + b) - ln_gamma(a) - ln_gamma(b) + a * x.ln() + b * (1.0 - x).ln()).exp()
+    };
+    
+    if x < (a + 1.0) / (a + b + 2.0) {
+        bt * beta_continued_fraction(x, a, b) / a
+    } else {
+        1.0 - bt * beta_continued_fraction(1.0 - x, b, a) / b
+    }
+}
+
+fn beta_continued_fraction(x: f64, a: f64, b: f64) -> f64 {
+    const MAX_ITER: usize = 100;
+    const EPS: f64 = 3.0e-7;
+    
+    let qab = a + b;
+    let qap = a + 1.0;
+    let qam = a - 1.0;
+    let mut c = 1.0;
+    let mut d = 1.0 - qab * x / qap;
+    
+    if d.abs() < f64::MIN_POSITIVE {
+        d = f64::MIN_POSITIVE;
+    }
+    d = 1.0 / d;
+    let mut h = d;
+    
+    for m in 1..=MAX_ITER {
+        let m_f = m as f64;
+        let m2 = 2.0 * m_f;
+        let aa = m_f * (b - m_f) * x / ((qam + m2) * (a + m2));
+        
+        d = 1.0 + aa * d;
+        if d.abs() < f64::MIN_POSITIVE {
+            d = f64::MIN_POSITIVE;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < f64::MIN_POSITIVE {
+            c = f64::MIN_POSITIVE;
+        }
+        d = 1.0 / d;
+        h *= d * c;
+        
+        let aa = -(a + m_f) * (qab + m_f) * x / ((a + m2) * (qap + m2));
+        d = 1.0 + aa * d;
+        if d.abs() < f64::MIN_POSITIVE {
+            d = f64::MIN_POSITIVE;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < f64::MIN_POSITIVE {
+            c = f64::MIN_POSITIVE;
+        }
+        d = 1.0 / d;
+        let del = d * c;
+        h *= del;
+        
+        if (del - 1.0).abs() < EPS {
+            break;
+        }
+    }
+    
+    h
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

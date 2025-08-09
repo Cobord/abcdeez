@@ -71,8 +71,9 @@ urlencoding = "2.1"
 # Environment variables
 dotenvy = "0.15"
 
-# Differential privacy
+# Differential privacy and statistics
 statrs = { workspace = true }
+rand_distr = "0.4"
 
 # Cryptography
 sha2 = "0.10"

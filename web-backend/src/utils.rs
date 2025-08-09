@@ -2,6 +2,7 @@ use serde::Serializer;
 use uuid::Uuid;
 
 pub mod math;
+pub mod statistics;
 
 /// Serialize UUID as string for compatibility with the app
 /// The app expects string IDs, not UUID objects
