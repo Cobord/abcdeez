@@ -304,11 +304,11 @@ impl BusinessMetricsCollector {
         event_type: BusinessEventType,
         value: f64,
     ) {
-        match event_type {
+        match &event_type {
             BusinessEventType::Subscription { tier } => {
                 let mut user_journeys = self.user_journey_data.write().await;
                 if let Some(journey) = user_journeys.get_mut(&user_id) {
-                    journey.subscription_tier = tier;
+                    journey.subscription_tier = tier.clone();
                     journey.lifecycle_stage = UserLifecycleStage::Active;
                 }
 

@@ -5,7 +5,7 @@ use axum::{
     response::Response,
 };
 use std::time::Instant;
-use tracing::{error, info, warn, Instrument};
+pub use tracing::{error, info, warn, debug, Instrument};
 use uuid::Uuid;
 
 /// HTTP header for correlation/trace ID
