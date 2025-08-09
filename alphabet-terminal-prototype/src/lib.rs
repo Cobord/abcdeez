@@ -1,20 +1,31 @@
 // Re-export all core modules for use as a library
+pub mod ab_testing;
 pub mod adaptive;
+pub mod audio_recording;
 pub mod backend;
 pub mod bayesian;
 pub mod boundaries;
+pub mod config;
 pub mod demo;
 pub mod error;
+pub mod experimental_design;
 pub mod experiments;
 pub mod export;
 pub mod extended_tasks;
 pub mod hierarchical_bayes;
 pub mod hints;
+pub mod interaction_tracking;
 pub mod learner;
 pub mod macro_learning;
+pub mod multi_session;
 pub mod music;
 pub mod navigation;
+pub mod power_analysis;
 pub mod prediction;
+pub mod preregistration;
+#[cfg(feature = "cli")]
+pub mod research_dashboard;
+pub mod sensor_integration;
 pub mod statistical_validation;
 pub mod statistics;
 pub mod strategy_mixture;
@@ -31,17 +42,25 @@ pub mod ui;
 mod tests;
 
 // Re-export commonly used types at the root level
+pub use ab_testing::{ABTestFramework, ABTest, TestVariant, ABTestResults};
 pub use adaptive::AdaptiveScheduler;
+pub use audio_recording::{AudioRecorder, AudioSession, ThinkAloudAnalyzer, ThinkAloudSegment, AudioMetrics};
 pub use bayesian::{BayesianLearnerModel, ResponseData};
 pub use error::{Error, Result};
+pub use experimental_design::{ExperimentalDesign, ExperimentalDesigner, CounterbalancingMethod, RandomizationType};
 pub use export::{LearnerDataExport, PopulationAnalyzer};
 pub use hints::{
     HintGenerator, HintLevel, InterventionAction, InterventionSystem, StruggleDetector,
     StruggleLevel,
 };
+pub use interaction_tracking::{InteractionTracker, InteractionSession, KeystrokeEvent, MouseEvent, InteractionMetrics};
+pub use power_analysis::{PowerAnalyzer, EffectSizeCalculator, RealTimeMonitor, PowerAnalysis, RealTimeEffectMonitor};
 pub use learner::{LearnerMetrics, LearnerModel, OperationType};
+pub use multi_session::{MultiSessionManager, MultiSessionExperiment, SessionPlan, LongitudinalAnalysis};
 pub use music::{MusicStructure, MusicTaskGenerator, MusicTheory};
 pub use prediction::{PerformancePredictor, ScheduleOptimizer};
+pub use sensor_integration::{SensorManager, SensorSession, SensorConfig, SensorType, MockEEGSensor, MockGSRSensor, MockEyeTracker};
+pub use statistical_validation::{StatisticalValidator, AssumptionChecks, NormalityTest, OutlierAnalysis, HomoscedasticityTest};
 pub use statistics::{
     DetailedStatistics, ExGaussianModel, ExGaussianParameters, ResponseTimeDistribution,
     SessionAnalyzer, StrategyType,

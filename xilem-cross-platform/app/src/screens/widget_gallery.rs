@@ -29,11 +29,15 @@ pub fn widget_gallery_screen(data: &AppData) -> impl WidgetView<AppData> {
 
     let answer_on_select = Arc::new(|_data: &mut AppData, _idx: usize| {});
 
-    let section1 = card("Overview", flex((
+    let section1 = card(
+        "Overview",
+        flex((
             label("These are experimental/unused components. This page is hidden.")
                 .brush(Color::from_rgb8(128, 128, 128))
                 .alignment(TextAlignment::Middle),
-    )).direction(Axis::Vertical);
+        ))
+        .direction(Axis::Vertical),
+    );
 
     let section2 = card("Basic Components", flex((
         card("Sample Card", label("Card content")),

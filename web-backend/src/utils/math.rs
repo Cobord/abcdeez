@@ -1,5 +1,6 @@
 /// Mathematical utilities with numerical stability guarantees
 use std::f64;
+use statrs::distribution::{StudentsT, ContinuousCDF};
 
 /// Safe division that handles edge cases
 pub fn safe_divide(numerator: f64, denominator: f64) -> Option<f64> {
@@ -75,7 +76,7 @@ pub fn safe_std_dev(values: &[f64]) -> f64 {
     safe_variance(values).sqrt()
 }
 
-/// Safe confidence interval calculation (assuming normal distribution)
+/// Safe confidence interval calculation using Student's t (two-sided)
 pub fn confidence_interval(values: &[f64], confidence: f64) -> (f64, f64) {
     if values.len() < 2 {
         let mean = safe_mean(values);
@@ -87,13 +88,11 @@ pub fn confidence_interval(values: &[f64], confidence: f64) -> (f64, f64) {
     let n = values.len() as f64;
     let std_error = std_dev / n.sqrt();
 
-    // Use t-distribution critical values (simplified approximation)
-    let t_critical = match confidence {
-        0.90 => 1.645,
-        0.95 => 1.96,
-        0.99 => 2.576,
-        _ => 1.96, // Default to 95%
-    };
+    // Use Student's t critical value for two-sided interval
+    let df = (n - 1.0).max(1.0);
+    let t = StudentsT::new(0.0, 1.0, df).unwrap();
+    let alpha_two_sided = (1.0 + confidence) / 2.0;
+    let t_critical = t.inverse_cdf(alpha_two_sided);
 
     let margin = t_critical * std_error;
     (mean - margin, mean + margin)

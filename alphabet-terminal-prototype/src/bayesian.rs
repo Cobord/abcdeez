@@ -212,8 +212,11 @@ impl BayesianLearnerModel {
     pub fn calculate_eig(&self, task: &crate::tasks::Task) -> f64 {
         // Use adaptive sampling for better convergence
         let (eig, _samples_used) = self.adaptive_monte_carlo_eig(task);
-        // EIG cannot exceed the current total entropy by information theory
-        eig.min(self.total_entropy())
+        
+        // Bound EIG by the entropy of the specific parameters being queried
+        // Information gain for a single task cannot exceed the entropy of the parameters it informs about
+        let task_entropy = self.calculate_task_specific_entropy(task);
+        eig.min(task_entropy)
     }
 
     /// Monte Carlo simulation for Expected Information Gain
@@ -774,6 +777,71 @@ impl BayesianLearnerModel {
         }
 
         // Ensure entropy is non-negative for numerical robustness in tests
+        entropy.max(0.0)
+    }
+    
+    /// Calculate entropy for parameters relevant to a specific task
+    fn calculate_task_specific_entropy(&self, task: &crate::tasks::Task) -> f64 {
+        let mut entropy = 0.0;
+        
+        // Add entropy of operation proficiency for this task
+        let op_key = format!("{:?}", task.operation);
+        if let Some(prof) = self.operation_proficiencies.get(&op_key) {
+            entropy += prof.entropy();
+        }
+        
+        // Add entropy of relevant node positions based on task type
+        match &task.task_type {
+            crate::tasks::TaskType::PairwiseOrder { a, b } => {
+                if let Some(pos_a) = self.get_node_position(a) {
+                    entropy += pos_a.entropy();
+                }
+                if let Some(pos_b) = self.get_node_position(b) {
+                    entropy += pos_b.entropy();
+                }
+            }
+            crate::tasks::TaskType::Successor { item } 
+            | crate::tasks::TaskType::Predecessor { item } => {
+                if let Some(pos) = self.get_node_position(item) {
+                    entropy += pos.entropy();
+                    // Also include adjacent node uncertainty
+                    if let Some(node) = self.topology.get_node_by_label(item) {
+                        if let Some(adj_id) = match &task.task_type {
+                            crate::tasks::TaskType::Successor { .. } => self.topology.get_successor(&node.id),
+                            crate::tasks::TaskType::Predecessor { .. } => self.topology.get_predecessor(&node.id),
+                            _ => None,
+                        } {
+                            if let Some(adj_node) = self.topology.get_node_by_id(&adj_id) {
+                                if let Some(adj_pos) = self.get_node_position(&adj_node.label) {
+                                    entropy += adj_pos.entropy();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            crate::tasks::TaskType::KJump { start, k } => {
+                if let Some(pos) = self.get_node_position(start) {
+                    entropy += pos.entropy();
+                }
+                // Include destination uncertainty
+                if let Some(dest) = self.topology.get_k_jump(start, *k as i32) {
+                    if let Some(dest_pos) = self.get_node_position(&dest) {
+                        entropy += dest_pos.entropy();
+                    }
+                }
+            }
+            _ => {
+                // For other task types, use a conservative estimate
+                // based on operation proficiency entropy only
+                if let Some(prof) = self.operation_proficiencies.get(&op_key) {
+                    entropy = prof.entropy();
+                } else {
+                    entropy = 1.0;
+                }
+            }
+        }
+        
         entropy.max(0.0)
     }
 }

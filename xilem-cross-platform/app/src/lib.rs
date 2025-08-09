@@ -166,6 +166,10 @@ pub struct AppData {
     pub experiment_control_group: bool,
     pub research_data_collection_enabled: bool,
     pub research_privacy_mode: bool,
+
+    // PWA integration (wasm only)
+    #[cfg(target_arch = "wasm32")]
+    pub pwa_initialized: bool,
 }
 
 impl Default for AppData {
@@ -266,12 +270,26 @@ impl Default for AppData {
             experiment_control_group: false,
             research_data_collection_enabled: true,
             research_privacy_mode: false,
+
+            #[cfg(target_arch = "wasm32")]
+            pwa_initialized: false,
         }
     }
 }
 
 // Main app logic
 fn app_logic(data: &mut AppData) -> impl WidgetView<AppData> {
+    // Setup PWA hooks (wasm only) on first render
+    #[cfg(target_arch = "wasm32")]
+    {
+        if !data.pwa_initialized {
+            if let Err(e) = data.init_pwa_integration() {
+                data.error_message = Some(format!("PWA init failed: {}", e));
+            } else {
+                data.pwa_initialized = true;
+            }
+        }
+    }
     // Update the little crab behavior
     if data.little_crab.is_some() {
         if let Some(mut crab) = data.little_crab.take() {
@@ -515,6 +533,88 @@ fn app_logic(data: &mut AppData) -> impl WidgetView<AppData> {
 
 // Helper functions for app logic
 impl AppData {
+    #[cfg(target_arch = "wasm32")]
+    fn register_service_worker() -> Result<(), String> {
+        use wasm_bindgen::JsCast;
+        use web_sys::ServiceWorkerContainer;
+        let window = web_sys::window().ok_or("no window")?;
+        let navigator = window.navigator();
+        let sw: ServiceWorkerContainer = navigator.service_worker();
+        let promise = sw
+            .register("/service_worker.js")
+            .map_err(|e| format!("sw register error: {:?}", e))?;
+        let _ = wasm_bindgen_futures::JsFuture::from(promise);
+        Ok(())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn setup_online_offline_listeners(connectivity: std::sync::Arc<ConnectivityMonitor>) -> Result<(), String> {
+        use wasm_bindgen::closure::Closure;
+        use wasm_bindgen::JsCast;
+        let window = web_sys::window().ok_or("no window")?;
+
+        // Online listener
+        {
+            let connectivity_clone = connectivity.clone();
+            let online_cb = Closure::<dyn FnMut(_)>::new(move |_| {
+                let connectivity = connectivity_clone.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    connectivity.set_online(true).await;
+                });
+            });
+            window
+                .add_event_listener_with_callback("online", online_cb.as_ref().unchecked_ref())
+                .map_err(|e| format!("online listener error: {:?}", e))?;
+            online_cb.forget();
+        }
+
+        // Offline listener
+        {
+            let connectivity_clone = connectivity.clone();
+            let offline_cb = Closure::<dyn FnMut(_)>::new(move |_| {
+                let connectivity = connectivity_clone.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    connectivity.set_online(false).await;
+                });
+            });
+            window
+                .add_event_listener_with_callback("offline", offline_cb.as_ref().unchecked_ref())
+                .map_err(|e| format!("offline listener error: {:?}", e))?;
+            offline_cb.forget();
+        }
+
+        Ok(())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn init_pwa_integration(&mut self) -> Result<(), String> {
+        // 1) Register service worker for offline caching
+        Self::register_service_worker()?;
+
+        // 2) Wire navigator.onLine to our ConnectivityMonitor
+        Self::setup_online_offline_listeners(self.connectivity_monitor.clone())?;
+
+        // 3) Initialize offline storage so PWA works offline
+        // Note: On wasm we use an in-memory PathBuf; our OfflineStorage uses SQLite via rusqlite
+        // which typically requires wasm bindings. If not available, skip with a friendly message.
+        let runtime = self.runtime.clone();
+        let offline_init = async {
+            if let Err(e) = self.init_offline_storage().await {
+                eprintln!("offline storage init failed: {}", e);
+            }
+        };
+        // Spawn on a background thread if available; on wasm, spawn_local
+        #[cfg(target_arch = "wasm32")]
+        {
+            wasm_bindgen_futures::spawn_local(async move { offline_init.await });
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = runtime.spawn(async move { offline_init.await });
+        }
+
+        Ok(())
+    }
     /// Initialize offline storage
     pub async fn init_offline_storage(&mut self) -> Result<(), String> {
         use std::path::PathBuf;

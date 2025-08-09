@@ -26,6 +26,11 @@ name = "mock_backend"
 path = "src/bin/mock_backend.rs"
 required-features = ["backend-server"]
 
+[[bin]]
+name = "research_dashboard_demo"
+path = "src/bin/research_dashboard_demo.rs"
+required-features = ["cli"]
+
 # Package metadata for distribution
 [package.metadata.dist]
 # Specify this package should be distributed
@@ -63,6 +68,7 @@ anyhow = "1.0"
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 toml = "0.8"
 axum = { version = "0.7", optional = true }
+sha2 = "0.10"
 
 [dev-dependencies]
 proptest = "1.0"

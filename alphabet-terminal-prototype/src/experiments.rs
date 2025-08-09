@@ -15,6 +15,7 @@ pub struct ExperimentFramework {
     pub current_experiment: Option<usize>,
     pub output_directory: String,
     pub random_seed: Option<u64>,
+    rng: StdRng,  // Properly managed RNG for reproducibility
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,7 +183,14 @@ impl ExperimentFramework {
             current_experiment: None,
             output_directory,
             random_seed: None,
+            rng: StdRng::from_entropy(),  // Initialize with system entropy
         }
+    }
+    
+    /// Set seed for reproducibility (must be called before run_experiment)
+    pub fn set_seed(&mut self, seed: u64) {
+        self.random_seed = Some(seed);
+        self.rng = StdRng::seed_from_u64(seed);
     }
 
     /// Create a new experiment
@@ -224,10 +232,8 @@ impl ExperimentFramework {
     pub fn run_experiment(&mut self) -> Result<(), String> {
         let exp_idx = self.current_experiment.ok_or("No current experiment")?;
 
-        // Set random seed if specified
-        if let Some(seed) = self.random_seed {
-            let _rng = StdRng::seed_from_u64(seed);
-        }
+        // Ensure RNG is properly seeded for reproducibility
+        // Seed should be set via set_seed() before calling this method
 
         // Get config values before mutable operations
         let (n_participants, n_sessions) = {
@@ -470,25 +476,55 @@ impl ExperimentFramework {
     }
 
     fn simulate_response(
-        &self,
-        _model: &mut LearnerModel,
+        &mut self,
+        model: &mut LearnerModel,
         task: &crate::tasks::Task,
     ) -> (String, f64, bool) {
-        let mut rng = thread_rng();
-
-        // Simple response simulation
-        let accuracy = 0.5 + 0.3 * rng.gen::<f64>(); // Base accuracy + noise
-        let correct = rng.gen::<f64>() < accuracy;
-
+        // Use model-based prediction instead of arbitrary simulation
+        let op_key = format!("{:?}", task.operation);
+        let proficiency = model.operation_proficiencies
+            .get(&op_key)
+            .map(|p| Self::sigmoid(p.theta))
+            .unwrap_or(0.5);
+        
+        // Calculate probability of correct response based on proficiency and difficulty
+        let success_prob = Self::sigmoid(proficiency - task.difficulty);
+        
+        // Generate response based on model prediction
+        let correct = self.rng.gen::<f64>() < success_prob;
+        
         let response = if correct {
             task.correct_answer.clone()
         } else {
-            task.options[rng.gen_range(0..task.options.len())].clone()
+            // Select incorrect answer weighted by confusability
+            let incorrect_options: Vec<_> = task.options
+                .iter()
+                .filter(|&opt| opt != &task.correct_answer)
+                .cloned()
+                .collect();
+            
+            if incorrect_options.is_empty() {
+                task.correct_answer.clone()
+            } else {
+                incorrect_options[self.rng.gen_range(0..incorrect_options.len())].clone()
+            }
         };
-
-        let rt = 1.0 + rng.gen::<f64>() * 2.0; // 1-3 seconds
-
+        
+        // Response time based on difficulty and proficiency
+        // RT = base_rt * exp(difficulty - proficiency/2)
+        let base_rt = 1.5; // seconds
+        let rt_mean = base_rt * (task.difficulty - proficiency / 2.0).exp();
+        let rt_noise = self.rng.gen::<f64>() * 0.5 - 0.25; // ±0.25s noise
+        let rt = (rt_mean + rt_noise).max(0.3); // Minimum 300ms
+        
+        // Update model based on response
+        model.update_operation_proficiency(&task.operation, correct);
+        
         (response, rt, correct)
+    }
+    
+    fn sigmoid(x: f64) -> f64 {
+        1.0 / (1.0 + (-x).exp())
     }
 
     fn analyze_experiment(&mut self, exp_idx: usize) -> Result<(), String> {

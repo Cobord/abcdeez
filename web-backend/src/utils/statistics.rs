@@ -1,5 +1,6 @@
 /// Statistical utilities for data analysis
 use super::math;
+use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
 use rand::Rng;
 
 /// Calculate mean of a dataset
@@ -189,7 +190,7 @@ pub fn covariance(x: &[f64], y: &[f64]) -> f64 {
 pub struct ExGaussianParams {
     pub mu: f64,    // Mean of normal component
     pub sigma: f64, // Standard deviation of normal component
-    pub tau: f64,   // Rate parameter of exponential component
+    pub tau: f64,   // Mean/scale of exponential component (λ = 1/τ)
 }
 
 impl ExGaussianParams {
@@ -216,9 +217,14 @@ pub fn fit_ex_gaussian(response_times: &[f64]) -> Result<ExGaussianParams, &'sta
         return Err("Invalid distribution parameters");
     }
 
-    // Method of moments estimation
-    let tau = skew.powf(2.0 / 3.0) * variance.powf(1.0 / 3.0) / 2.0;
-    let sigma_squared = variance - tau.powi(2);
+    // Method of moments (tau has same units as time)
+    // A practical approximation: tau ≈ (skew/2)^(1/3) * s
+    let s = variance.sqrt();
+    let tau = (skew / 2.0).powf(1.0 / 3.0) * s;
+    let mut sigma_squared = variance - tau.powi(2);
+    if sigma_squared <= f64::EPSILON {
+        sigma_squared = f64::EPSILON;
+    }
 
     if sigma_squared <= 0.0 {
         return Err("Invalid sigma calculation");
@@ -373,26 +379,17 @@ fn t_distribution_cdf(t: f64, df: f64) -> f64 {
     if df <= 0.0 {
         return 0.5;
     }
-
-    // For large df, approximate with standard normal
-    if df >= 100.0 {
-        return standard_normal_cdf(t);
-    }
-
-    // Simple approximation for t-distribution
-    let x = t / (df + t.powi(2)).sqrt();
-    0.5 + 0.5 * math::error_function(x * (df / 2.0).sqrt())
+    let dist = StudentsT::new(0.0, 1.0, df.max(1.0)).unwrap();
+    dist.cdf(t)
 }
 
 /// Approximate F-distribution CDF
 fn f_distribution_cdf(f: f64, df1: f64, df2: f64) -> f64 {
-    if f <= 0.0 {
+    if f <= 0.0 || df1 <= 0.0 || df2 <= 0.0 {
         return 0.0;
     }
-
-    // Regularized incomplete beta function approximation
-    let x = df1 * f / (df1 * f + df2);
-    math::regularized_beta(x, df1 / 2.0, df2 / 2.0)
+    let dist = FisherSnedecor::new(df1, df2).unwrap();
+    dist.cdf(f)
 }
 
 /// Standard normal CDF approximation

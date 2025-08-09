@@ -42,6 +42,7 @@ pub struct AssumptionChecks {
     pub homoscedasticity: HomoscedasticityTest,
     pub independence: IndependenceTest,
     pub linearity: LinearityTest,
+    pub outliers: OutlierAnalysis,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +74,16 @@ pub struct LinearityTest {
     pub r_squared: f64,
     pub residual_pattern: String,
     pub is_linear: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutlierAnalysis {
+    pub outlier_count: usize,
+    pub outlier_percentage: f64,
+    pub outlier_indices: Vec<usize>,
+    pub max_z_score: f64,
+    pub outliers_detected: bool,
+    pub method_used: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -336,35 +347,108 @@ impl StatisticalValidator {
         }
     }
 
-    /// Check normality assumptions
+    /// Check normality assumptions with comprehensive analysis
     pub fn check_normality(&self, data: &[f64]) -> NormalityTest {
-        // Shapiro-Wilk test (simplified version)
-        let n = data.len();
-        let mut sorted = data.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-        let _mean = data.mean();
-        let variance = data.variance();
-
-        // Calculate W statistic (simplified)
-        let mut numerator = 0.0;
-        for i in 0..n / 2 {
-            let a_i = self.shapiro_wilk_coefficient(i, n);
-            numerator += a_i * (sorted[n - 1 - i] - sorted[i]);
+        if data.len() < 3 {
+            return NormalityTest {
+                shapiro_wilk_statistic: 0.0,
+                shapiro_wilk_p_value: 1.0,
+                anderson_darling_statistic: 0.0,
+                is_normal: false,
+            };
         }
-        let w = numerator.powi(2) / (variance * (n - 1) as f64);
 
-        // Anderson-Darling test
+        // Use Shapiro-Wilk for small samples, Anderson-Darling for larger samples
+        if data.len() <= 50 {
+            self.shapiro_wilk_detailed(data)
+        } else {
+            self.anderson_darling_detailed(data)
+        }
+    }
+
+    fn shapiro_wilk_detailed(&self, data: &[f64]) -> NormalityTest {
+        let n = data.len() as f64;
+        let sorted_data: Vec<f64> = {
+            let mut d = data.to_vec();
+            d.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            d
+        };
+
+        let mean = data.iter().sum::<f64>() / n;
+        let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0);
+        
+        // Simplified W statistic calculation
+        let w_stat = if variance > 0.0 {
+            let numerator: f64 = sorted_data.iter()
+                .enumerate()
+                .map(|(i, &x)| {
+                    let coeff = self.shapiro_wilk_coefficient(i, data.len());
+                    coeff * x
+                })
+                .sum::<f64>().powi(2);
+            numerator / (variance * (n - 1.0))
+        } else {
+            1.0
+        };
+
+        let p_value = if w_stat > 0.95 { 0.8 } else if w_stat > 0.90 { 0.2 } else if w_stat > 0.85 { 0.05 } else { 0.01 };
         let ad_statistic = self.anderson_darling_statistic(data);
 
-        // Determine if normal (simplified criteria)
-        let is_normal = w > 0.9 && ad_statistic < 1.0;
+        NormalityTest {
+            shapiro_wilk_statistic: w_stat,
+            shapiro_wilk_p_value: p_value,
+            anderson_darling_statistic: ad_statistic,
+            is_normal: p_value > (1.0 - self.confidence_level),
+        }
+    }
+
+    fn anderson_darling_detailed(&self, data: &[f64]) -> NormalityTest {
+        let n = data.len() as f64;
+        let sorted_data: Vec<f64> = {
+            let mut d = data.to_vec();
+            d.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            d
+        };
+
+        let mean = data.iter().sum::<f64>() / n;
+        let std_dev = (data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0)).sqrt();
+
+        // Standardize data
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let mut ad_stat = 0.0;
+
+        for (i, &x) in sorted_data.iter().enumerate() {
+            let z = (x - mean) / std_dev;
+            let phi = normal.cdf(z);
+            let i_f64 = (i + 1) as f64;
+            
+            if phi > 0.0 && phi < 1.0 {
+                ad_stat += (2.0 * i_f64 - 1.0) * (phi.ln() + (1.0 - sorted_data[sorted_data.len() - i - 1]).ln());
+            }
+        }
+
+        ad_stat = -n - ad_stat / n;
+        let ad_stat_adj = ad_stat * (1.0 + 0.75 / n + 2.25 / (n * n));
+
+        let p_value = self.anderson_darling_p_value(ad_stat_adj);
 
         NormalityTest {
-            shapiro_wilk_statistic: w,
-            shapiro_wilk_p_value: if w > 0.9 { 0.1 } else { 0.01 },
-            anderson_darling_statistic: ad_statistic,
-            is_normal,
+            shapiro_wilk_statistic: 0.0, // Not computed for large samples
+            shapiro_wilk_p_value: 0.0,
+            anderson_darling_statistic: ad_stat_adj,
+            is_normal: p_value > (1.0 - self.confidence_level),
+        }
+    }
+
+    fn anderson_darling_p_value(&self, ad_stat: f64) -> f64 {
+        if ad_stat < 0.2 {
+            1.0 - (-1.2337 * ad_stat).exp()
+        } else if ad_stat < 0.34 {
+            1.0 - (1.0833 * ad_stat - 2.1962).exp()
+        } else if ad_stat < 0.6 {
+            1.0 - (-1.9003 * ad_stat - 1.0837).exp()
+        } else {
+            (ad_stat - 0.6) * (-0.37782 * ad_stat + 2.8123).exp()
         }
     }
 
@@ -613,6 +697,277 @@ impl StatisticalValidator {
             // Stirling's approximation: ln(n!) ≈ n*ln(n) - n + 0.5*ln(2πn)
             let n_f = n as f64;
             n_f * n_f.ln() - n_f + 0.5 * (2.0 * std::f64::consts::PI * n_f).ln()
+        }
+    }
+
+    /// Check for homogeneity of variance using Levene's test
+    pub fn check_homogeneity(&self, groups: &[Vec<f64>]) -> HomoscedasticityTest {
+        if groups.len() < 2 {
+            return HomoscedasticityTest {
+                levene_statistic: 0.0,
+                levene_p_value: 1.0,
+                bartlett_statistic: 0.0,
+                bartlett_p_value: 1.0,
+                equal_variance: false,
+            };
+        }
+
+        let levene_result = self.levene_test(groups);
+        let bartlett_result = self.bartlett_test(groups);
+
+        HomoscedasticityTest {
+            levene_statistic: levene_result.0,
+            levene_p_value: levene_result.1,
+            bartlett_statistic: bartlett_result.0,
+            bartlett_p_value: bartlett_result.1,
+            equal_variance: levene_result.1 > (1.0 - self.confidence_level) && 
+                          bartlett_result.1 > (1.0 - self.confidence_level),
+        }
+    }
+
+    fn levene_test(&self, groups: &[Vec<f64>]) -> (f64, f64) {
+        let k = groups.len();
+        let mut n_total = 0;
+        let mut group_medians = Vec::new();
+        let mut group_sizes = Vec::new();
+
+        for group in groups {
+            if group.is_empty() {
+                continue;
+            }
+            
+            // Calculate median (more robust than mean)
+            let mut sorted_group = group.clone();
+            sorted_group.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let median = if sorted_group.len() % 2 == 0 {
+                (sorted_group[sorted_group.len() / 2 - 1] + sorted_group[sorted_group.len() / 2]) / 2.0
+            } else {
+                sorted_group[sorted_group.len() / 2]
+            };
+            
+            group_medians.push(median);
+            group_sizes.push(group.len());
+            n_total += group.len();
+        }
+
+        if k < 2 || n_total < 3 {
+            return (0.0, 1.0);
+        }
+
+        // Calculate absolute deviations from group medians
+        let mut all_deviations = Vec::new();
+        let mut group_deviation_means = Vec::new();
+
+        for (i, group) in groups.iter().enumerate() {
+            if group.is_empty() {
+                continue;
+            }
+
+            let deviations: Vec<f64> = group.iter().map(|&x| (x - group_medians[i]).abs()).collect();
+            let deviation_mean = deviations.iter().sum::<f64>() / deviations.len() as f64;
+            group_deviation_means.push(deviation_mean);
+            all_deviations.extend(deviations);
+        }
+
+        // Calculate overall mean of deviations
+        let overall_mean = all_deviations.iter().sum::<f64>() / all_deviations.len() as f64;
+
+        // Calculate between-group and within-group sum of squares
+        let mut ss_between = 0.0;
+        for (i, &group_mean) in group_deviation_means.iter().enumerate() {
+            ss_between += group_sizes[i] as f64 * (group_mean - overall_mean).powi(2);
+        }
+
+        let mut ss_within = 0.0;
+        let mut current_index = 0;
+        for (i, group) in groups.iter().enumerate() {
+            if group.is_empty() {
+                continue;
+            }
+            for j in 0..group.len() {
+                ss_within += (all_deviations[current_index + j] - group_deviation_means[i]).powi(2);
+            }
+            current_index += group.len();
+        }
+
+        // Calculate F-statistic
+        let df_between = (k - 1) as f64;
+        let df_within = (n_total - k) as f64;
+        let ms_between = ss_between / df_between;
+        let ms_within = ss_within / df_within;
+        let f_stat = if ms_within > 0.0 { ms_between / ms_within } else { 0.0 };
+
+        // Calculate p-value
+        let f_dist = FisherSnedecor::new(df_between, df_within).unwrap();
+        let p_value = 1.0 - f_dist.cdf(f_stat);
+
+        (f_stat, p_value)
+    }
+
+    fn bartlett_test(&self, groups: &[Vec<f64>]) -> (f64, f64) {
+        let k = groups.len();
+        if k < 2 {
+            return (0.0, 1.0);
+        }
+
+        let mut variances = Vec::new();
+        let mut sample_sizes = Vec::new();
+        let mut total_n = 0;
+
+        for group in groups {
+            if group.len() > 1 {
+                let variance = group.variance();
+                variances.push(variance);
+                sample_sizes.push(group.len());
+                total_n += group.len();
+            }
+        }
+
+        if variances.len() < 2 {
+            return (0.0, 1.0);
+        }
+
+        // Calculate pooled variance
+        let mut numerator = 0.0;
+        for (i, &var) in variances.iter().enumerate() {
+            numerator += (sample_sizes[i] - 1) as f64 * var;
+        }
+        let pooled_variance = numerator / (total_n - k) as f64;
+
+        // Bartlett's test statistic
+        let mut sum_log_vars = 0.0;
+        let mut sum_weights = 0.0;
+        for (i, &var) in variances.iter().enumerate() {
+            let weight = (sample_sizes[i] - 1) as f64;
+            sum_log_vars += weight * var.ln();
+            sum_weights += weight;
+        }
+
+        let bartlett_stat = sum_weights * pooled_variance.ln() - sum_log_vars;
+
+        // Apply correction factor (simplified)
+        let correction = 1.0 + (1.0 / (3.0 * (k - 1) as f64)) * 
+                        (variances.iter().enumerate().map(|(i, _)| 1.0 / (sample_sizes[i] - 1) as f64).sum::<f64>() - 
+                         1.0 / (total_n - k) as f64);
+        
+        let corrected_stat = bartlett_stat / correction;
+
+        // Chi-squared distribution with k-1 degrees of freedom
+        let chi_dist = ChiSquared::new((k - 1) as f64).unwrap();
+        let p_value = 1.0 - chi_dist.cdf(corrected_stat);
+
+        (corrected_stat, p_value)
+    }
+
+    /// Detect outliers using modified Z-score method
+    pub fn check_outliers(&self, data: &[f64]) -> OutlierAnalysis {
+        if data.len() < 4 {
+            return OutlierAnalysis {
+                outlier_count: 0,
+                outlier_percentage: 0.0,
+                outlier_indices: Vec::new(),
+                max_z_score: 0.0,
+                outliers_detected: false,
+                method_used: "Insufficient data".to_string(),
+            };
+        }
+
+        // Calculate median
+        let median = {
+            let mut sorted = data.to_vec();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            if sorted.len() % 2 == 0 {
+                (sorted[sorted.len() / 2 - 1] + sorted[sorted.len() / 2]) / 2.0
+            } else {
+                sorted[sorted.len() / 2]
+            }
+        };
+
+        // Calculate median absolute deviation (MAD)
+        let mut absolute_deviations: Vec<f64> = data.iter().map(|&x| (x - median).abs()).collect();
+        absolute_deviations.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mad = if absolute_deviations.len() % 2 == 0 {
+            (absolute_deviations[absolute_deviations.len() / 2 - 1] + absolute_deviations[absolute_deviations.len() / 2]) / 2.0
+        } else {
+            absolute_deviations[absolute_deviations.len() / 2]
+        };
+
+        let threshold = 3.5; // Common threshold for outlier detection
+        let mut outlier_indices = Vec::new();
+        let mut max_z_score = 0.0;
+
+        for (i, &value) in data.iter().enumerate() {
+            let modified_z = if mad > 0.0 {
+                0.6745 * (value - median).abs() / mad
+            } else {
+                0.0
+            };
+            
+            if modified_z > threshold {
+                outlier_indices.push(i);
+            }
+            
+            if modified_z > max_z_score {
+                max_z_score = modified_z;
+            }
+        }
+
+        let outlier_percentage = (outlier_indices.len() as f64 / data.len() as f64) * 100.0;
+
+        OutlierAnalysis {
+            outlier_count: outlier_indices.len(),
+            outlier_percentage,
+            outlier_indices,
+            max_z_score,
+            outliers_detected: !outlier_indices.is_empty(),
+            method_used: "Modified Z-Score".to_string(),
+        }
+    }
+
+    /// Comprehensive assumption checking for analysis planning
+    pub fn comprehensive_assumption_check(&self, data: &[Vec<f64>]) -> AssumptionChecks {
+        let mut normality_tests = Vec::new();
+        for group in data {
+            if !group.is_empty() {
+                normality_tests.push(self.check_normality(group));
+            }
+        }
+
+        // Take the worst normality result
+        let normality = normality_tests.into_iter()
+            .min_by(|a, b| a.shapiro_wilk_p_value.partial_cmp(&b.shapiro_wilk_p_value).unwrap())
+            .unwrap_or(NormalityTest {
+                shapiro_wilk_statistic: 0.0,
+                shapiro_wilk_p_value: 1.0,
+                anderson_darling_statistic: 0.0,
+                is_normal: false,
+            });
+
+        let homoscedasticity = self.check_homogeneity(data);
+        
+        // Check outliers across all data
+        let all_data: Vec<f64> = data.iter().flatten().cloned().collect();
+        let outliers = self.check_outliers(&all_data);
+
+        // Independence and linearity require more context
+        let independence = IndependenceTest {
+            durbin_watson_statistic: 2.0, // Placeholder
+            autocorrelation: 0.0,
+            is_independent: true, // Assumed unless evidence suggests otherwise
+        };
+
+        let linearity = LinearityTest {
+            r_squared: 0.0, // Would need regression analysis
+            residual_pattern: "Assessment required".to_string(),
+            is_linear: true, // Assumed for basic tests
+        };
+
+        AssumptionChecks {
+            normality,
+            homoscedasticity,
+            independence,
+            linearity,
+            outliers,
         }
     }
 }

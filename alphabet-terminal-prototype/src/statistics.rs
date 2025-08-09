@@ -1,3 +1,4 @@
+use crate::statistical_validation::StatisticalValidator;
 use serde::{Deserialize, Serialize};
 use statrs::distribution::{ContinuousCDF, Normal};
 use statrs::statistics::Statistics;
@@ -588,6 +589,516 @@ impl SessionAnalyzer {
     }
 }
 
+/// Result of a statistical test
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestResult {
+    pub statistic: f64,
+    pub p_value: f64,
+    pub significant: bool,
+    pub test_name: String,
+    pub correction_applied: Option<String>,
+}
+
+/// Proper statistical normality tests
+pub struct NormalityTests;
+
+impl NormalityTests {
+    /// Shapiro-Wilk test for normality (best for n < 50)
+    pub fn shapiro_wilk(data: &[f64]) -> f64 {
+        let n = data.len();
+        if n < 3 || n > 5000 {
+            return 0.0; // Invalid sample size
+        }
+        
+        // Sort data
+        let mut sorted = data.to_vec();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        
+        // Calculate mean
+        let mean = sorted.iter().sum::<f64>() / n as f64;
+        
+        // Calculate sum of squared deviations
+        let ss = sorted.iter().map(|x| (x - mean).powi(2)).sum::<f64>();
+        
+        if ss == 0.0 {
+            return 1.0; // All values are identical, perfectly "normal"
+        }
+        
+        // Calculate Shapiro-Wilk W statistic
+        let mut b = 0.0;
+        let m = n / 2;
+        
+        // Get coefficients (simplified for common sample sizes)
+        for i in 0..m {
+            let a_i = Self::shapiro_wilk_coefficient(i, n);
+            b += a_i * (sorted[n - 1 - i] - sorted[i]);
+        }
+        
+        let w = b * b / ss;
+        
+        // Transform W to approximate p-value
+        Self::shapiro_wilk_p_value(w, n)
+    }
+    
+    /// Get Shapiro-Wilk coefficients (simplified approximation)
+    fn shapiro_wilk_coefficient(i: usize, n: usize) -> f64 {
+        // This is a simplified approximation
+        // Real implementation would use precomputed tables
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let m = (i + 1) as f64;
+        let n_f = n as f64;
+        
+        // Expected value of order statistic
+        let p = (m - 0.375) / (n_f + 0.25);
+        normal.inverse_cdf(p)
+    }
+    
+    /// Convert W statistic to p-value
+    fn shapiro_wilk_p_value(w: f64, n: usize) -> f64 {
+        // Simplified transformation based on Royston's approximation
+        let n_f = n as f64;
+        
+        let mu = if n <= 11 {
+            0.0
+        } else {
+            -2.273 + 0.459 * n_f.ln()
+        };
+        
+        let sigma = if n <= 11 {
+            1.0
+        } else {
+            (-2.882 + 2.557 * n_f.ln()).exp()
+        };
+        
+        let z = (w.ln() - mu) / sigma;
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        
+        // Return two-tailed p-value
+        2.0 * (1.0 - normal.cdf(z.abs()))
+    }
+    
+    /// Anderson-Darling test for normality (good for all sample sizes)
+    pub fn anderson_darling(data: &[f64]) -> f64 {
+        let n = data.len();
+        if n < 7 {
+            return 0.0; // Need at least 7 observations
+        }
+        
+        // Standardize data
+        let mean = data.iter().sum::<f64>() / n as f64;
+        let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
+        let std_dev = variance.sqrt();
+        
+        if std_dev == 0.0 {
+            return 1.0; // All values identical
+        }
+        
+        let mut standardized: Vec<f64> = data.iter()
+            .map(|x| (x - mean) / std_dev)
+            .collect();
+        standardized.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        
+        // Calculate A² statistic
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let mut sum = 0.0;
+        
+        for i in 0..n {
+            let f_i = normal.cdf(standardized[i]);
+            let f_ni = normal.cdf(standardized[n - 1 - i]);
+            
+            // Avoid log(0) or log(1)
+            let f_i = f_i.max(1e-10).min(1.0 - 1e-10);
+            let f_ni = f_ni.max(1e-10).min(1.0 - 1e-10);
+            
+            sum += (2 * i + 1) as f64 * (f_i.ln() + (1.0 - f_ni).ln());
+        }
+        
+        let a_squared = -n as f64 - sum / n as f64;
+        
+        // Adjust for sample size
+        let a_squared_star = a_squared * (1.0 + 0.75 / n as f64 + 2.25 / (n * n) as f64);
+        
+        // Convert to p-value using approximation
+        Self::anderson_darling_p_value(a_squared_star)
+    }
+    
+    /// Convert Anderson-Darling statistic to p-value
+    fn anderson_darling_p_value(a_squared_star: f64) -> f64 {
+        // Using modified approximation from D'Agostino & Stephens
+        if a_squared_star < 0.2 {
+            1.0 - ((-13.436 + 101.14 * a_squared_star - 223.73 * a_squared_star.powi(2)).exp())
+        } else if a_squared_star < 0.34 {
+            1.0 - ((-8.318 + 42.796 * a_squared_star - 59.938 * a_squared_star.powi(2)).exp())
+        } else if a_squared_star < 0.6 {
+            (0.9177 - 4.279 * a_squared_star + 1.38 * a_squared_star.powi(2)).exp()
+        } else if a_squared_star < 13.0 {
+            (1.2937 - 5.709 * a_squared_star + 0.0186 * a_squared_star.powi(2)).exp()
+        } else {
+            0.0 // Extremely non-normal
+        }
+    }
+    
+    /// Kolmogorov-Smirnov test for normality
+    pub fn kolmogorov_smirnov(data: &[f64]) -> f64 {
+        let n = data.len();
+        if n < 5 {
+            return 0.0;
+        }
+        
+        // Standardize data
+        let mean = data.iter().sum::<f64>() / n as f64;
+        let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
+        let std_dev = variance.sqrt();
+        
+        if std_dev == 0.0 {
+            return 1.0;
+        }
+        
+        let mut standardized: Vec<f64> = data.iter()
+            .map(|x| (x - mean) / std_dev)
+            .collect();
+        standardized.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        
+        // Calculate KS statistic
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let mut d_max = 0.0;
+        
+        for i in 0..n {
+            let f_empirical = (i + 1) as f64 / n as f64;
+            let f_theoretical = normal.cdf(standardized[i]);
+            
+            let d1 = (f_empirical - f_theoretical).abs();
+            let d2 = (f_theoretical - (i as f64 / n as f64)).abs();
+            
+            d_max = d_max.max(d1).max(d2);
+        }
+        
+        // Lilliefors correction for estimated parameters
+        let d_corrected = d_max * (n as f64).sqrt();
+        
+        // Approximate p-value
+        Self::ks_p_value(d_corrected, n)
+    }
+    
+    /// Convert KS statistic to p-value (Lilliefors table approximation)
+    fn ks_p_value(d: f64, n: usize) -> f64 {
+        // Simplified approximation
+        let sqrt_n = (n as f64).sqrt();
+        let lambda = d / sqrt_n;
+        
+        // Kolmogorov distribution approximation
+        if lambda < 0.4 {
+            1.0
+        } else {
+            let sum = (1..=10).map(|k| {
+                let k_f = k as f64;
+                2.0 * (if k % 2 == 0 { -1.0 } else { 1.0 }) * (-2.0 * k_f.powi(2) * lambda.powi(2)).exp()
+            }).sum::<f64>();
+            
+            (1.0 - sum).max(0.0).min(1.0)
+        }
+    }
+}
+
+/// Automatic Statistical Corrections Framework
+/// Automatically applies appropriate corrections when assumptions are violated
+pub struct AutoCorrectingStatisticalTest {
+    confidence_level: f64,
+    assumption_checks: Vec<AssumptionCheckResult>,
+}
+
+impl AutoCorrectingStatisticalTest {
+    pub fn new(confidence_level: f64) -> Self {
+        Self {
+            confidence_level,
+            assumption_checks: Vec::new(),
+        }
+    }
+    
+    /// Perform t-test with automatic corrections for assumption violations
+    pub fn auto_corrected_t_test(&mut self, sample1: &[f64], sample2: Option<&[f64]>) -> TestResult {
+        // Check assumptions
+        self.assumption_checks = AssumptionChecker::check_t_test_assumptions(sample1, sample2);
+        
+        // Determine if corrections are needed
+        let normality_violated = self.assumption_checks.iter()
+            .any(|a| a.test_name == "Normality" && !a.is_met);
+        let variance_violated = self.assumption_checks.iter()
+            .any(|a| a.test_name == "Homogeneity of Variance" && !a.is_met);
+        let has_outliers = self.assumption_checks.iter()
+            .any(|a| a.test_name == "Outliers" && !a.is_met);
+        
+        // Apply appropriate test based on violations
+        if let Some(s2) = sample2 {
+            // Two-sample test
+            if normality_violated || (sample1.len() < 30 && s2.len() < 30) {
+                // Use non-parametric Mann-Whitney U test
+                self.mann_whitney_u_test(sample1, s2)
+            } else if variance_violated {
+                // Use Welch's t-test for unequal variances
+                self.welchs_t_test(sample1, s2)
+            } else if has_outliers {
+                // Use robust test with trimmed means
+                self.trimmed_mean_t_test(sample1, s2, 0.1) // 10% trim
+            } else {
+                // Standard t-test
+                let validator = StatisticalValidator::new(self.confidence_level);
+                let result = validator.t_test(sample1, s2, false);
+                TestResult {
+                    statistic: result.statistic,
+                    p_value: result.p_value,
+                    significant: result.significant,
+                    test_name: "Independent t-test".to_string(),
+                    correction_applied: None,
+                }
+            }
+        } else {
+            // One-sample test
+            if normality_violated || sample1.len() < 30 {
+                // Use Wilcoxon signed-rank test
+                self.wilcoxon_signed_rank_test(sample1, 0.0)
+            } else if has_outliers {
+                // Use trimmed mean test
+                self.trimmed_mean_one_sample_test(sample1, 0.0, 0.1)
+            } else {
+                // Standard one-sample t-test
+                let mean = sample1.iter().sum::<f64>() / sample1.len() as f64;
+                let var = sample1.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (sample1.len() - 1) as f64;
+                let se = (var / sample1.len() as f64).sqrt();
+                let t_stat = mean / se;
+                let df = sample1.len() - 1;
+                let normal = Normal::new(0.0, 1.0).unwrap();
+                let p_value = 2.0 * (1.0 - normal.cdf(t_stat.abs() / (1.0 + 2.0 / df as f64).sqrt()));
+                TestResult {
+                    statistic: t_stat,
+                    p_value,
+                    significant: p_value < (1.0 - self.confidence_level),
+                    test_name: "One-sample t-test".to_string(),
+                    correction_applied: None,
+                }
+            }
+        }
+    }
+    
+    /// Mann-Whitney U test (non-parametric alternative to t-test)
+    fn mann_whitney_u_test(&self, sample1: &[f64], sample2: &[f64]) -> TestResult {
+        // Combine and rank all observations
+        let mut combined: Vec<(f64, usize)> = Vec::new();
+        for &val in sample1 {
+            combined.push((val, 1));
+        }
+        for &val in sample2 {
+            combined.push((val, 2));
+        }
+        combined.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        
+        // Assign ranks (handle ties by averaging)
+        let mut ranks = vec![0.0; combined.len()];
+        let mut i = 0;
+        while i < combined.len() {
+            let mut j = i;
+            while j < combined.len() && combined[j].0 == combined[i].0 {
+                j += 1;
+            }
+            let avg_rank = (i + 1 + j) as f64 / 2.0;
+            for k in i..j {
+                ranks[k] = avg_rank;
+            }
+            i = j;
+        }
+        
+        // Calculate U statistics
+        let r1: f64 = combined.iter().zip(ranks.iter())
+            .filter(|((_, group), _)| *group == 1)
+            .map(|(_, rank)| rank)
+            .sum();
+        
+        let n1 = sample1.len() as f64;
+        let n2 = sample2.len() as f64;
+        let u1 = r1 - n1 * (n1 + 1.0) / 2.0;
+        let u2 = n1 * n2 - u1;
+        let u = u1.min(u2);
+        
+        // Normal approximation for large samples
+        let mean_u = n1 * n2 / 2.0;
+        let std_u = ((n1 * n2 * (n1 + n2 + 1.0)) / 12.0).sqrt();
+        let z = (u - mean_u) / std_u;
+        
+        // Calculate p-value (two-tailed)
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let p_value = 2.0 * (1.0 - normal.cdf(z.abs()));
+        
+        TestResult {
+            statistic: u,
+            p_value,
+            significant: p_value < (1.0 - self.confidence_level),
+            test_name: "Mann-Whitney U Test".to_string(),
+            correction_applied: Some("Non-parametric test for normality violation".to_string()),
+        }
+    }
+    
+    /// Welch's t-test for unequal variances
+    fn welchs_t_test(&self, sample1: &[f64], sample2: &[f64]) -> TestResult {
+        let n1 = sample1.len() as f64;
+        let n2 = sample2.len() as f64;
+        
+        let mean1 = sample1.iter().sum::<f64>() / n1;
+        let mean2 = sample2.iter().sum::<f64>() / n2;
+        
+        let var1 = sample1.iter().map(|x| (x - mean1).powi(2)).sum::<f64>() / (n1 - 1.0);
+        let var2 = sample2.iter().map(|x| (x - mean2).powi(2)).sum::<f64>() / (n2 - 1.0);
+        
+        let se = (var1 / n1 + var2 / n2).sqrt();
+        let t_stat = (mean1 - mean2) / se;
+        
+        // Calculate degrees of freedom using Welch-Satterthwaite equation
+        let df = (var1 / n1 + var2 / n2).powi(2) / 
+                 ((var1 / n1).powi(2) / (n1 - 1.0) + (var2 / n2).powi(2) / (n2 - 1.0));
+        
+        // Approximate p-value using normal distribution for large df
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let p_value = 2.0 * (1.0 - normal.cdf(t_stat.abs() / (1.0 + 2.0 / df).sqrt()));
+        
+        TestResult {
+            statistic: t_stat,
+            p_value,
+            significant: p_value < (1.0 - self.confidence_level),
+            test_name: "Welch's t-test".to_string(),
+            correction_applied: Some("Adjusted for unequal variances".to_string()),
+        }
+    }
+    
+    /// Trimmed mean t-test (robust to outliers)
+    fn trimmed_mean_t_test(&self, sample1: &[f64], sample2: &[f64], trim_proportion: f64) -> TestResult {
+        let trimmed1 = self.trim_sample(sample1, trim_proportion);
+        let trimmed2 = self.trim_sample(sample2, trim_proportion);
+        
+        // Perform standard t-test on trimmed samples
+        let n1 = trimmed1.len() as f64;
+        let n2 = trimmed2.len() as f64;
+        let mean1 = trimmed1.iter().sum::<f64>() / n1;
+        let mean2 = trimmed2.iter().sum::<f64>() / n2;
+        let var1 = trimmed1.iter().map(|x| (x - mean1).powi(2)).sum::<f64>() / (n1 - 1.0);
+        let var2 = trimmed2.iter().map(|x| (x - mean2).powi(2)).sum::<f64>() / (n2 - 1.0);
+        let pooled_var = ((n1 - 1.0) * var1 + (n2 - 1.0) * var2) / (n1 + n2 - 2.0);
+        let se = (pooled_var * (1.0 / n1 + 1.0 / n2)).sqrt();
+        let t_stat = (mean1 - mean2) / se;
+        let df = n1 + n2 - 2.0;
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let p_value = 2.0 * (1.0 - normal.cdf(t_stat.abs() / (1.0 + 2.0 / df).sqrt()));
+        TestResult {
+            statistic: t_stat,
+            p_value,
+            significant: p_value < (1.0 - self.confidence_level),
+            test_name: "Trimmed Mean t-test".to_string(),
+            correction_applied: Some(format!("{}% trimmed for outlier robustness", (trim_proportion * 100.0) as u32)),
+        }
+    }
+    
+    /// Wilcoxon signed-rank test (one-sample non-parametric)
+    fn wilcoxon_signed_rank_test(&self, sample: &[f64], null_value: f64) -> TestResult {
+        let differences: Vec<f64> = sample.iter().map(|x| x - null_value).collect();
+        let non_zero: Vec<_> = differences.iter().filter(|&&d| d != 0.0).copied().collect();
+        
+        if non_zero.is_empty() {
+            return TestResult {
+                statistic: 0.0,
+                p_value: 1.0,
+                significant: false,
+                test_name: "Wilcoxon Signed-Rank Test".to_string(),
+                correction_applied: Some("All differences are zero".to_string()),
+            };
+        }
+        
+        // Rank absolute differences
+        let mut abs_ranked: Vec<(f64, f64, usize)> = non_zero.iter()
+            .enumerate()
+            .map(|(i, &d)| (d.abs(), d, i))
+            .collect();
+        abs_ranked.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        
+        // Calculate W statistic
+        let mut w_plus = 0.0;
+        let mut w_minus = 0.0;
+        for (rank, (_, diff, _)) in abs_ranked.iter().enumerate() {
+            let r = (rank + 1) as f64;
+            if *diff > 0.0 {
+                w_plus += r;
+            } else {
+                w_minus += r;
+            }
+        }
+        
+        let w = w_plus.min(w_minus);
+        let n = non_zero.len() as f64;
+        
+        // Normal approximation for large samples
+        let mean_w = n * (n + 1.0) / 4.0;
+        let std_w = ((n * (n + 1.0) * (2.0 * n + 1.0)) / 24.0).sqrt();
+        let z = (w - mean_w) / std_w;
+        
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let p_value = 2.0 * (1.0 - normal.cdf(z.abs()));
+        
+        TestResult {
+            statistic: w,
+            p_value,
+            significant: p_value < (1.0 - self.confidence_level),
+            test_name: "Wilcoxon Signed-Rank Test".to_string(),
+            correction_applied: Some("Non-parametric test for normality violation".to_string()),
+        }
+    }
+    
+    /// Trimmed mean one-sample test
+    fn trimmed_mean_one_sample_test(&self, sample: &[f64], null_value: f64, trim_proportion: f64) -> TestResult {
+        let trimmed = self.trim_sample(sample, trim_proportion);
+        let mean = trimmed.iter().sum::<f64>() / trimmed.len() as f64;
+        let var = trimmed.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (trimmed.len() - 1) as f64;
+        let se = (var / trimmed.len() as f64).sqrt();
+        let t_stat = (mean - null_value) / se;
+        let df = trimmed.len() - 1;
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let p_value = 2.0 * (1.0 - normal.cdf(t_stat.abs() / (1.0 + 2.0 / df as f64).sqrt()));
+        TestResult {
+            statistic: t_stat,
+            p_value,
+            significant: p_value < (1.0 - self.confidence_level),
+            test_name: "Trimmed Mean One-Sample Test".to_string(),
+            correction_applied: Some(format!("{}% trimmed for outlier robustness", (trim_proportion * 100.0) as u32)),
+        }
+    }
+    
+    /// Helper function to trim a sample
+    fn trim_sample(&self, sample: &[f64], proportion: f64) -> Vec<f64> {
+        let mut sorted = sample.to_vec();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        
+        let n = sorted.len();
+        let trim_count = (n as f64 * proportion) as usize;
+        
+        if trim_count * 2 >= n {
+            // Can't trim that much
+            return sorted;
+        }
+        
+        sorted[trim_count..n - trim_count].to_vec()
+    }
+    
+    /// Get summary of applied corrections
+    pub fn get_correction_summary(&self) -> String {
+        let violations: Vec<_> = self.assumption_checks.iter()
+            .filter(|a| !a.is_met)
+            .map(|a| a.test_name.clone())
+            .collect();
+        
+        if violations.is_empty() {
+            "No assumption violations detected. Standard test applied.".to_string()
+        } else {
+            format!("Violations detected: {}. Automatic corrections applied.", violations.join(", "))
+        }
+    }
+}
+
 // Multiple Comparison Corrections
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum CorrectionMethod {
@@ -844,7 +1355,7 @@ impl AssumptionChecker {
         results
     }
     
-    /// Check normality using Shapiro-Wilk test approximation
+    /// Check normality using proper statistical tests
     pub fn check_normality(data: &[f64], sample_name: &str) -> AssumptionCheckResult {
         let n = data.len();
         
@@ -858,45 +1369,28 @@ impl AssumptionChecker {
             };
         }
         
-        // Calculate skewness and kurtosis as quick normality indicators
-        let mean = data.iter().sum::<f64>() / n as f64;
-        let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
-        let std_dev = variance.sqrt();
-        
-        let skewness = if std_dev > 0.0 {
-            let sum_cubed = data.iter().map(|x| ((x - mean) / std_dev).powi(3)).sum::<f64>();
-            sum_cubed * n as f64 / ((n - 1) as f64 * (n - 2) as f64)
+        // Choose appropriate test based on sample size
+        let (test_name, p_value) = if n <= 50 {
+            // Use Shapiro-Wilk test for small samples
+            ("Shapiro-Wilk", NormalityTests::shapiro_wilk(data))
         } else {
-            0.0
+            // Use Anderson-Darling test for larger samples
+            ("Anderson-Darling", NormalityTests::anderson_darling(data))
         };
         
-        let kurtosis = if std_dev > 0.0 && n > 3 {
-            let sum_fourth = data.iter().map(|x| ((x - mean) / std_dev).powi(4)).sum::<f64>();
-            let k = sum_fourth * n as f64 * (n + 1) as f64 
-                / ((n - 1) as f64 * (n - 2) as f64 * (n - 3) as f64)
-                - 3.0 * (n - 1) as f64 * (n - 1) as f64 
-                / ((n - 2) as f64 * (n - 3) as f64);
-            k
-        } else {
-            0.0
-        };
-        
-        // Rules of thumb for normality
-        let skewness_ok = skewness.abs() < 2.0;
-        let kurtosis_ok = kurtosis.abs() < 7.0;
-        let is_normal = skewness_ok && kurtosis_ok;
+        let is_normal = p_value > 0.05;
         
         AssumptionCheckResult {
-            test_name: "Normality".to_string(),
+            test_name: format!("{} test", test_name),
             assumption: format!("Normal distribution for {}", sample_name),
             is_met: is_normal,
-            p_value: None,
+            p_value: Some(p_value),
             recommendation: if is_normal {
-                "Data appears approximately normal.".to_string()
+                format!("Data appears normally distributed (p = {:.4})", p_value)
             } else if n < 30 {
-                "Violation detected with small sample. Consider non-parametric test (e.g., Wilcoxon).".to_string()
+                format!("Normality rejected (p = {:.4}). Use non-parametric test (e.g., Wilcoxon)", p_value)
             } else {
-                "Violation detected but sample is large. T-test may still be robust.".to_string()
+                format!("Normality rejected (p = {:.4}) but n={}, t-test may still be robust", p_value, n)
             },
         }
     }

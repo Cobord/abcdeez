@@ -5,6 +5,7 @@ pub mod experiment;
 pub mod gamification;
 pub mod learner;
 pub mod music;
+pub mod preregistration;
 pub mod session;
 pub mod sync;
 pub mod task;

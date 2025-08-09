@@ -97,7 +97,8 @@ impl TerminalApp {
             Print("──────────────────────────────────────────────────\n"),
             Print("  [1] Start New Training Session\n"),
             Print("  [2] View Current Metrics\n"),
-            Print("  [3] About This System\n"),
+            Print("  [3] Research Dashboard (Pre-Registration)\n"),
+            Print("  [4] About This System\n"),
             Print("  [Q] Quit\n\n"),
             Print("Select an option: ")
         )
@@ -290,6 +291,19 @@ impl TerminalApp {
             }
             KeyCode::Char('2') => {
                 self.state = AppState::ViewMetrics;
+                Ok(true)
+            }
+            KeyCode::Char('3') => {
+                // Launch the research dashboard in a separate session
+                terminal::disable_raw_mode()?;
+                execute!(io::stdout(), terminal::LeaveAlternateScreen)?;
+                
+                // Run the research dashboard
+                crate::research_dashboard::run_research_dashboard()?;
+                
+                // Re-enable raw mode and alternate screen when returning
+                terminal::enable_raw_mode()?;
+                execute!(io::stdout(), terminal::EnterAlternateScreen)?;
                 Ok(true)
             }
             KeyCode::Char('q') | KeyCode::Char('Q') => Ok(false),

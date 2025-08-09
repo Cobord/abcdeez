@@ -1,3 +1,4 @@
+use crate::config::LearnerConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -48,10 +49,15 @@ pub struct LearnerModel {
     pub chunk_boundaries: Vec<ChunkBoundary>,
     pub total_practice_time: std::time::Duration,
     pub session_count: usize,
+    pub config: LearnerConfig,
 }
 
 impl LearnerModel {
     pub fn new(learner_id: String, topology: &crate::topology::Topology) -> Self {
+        Self::new_with_config(learner_id, topology, LearnerConfig::adult())
+    }
+    
+    pub fn new_with_config(learner_id: String, topology: &crate::topology::Topology, config: LearnerConfig) -> Self {
         let mut node_embeddings = HashMap::new();
         let mut memory_strengths = HashMap::new();
 
@@ -61,7 +67,7 @@ impl LearnerModel {
                 LatentNodeEmbedding {
                     node_id: node.id.clone(),
                     position: node.position + rand::random::<f64>() * 0.5 - 0.25,
-                    uncertainty: 1.0,
+                    uncertainty: config.initial_uncertainty,
                 },
             );
 
@@ -69,7 +75,7 @@ impl LearnerModel {
                 node.id.clone(),
                 MemoryStrength {
                     node_id: node.id.clone(),
-                    strength: 0.5, // Start at neutral strength
+                    strength: config.initial_memory_strength, // Start at neutral strength
                     last_practice: chrono::Utc::now(),
                 },
             );
@@ -93,7 +99,7 @@ impl LearnerModel {
                 key,
                 OperationProficiency {
                     operation: op,
-                    theta: 0.0, // Start at neutral (50% probability)
+                    theta: config.initial_proficiency,
                     practice_count: 0,
                 },
             );
@@ -130,6 +136,7 @@ impl LearnerModel {
             chunk_boundaries,
             total_practice_time: std::time::Duration::new(0, 0),
             session_count: 0,
+            config,
         }
     }
 
@@ -140,8 +147,10 @@ impl LearnerModel {
         reduce_uncertainty: f64,
     ) {
         if let Some(embedding) = self.node_embeddings.get_mut(node_id) {
-            embedding.position = 0.7 * embedding.position + 0.3 * new_position;
-            embedding.uncertainty *= (1.0 - reduce_uncertainty).max(0.1);
+            let old_weight = self.config.position_update_weight;
+            let new_weight = 1.0 - old_weight;
+            embedding.position = old_weight * embedding.position + new_weight * new_position;
+            embedding.uncertainty *= (1.0 - reduce_uncertainty).max(self.config.min_uncertainty);
         }
     }
 
@@ -156,11 +165,12 @@ impl LearnerModel {
             // 3. Recent performance (adjust based on consistency)
             
             // Base learning rate decreases with practice (power law)
-            let base_rate = 0.3 / (1.0 + prof.practice_count as f64).powf(0.5);
+            let base_rate = self.config.learning_rate_base / (1.0 + prof.practice_count as f64).powf(self.config.learning_rate_decay);
             
             // Adjust based on current proficiency level
             // Learn faster in the middle range, slower at extremes
-            let proficiency_factor = 1.0 - (prof.theta.abs() / 3.0).min(1.0);
+            let theta_range = self.config.theta_bounds.1 - self.config.theta_bounds.0;
+            let proficiency_factor = 1.0 - (prof.theta.abs() / (theta_range / 2.0)).min(1.0);
             
             // Calculate adaptive learning rate
             let learning_rate = (base_rate * (0.5 + proficiency_factor)).max(0.01).min(0.5);
@@ -175,7 +185,7 @@ impl LearnerModel {
             }
             
             // Ensure theta stays within reasonable bounds
-            prof.theta = prof.theta.max(-3.0).min(3.0);
+            prof.theta = prof.theta.max(self.config.theta_bounds.0).min(self.config.theta_bounds.1);
         }
     }
 
@@ -200,9 +210,9 @@ impl LearnerModel {
                 Self::apply_forgetting_curve_static(current_strength, hours_since, decay_rate);
 
             if correct {
-                mem.strength = (decayed_strength + 0.2).min(1.0);
+                mem.strength = (decayed_strength + self.config.memory_update_correct).min(1.0);
             } else {
-                mem.strength = (decayed_strength - 0.1).max(0.0);
+                mem.strength = (decayed_strength + self.config.memory_update_incorrect).max(0.0);
             }
 
             mem.last_practice = now;
@@ -218,7 +228,7 @@ impl LearnerModel {
     }
 
     fn calculate_decay_rate(&self, current_strength: f64) -> f64 {
-        0.05 * (2.0 - current_strength)
+        self.config.memory_decay_rate * (2.0 - current_strength)
     }
 
     fn apply_forgetting_curve(&self, strength: f64, hours_elapsed: f64, decay_rate: f64) -> f64 {
@@ -247,7 +257,7 @@ impl LearnerModel {
                 // Cosine-based edge emphasis: peaks at edges, lowest in middle
                 let edge_emphasis = (std::f64::consts::PI * pos_norm).cos().abs();
                 // Keep boost very small so it doesn't break decay expectations
-                let boost = 1.0 + 0.01 * edge_emphasis; // up to +1%
+                let boost = 1.0 + self.config.edge_emphasis * edge_emphasis;
                 retention = (retention * boost).min(1.0);
             }
 

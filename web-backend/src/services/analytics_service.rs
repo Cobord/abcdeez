@@ -258,6 +258,7 @@ impl AnalyticsService {
             .acquire()
             .await
             .map_err(|e| AppError::DatabaseError(e))?;
+        // Note: "condition" here is the experimental condition label; the learner_id links to user performance
         let participants = sqlx::query(
             "SELECT learner_id, condition FROM experiment_participants WHERE experiment_id = ?",
         )

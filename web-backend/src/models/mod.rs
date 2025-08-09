@@ -1,6 +1,7 @@
 pub mod experiment;
 pub mod gamification;
 pub mod learner;
+pub mod preregistration;
 pub mod response;
 pub mod session;
 pub mod sync;
