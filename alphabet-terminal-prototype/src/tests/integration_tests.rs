@@ -185,7 +185,7 @@ fn test_extended_task_generation() {
     use crate::extended_tasks::ExtendedTaskGenerator;
 
     let topology = Topology::alphabet();
-    let generator = ExtendedTaskGenerator::new(topology);
+    let mut generator = ExtendedTaskGenerator::new(topology);
 
     // Test task generation
     let task = generator.generate_reverse_n_treadmill("M".to_string(), 3, 2);

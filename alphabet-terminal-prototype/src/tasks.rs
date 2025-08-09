@@ -73,15 +73,30 @@ pub struct TaskResponse {
 
 pub struct TaskGenerator {
     pub topology: Topology,
-    rng: rand::rngs::ThreadRng,
+    rng: rand::rngs::StdRng,
+}
+
+impl std::fmt::Debug for TaskGenerator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TaskGenerator")
+            .field("topology", &self.topology)
+            .field("rng", &"StdRng")
+            .finish()
+    }
 }
 
 impl TaskGenerator {
     pub fn new(topology: Topology) -> Self {
-        TaskGenerator {
-            topology,
-            rng: rand::thread_rng(),
-        }
+        Self::with_seed(topology, None)
+    }
+
+    pub fn with_seed(topology: Topology, seed: Option<u64>) -> Self {
+        use rand::SeedableRng;
+        let rng = match seed {
+            Some(s) => rand::rngs::StdRng::seed_from_u64(s),
+            None => rand::rngs::StdRng::from_entropy(),
+        };
+        TaskGenerator { topology, rng }
     }
 
     pub fn generate_task(&mut self, task_type: Option<TaskType>) -> Task {
@@ -168,7 +183,7 @@ impl TaskGenerator {
         }
     }
 
-    fn generate_successor(&self, item: String) -> Task {
+    fn generate_successor(&mut self, item: String) -> Task {
         let prompt = format!("What comes after '{}'?", item);
         let node = self.topology.get_node_by_label(&item).unwrap();
         let successor_id = self.topology.get_successor(&node.id);
@@ -179,7 +194,7 @@ impl TaskGenerator {
             .unwrap_or("None".to_string());
 
         let mut options = self.generate_options(&correct_answer, 4);
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
 
         Task {
             task_type: TaskType::Successor { item },
@@ -191,7 +206,7 @@ impl TaskGenerator {
         }
     }
 
-    fn generate_predecessor(&self, item: String) -> Task {
+    fn generate_predecessor(&mut self, item: String) -> Task {
         let prompt = format!("What comes before '{}'?", item);
         let node = self.topology.get_node_by_label(&item).unwrap();
         let predecessor_id = self.topology.get_predecessor(&node.id);
@@ -202,7 +217,7 @@ impl TaskGenerator {
             .unwrap_or("None".to_string());
 
         let mut options = self.generate_options(&correct_answer, 4);
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
 
         Task {
             task_type: TaskType::Predecessor { item },
@@ -214,7 +229,7 @@ impl TaskGenerator {
         }
     }
 
-    fn generate_k_jump(&self, start: String, k: i32) -> Task {
+    fn generate_k_jump(&mut self, start: String, k: i32) -> Task {
         let direction = if k > 0 { "after" } else { "before" };
         let prompt = format!("What is {} positions {} '{}'?", k.abs(), direction, start);
 
@@ -230,7 +245,7 @@ impl TaskGenerator {
         if !options.contains(&"Out of bounds".to_string()) {
             options.push("Out of bounds".to_string());
         }
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
 
         Task {
             task_type: TaskType::KJump { start, k },
@@ -242,11 +257,11 @@ impl TaskGenerator {
         }
     }
 
-    fn generate_segment(&self, start: String, count: usize, reverse: bool) -> Task {
+    fn generate_segment(&mut self, start: String, count: usize, reverse: bool) -> Task {
         // Enhanced segment recital task based on PAPER.md
         // Can ask for items before, after, or from a starting point
-        let mut rng = rand::thread_rng();
-        let recital_type = rng.gen_range(0..3);
+        // Use the internal RNG instead of thread_rng
+        let recital_type = self.rng.gen_range(0..3);
 
         let (prompt, correct_answer, difficulty_bonus) = match recital_type {
             0 => {
@@ -321,7 +336,7 @@ impl TaskGenerator {
         }
     }
 
-    fn generate_index(&self, item: String) -> Task {
+    fn generate_index(&mut self, item: String) -> Task {
         let prompt = format!("What position (1-based) is '{}'?", item);
         let node = self.topology.get_node_by_label(&item).unwrap();
         let position = self.topology.node_map[&node.id] + 1;
@@ -334,7 +349,7 @@ impl TaskGenerator {
             (position + 2).to_string(),
         ];
         options.dedup();
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
 
         Task {
             task_type: TaskType::Index { item },
@@ -346,7 +361,7 @@ impl TaskGenerator {
         }
     }
 
-    fn generate_missing_item(&self, before: String, after: String) -> Task {
+    fn generate_missing_item(&mut self, before: String, after: String) -> Task {
         let prompt = format!("What comes between '{}' and '{}'?", before, after);
 
         let before_node = self.topology.get_node_by_label(&before);
@@ -368,7 +383,7 @@ impl TaskGenerator {
         let mut options = self.generate_options(&correct_answer, 3);
         options.push("Not adjacent".to_string());
         options.dedup();
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
 
         Task {
             task_type: TaskType::MissingItem { before, after },
@@ -380,7 +395,7 @@ impl TaskGenerator {
         }
     }
 
-    fn generate_shortest_distance(&self, from: String, to: String) -> Task {
+    fn generate_shortest_distance(&mut self, from: String, to: String) -> Task {
         let prompt = format!("What is the shortest distance from '{}' to '{}'?", from, to);
 
         let from_node = self.topology.get_node_by_label(&from);
@@ -401,7 +416,7 @@ impl TaskGenerator {
             (distance + 2).to_string(),
         ];
         options.dedup();
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
 
         Task {
             task_type: TaskType::ShortestDistance { from, to },
@@ -524,7 +539,7 @@ impl TaskGenerator {
         }
     }
 
-    fn generate_options(&self, correct: &str, count: usize) -> Vec<String> {
+    fn generate_options(&mut self, correct: &str, count: usize) -> Vec<String> {
         let mut options = vec![correct.to_string()];
         let all_labels: Vec<String> = self
             .topology
@@ -534,9 +549,9 @@ impl TaskGenerator {
             .filter(|l| l != correct)
             .collect();
 
-        let mut rng = rand::thread_rng();
+        // Use the internal RNG instead of thread_rng
         for _ in 1..count {
-            if let Some(label) = all_labels.choose(&mut rng) {
+            if let Some(label) = all_labels.choose(&mut self.rng) {
                 if !options.contains(label) {
                     options.push(label.clone());
                 }

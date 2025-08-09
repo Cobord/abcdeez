@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 /// Bayesian Expected Information Gain implementation for adaptive task selection
 /// Based on the paper's equation: EIG = E[KL(p(θ|D_t) || p(θ|D_t, Response to q))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct BayesianLearnerModel {
     /// Posterior distributions for node positions
     pub node_positions: HashMap<String, PosteriorDistribution>,
@@ -21,6 +21,41 @@ pub struct BayesianLearnerModel {
     pub confusability: HashMap<(String, String), PosteriorDistribution>,
     /// Memory strength posteriors
     pub memory_strengths: HashMap<String, PosteriorDistribution>,
+    /// Seeded RNG for reproducible sampling
+    #[serde(skip)]
+    rng: rand::rngs::StdRng,
+}
+
+impl<'de> serde::Deserialize<'de> for BayesianLearnerModel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct BayesianLearnerModelData {
+            node_positions: HashMap<String, PosteriorDistribution>,
+            operation_proficiencies: HashMap<String, PosteriorDistribution>,
+            chunk_boundaries: Vec<ChunkBoundaryPosterior>,
+            response_history: Vec<ResponseData>,
+            topology: crate::topology::Topology,
+            confusability: HashMap<(String, String), PosteriorDistribution>,
+            memory_strengths: HashMap<String, PosteriorDistribution>,
+        }
+
+        let data = BayesianLearnerModelData::deserialize(deserializer)?;
+        
+        use rand::SeedableRng;
+        Ok(BayesianLearnerModel {
+            node_positions: data.node_positions,
+            operation_proficiencies: data.operation_proficiencies,
+            chunk_boundaries: data.chunk_boundaries,
+            response_history: data.response_history,
+            topology: data.topology,
+            confusability: data.confusability,
+            memory_strengths: data.memory_strengths,
+            rng: rand::rngs::StdRng::from_entropy(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,6 +187,10 @@ impl SampledModel {
 
 impl BayesianLearnerModel {
     pub fn new(topology: &crate::topology::Topology) -> Self {
+        Self::with_seed(topology, None)
+    }
+
+    pub fn with_seed(topology: &crate::topology::Topology, seed: Option<u64>) -> Self {
         let mut node_positions = HashMap::new();
         let mut operation_proficiencies = HashMap::new();
         let mut memory_strengths = HashMap::new();
@@ -196,6 +235,12 @@ impl BayesianLearnerModel {
             _ => vec![],
         };
 
+        use rand::SeedableRng;
+        let rng = match seed {
+            Some(s) => rand::rngs::StdRng::seed_from_u64(s),
+            None => rand::rngs::StdRng::from_entropy(),
+        };
+        
         BayesianLearnerModel {
             node_positions,
             operation_proficiencies,
@@ -204,12 +249,13 @@ impl BayesianLearnerModel {
             topology: topology.clone(),
             confusability: HashMap::new(),
             memory_strengths,
+            rng,
         }
     }
 
     /// Calculate Expected Information Gain for a given task using Monte Carlo simulation
     /// EIG = E[KL(p(θ|D_t) || p(θ|D_t, Response to q))]
-    pub fn calculate_eig(&self, task: &crate::tasks::Task) -> f64 {
+    pub fn calculate_eig(&mut self, task: &crate::tasks::Task) -> f64 {
         // Use adaptive sampling for better convergence
         let (eig, _samples_used) = self.adaptive_monte_carlo_eig(task);
         
@@ -221,19 +267,19 @@ impl BayesianLearnerModel {
 
     /// Monte Carlo simulation for Expected Information Gain
     /// Samples from the posterior predictive distribution
-    pub fn monte_carlo_eig(&self, task: &crate::tasks::Task, n_samples: usize) -> f64 {
+    pub fn monte_carlo_eig(&mut self, task: &crate::tasks::Task, n_samples: usize) -> f64 {
         use rand::prelude::*;
 
-        let mut rng = thread_rng();
+        // Use the seeded RNG instead of thread_rng
         let mut total_eig = 0.0;
 
         for _ in 0..n_samples {
             // Sample from current posterior beliefs
-            let sampled_model = self.sample_from_posterior(&mut rng);
+            let sampled_model = self.sample_from_posterior();
 
             // Simulate response given sampled parameters
             let response_prob = sampled_model.predict_success_probability(task);
-            let simulated_correct = rng.gen::<f64>() < response_prob;
+            let simulated_correct = self.rng.gen::<f64>() < response_prob;
 
             // Calculate KL divergence for this simulated outcome
             let kl = if simulated_correct {
@@ -249,24 +295,24 @@ impl BayesianLearnerModel {
     }
 
     /// Adaptive Monte Carlo EIG with convergence checking
-    pub fn adaptive_monte_carlo_eig(&self, task: &crate::tasks::Task) -> (f64, usize) {
+    pub fn adaptive_monte_carlo_eig(&mut self, task: &crate::tasks::Task) -> (f64, usize) {
         const MIN_SAMPLES: usize = 100;
         const MAX_SAMPLES: usize = 10000;
         const RELATIVE_ERROR_THRESHOLD: f64 = 0.01; // 1% relative error
 
         use rand::prelude::*;
-        let mut rng = thread_rng();
+        // Use the seeded RNG instead of thread_rng
 
         let mut running_mean = 0.0;
         let mut running_var = 0.0;
 
         for i in 0..MAX_SAMPLES {
             // Sample from current posterior beliefs
-            let sampled_model = self.sample_from_posterior(&mut rng);
+            let sampled_model = self.sample_from_posterior();
 
             // Simulate response given sampled parameters
             let response_prob = sampled_model.predict_success_probability(task);
-            let simulated_correct = rng.gen::<f64>() < response_prob;
+            let simulated_correct = self.rng.gen::<f64>() < response_prob;
 
             // Calculate KL divergence for this simulated outcome
             let kl = if simulated_correct {
@@ -301,21 +347,21 @@ impl BayesianLearnerModel {
     }
 
     /// Sample a model from the current posterior distributions
-    fn sample_from_posterior(&self, rng: &mut impl Rng) -> SampledModel {
+    fn sample_from_posterior(&mut self) -> SampledModel {
         use rand_distr::Normal;
 
         let mut sampled_positions = HashMap::new();
         for (key, posterior) in &self.node_positions {
             let dist = Normal::new(posterior.mean, posterior.variance.sqrt())
                 .unwrap_or(Normal::new(0.0, 1.0).unwrap());
-            sampled_positions.insert(key.clone(), dist.sample(rng));
+            sampled_positions.insert(key.clone(), dist.sample(&mut self.rng));
         }
 
         let mut sampled_proficiencies = HashMap::new();
         for (key, posterior) in &self.operation_proficiencies {
             let dist = Normal::new(posterior.mean, posterior.variance.sqrt())
                 .unwrap_or(Normal::new(0.0, 1.0).unwrap());
-            sampled_proficiencies.insert(key.clone(), dist.sample(rng));
+            sampled_proficiencies.insert(key.clone(), dist.sample(&mut self.rng));
         }
 
         SampledModel {
@@ -745,7 +791,7 @@ impl BayesianLearnerModel {
 
     /// Get tasks ranked by Expected Information Gain
     pub fn rank_tasks_by_eig(
-        &self,
+        &mut self,
         tasks: Vec<crate::tasks::Task>,
     ) -> Vec<(crate::tasks::Task, f64)> {
         let mut ranked: Vec<(crate::tasks::Task, f64)> = tasks
@@ -849,14 +895,19 @@ impl BayesianLearnerModel {
 /// Monte Carlo estimation of Expected Information Gain
 pub struct MonteCarloEIG {
     samples: usize,
+    rng: rand::rngs::StdRng,
 }
 
 impl MonteCarloEIG {
     pub fn new(samples: usize) -> Self {
-        MonteCarloEIG { samples }
+        use rand::SeedableRng;
+        MonteCarloEIG { 
+            samples,
+            rng: rand::rngs::StdRng::from_entropy(),
+        }
     }
 
-    pub fn estimate_eig(&self, model: &BayesianLearnerModel, task: &crate::tasks::Task) -> f64 {
+    pub fn estimate_eig(&mut self, model: &BayesianLearnerModel, task: &crate::tasks::Task) -> f64 {
         let mut total_gain = 0.0;
 
         for _ in 0..self.samples {
@@ -879,7 +930,7 @@ impl MonteCarloEIG {
         total_gain / self.samples as f64
     }
 
-    fn sample_from_posterior(&self, model: &BayesianLearnerModel) -> SampledParameters {
+    fn sample_from_posterior(&mut self, model: &BayesianLearnerModel) -> SampledParameters {
         let mut sampled = SampledParameters::new();
 
         // Sample from each posterior distribution
@@ -888,7 +939,7 @@ impl MonteCarloEIG {
             let normal = RandNormal::new(dist.mean, dist.variance.sqrt()).unwrap();
             sampled
                 .node_positions
-                .insert(key.clone(), normal.sample(&mut rand::thread_rng()));
+                .insert(key.clone(), normal.sample(&mut self.rng));
         }
 
         for (key, dist) in &model.operation_proficiencies {
@@ -896,7 +947,7 @@ impl MonteCarloEIG {
             let normal = RandNormal::new(dist.mean, dist.variance.sqrt()).unwrap();
             sampled
                 .operation_proficiencies
-                .insert(key.clone(), normal.sample(&mut rand::thread_rng()));
+                .insert(key.clone(), normal.sample(&mut self.rng));
         }
 
         sampled
@@ -1070,13 +1121,13 @@ impl BayesianLearnerModel {
     }
 
     /// Calculate DIC using posterior samples
-    pub fn calculate_dic(&self, n_samples: usize) -> DIC {
-        let mut rng = thread_rng();
+    pub fn calculate_dic(&mut self, n_samples: usize) -> DIC {
+        // Use the seeded RNG instead of thread_rng
         let mut deviances = Vec::new();
 
         // Sample from posterior and calculate deviances
         for _ in 0..n_samples {
-            let sampled_model = self.sample_from_posterior(&mut rng);
+            let sampled_model = self.sample_from_posterior();
             let deviance = -2.0 * self.log_likelihood_with_params(&sampled_model);
             deviances.push(deviance);
         }
@@ -1091,13 +1142,13 @@ impl BayesianLearnerModel {
     }
 
     /// Calculate WAIC using posterior samples
-    pub fn calculate_waic(&self, n_samples: usize) -> WAIC {
-        let mut rng = thread_rng();
+    pub fn calculate_waic(&mut self, n_samples: usize) -> WAIC {
+        // Use the seeded RNG instead of thread_rng
         let mut log_likelihoods = vec![Vec::new(); self.response_history.len()];
 
         // Sample from posterior
         for _ in 0..n_samples {
-            let sampled_model = self.sample_from_posterior(&mut rng);
+            let sampled_model = self.sample_from_posterior();
 
             // Calculate log-likelihood for each observation
             for (i, response) in self.response_history.iter().enumerate() {
@@ -1156,22 +1207,23 @@ impl BayesianLearnerModel {
     }
 
     /// Posterior Predictive Check: Generate replicated data and compare with observed
-    pub fn posterior_predictive_check(&self, n_replications: usize) -> PosteriorPredictiveCheck {
-        let mut rng = thread_rng();
+    pub fn posterior_predictive_check(&mut self, n_replications: usize) -> PosteriorPredictiveCheck {
+        // Use the seeded RNG instead of thread_rng
         let mut replicated_data = Vec::new();
 
         for _ in 0..n_replications {
-            let sampled_model = self.sample_from_posterior(&mut rng);
+            let sampled_model = self.sample_from_posterior();
             let mut replicated_responses = Vec::new();
 
             // Generate replicated responses for each observed task
-            for response in &self.response_history {
+            let response_history_copy = self.response_history.clone();
+            for response in &response_history_copy {
                 let prob = self.predict_with_params(&sampled_model, &response.task);
-                let replicated_correct = rng.gen::<f64>() < prob;
+                let replicated_correct = self.rng.gen::<f64>() < prob;
 
                 // Simulate response time using Ex-Gaussian
                 let rt_mean = 1000.0 + response.task.difficulty * 500.0;
-                let rt = self.sample_response_time(rt_mean, &mut rng);
+                let rt = self.sample_response_time(rt_mean);
 
                 replicated_responses.push(ResponseData {
                     task: response.task.clone(),
@@ -1198,7 +1250,7 @@ impl BayesianLearnerModel {
     }
 
     /// Sample response time from Ex-Gaussian distribution
-    fn sample_response_time(&self, mean: f64, rng: &mut impl Rng) -> f64 {
+    fn sample_response_time(&mut self, mean: f64) -> f64 {
         use rand_distr::{Exp, Normal};
 
         // Ex-Gaussian parameters
@@ -1210,8 +1262,8 @@ impl BayesianLearnerModel {
         let normal = Normal::new(mu, sigma).unwrap_or(Normal::new(1000.0, 150.0).unwrap());
         let exp = Exp::new(1.0 / tau).unwrap_or(Exp::new(0.001).unwrap());
 
-        let normal_sample: f64 = normal.sample(rng);
-        let exp_sample: f64 = exp.sample(rng);
+        let normal_sample: f64 = normal.sample(&mut self.rng);
+        let exp_sample: f64 = exp.sample(&mut self.rng);
 
         (normal_sample + exp_sample).max(100.0) // Minimum 100ms RT
     }

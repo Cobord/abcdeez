@@ -2,6 +2,7 @@ use crate::learner::OperationType;
 use crate::tasks::{Task, TaskType};
 use crate::topology::Topology;
 use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -39,16 +40,27 @@ pub struct MacroDiscoverySystem {
     macro_usage_history: Vec<(String, usize)>, // (macro_name, timestamp)
     pattern_frequency: HashMap<Vec<String>, usize>,
     abstraction_enabled: bool,
+    rng: rand::rngs::StdRng,
 }
 
 impl MacroDiscoverySystem {
     pub fn new(topology: Topology) -> Self {
+        Self::with_seed(topology, None)
+    }
+
+    pub fn with_seed(topology: Topology, seed: Option<u64>) -> Self {
+        let rng = match seed {
+            Some(s) => rand::rngs::StdRng::seed_from_u64(s),
+            None => rand::rngs::StdRng::from_entropy(),
+        };
+        
         let mut system = MacroDiscoverySystem {
             topology,
             discovered_macros: HashMap::new(),
             macro_usage_history: Vec::new(),
             pattern_frequency: HashMap::new(),
             abstraction_enabled: true,
+            rng,
         };
 
         // Initialize with common patterns
@@ -287,17 +299,17 @@ impl MacroDiscoverySystem {
     }
 
     /// Generate a task that teaches macro discovery
-    pub fn generate_macro_discovery_task(&self) -> Task {
+    pub fn generate_macro_discovery_task(&mut self) -> Task {
         // Select a random discovered macro or create a new pattern
         let macros: Vec<_> = self.discovered_macros.values().collect();
 
-        let (pattern, macro_name) = if !macros.is_empty() && rand::random::<bool>() {
-            let macro_def = macros[rand::random::<usize>() % macros.len()];
+        let (pattern, macro_name) = if !macros.is_empty() && self.rng.gen::<bool>() {
+            let macro_def = macros[self.rng.gen_range(0..macros.len())];
             (macro_def.pattern.clone(), macro_def.name.clone())
         } else {
             // Generate a new pattern for discovery
-            let start_idx = rand::random::<usize>() % (self.topology.nodes.len() - 4);
-            let pattern_type = rand::random::<usize>() % 3;
+            let start_idx = self.rng.gen_range(0..(self.topology.nodes.len() - 4));
+            let pattern_type = self.rng.gen_range(0..3);
 
             let pattern = match pattern_type {
                 0 => {
@@ -344,7 +356,7 @@ impl MacroDiscoverySystem {
             "Random sequence".to_string(),
         ];
         options.dedup();
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
 
         Task {
             task_type: TaskType::Segment {
@@ -464,13 +476,13 @@ impl MacroDiscoverySystem {
     }
 
     /// Generate a task that uses macro application
-    pub fn generate_macro_application_task(&self) -> Task {
+    pub fn generate_macro_application_task(&mut self) -> Task {
         let macros: Vec<_> = self.discovered_macros.values().collect();
         if macros.is_empty() {
             return self.generate_macro_discovery_task();
         }
 
-        let macro_def = macros[rand::random::<usize>() % macros.len()];
+        let macro_def = macros[self.rng.gen_range(0..macros.len())];
         let start_options: Vec<_> = self
             .topology
             .nodes
@@ -479,7 +491,7 @@ impl MacroDiscoverySystem {
             .map(|n| n.label.clone())
             .collect();
 
-        let start = &start_options[rand::random::<usize>() % start_options.len()];
+        let start = &start_options[self.rng.gen_range(0..start_options.len())];
 
         let prompt = format!(
             "Apply the '{}' macro starting from '{}'). What is the resulting sequence?",
@@ -508,14 +520,14 @@ impl MacroDiscoverySystem {
             .topology
             .nodes
             .iter()
-            .skip(rand::random::<usize>() % 10)
+            .skip(self.rng.gen_range(0..10))
             .take(macro_def.pattern.len())
             .map(|n| n.label.clone())
             .collect::<Vec<_>>();
         options.push(random_seq.join(", "));
 
         options.dedup();
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
 
         Task {
             task_type: TaskType::Segment {

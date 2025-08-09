@@ -713,7 +713,7 @@ impl NormalityTests {
             sum += (2 * i + 1) as f64 * (f_i.ln() + (1.0 - f_ni).ln());
         }
         
-        let a_squared = -n as f64 - sum / n as f64;
+        let a_squared = -(n as f64) - sum / n as f64;
         
         // Adjust for sample size
         let a_squared_star = a_squared * (1.0 + 0.75 / n as f64 + 2.25 / (n * n) as f64);
@@ -761,7 +761,7 @@ impl NormalityTests {
         
         // Calculate KS statistic
         let normal = Normal::new(0.0, 1.0).unwrap();
-        let mut d_max = 0.0;
+        let mut d_max = 0.0f64;
         
         for i in 0..n {
             let f_empirical = (i + 1) as f64 / n as f64;

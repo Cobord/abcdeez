@@ -1,0 +1,108 @@
+# Multi-stage build for Xilem Cross-Platform App
+FROM rust:1.75 as builder
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libasound2-dev \
+    libxcb1-dev \
+    libxcb-render0-dev \
+    libxcb-shape0-dev \
+    libxcb-xfixes0-dev \
+    libxkbcommon-dev \
+    libgtk-3-dev \
+    sqlite3 \
+    libsqlite3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /usr/src/app
+
+# Copy manifest files
+COPY Cargo.toml Cargo.lock ./
+COPY xilem-cross-platform/app/Cargo.toml ./xilem-cross-platform/app/
+COPY alphabet-terminal-prototype/Cargo.toml ./alphabet-terminal-prototype/
+
+# Copy source code
+COPY xilem-cross-platform/app/src ./xilem-cross-platform/app/src
+COPY alphabet-terminal-prototype/src ./alphabet-terminal-prototype/src
+
+# Build the application
+WORKDIR /usr/src/app/xilem-cross-platform/app
+RUN cargo build --release
+
+# Runtime stage with GUI support
+FROM debian:bookworm-slim
+
+# Install runtime dependencies for GUI applications
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    sqlite3 \
+    libasound2 \
+    libxcb1 \
+    libxcb-render0 \
+    libxcb-shape0 \
+    libxcb-xfixes0 \
+    libxkbcommon0 \
+    libgtk-3-0 \
+    libglib2.0-0 \
+    libfontconfig1 \
+    libfreetype6 \
+    xvfb \
+    x11vnc \
+    fluxbox \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN useradd -r -u 1001 app
+
+# Create app directory
+WORKDIR /app
+
+# Copy binary from builder stage
+COPY --from=builder /usr/src/app/xilem-cross-platform/app/target/release/graph_learning_app /app/xilem-app
+
+# Create data directory
+RUN mkdir -p /app/data /app/audio_recordings /app/irb_documents && chown -R app:app /app
+
+# Copy configuration files if they exist
+COPY xilem-cross-platform/app/config.toml /app/ || echo "No config file found"
+
+# Switch to app user
+USER app
+
+# Set environment variables
+ENV RUST_LOG=info
+ENV DISPLAY=:99
+
+# Create startup script for headless operation
+COPY <<EOF /app/start.sh
+#!/bin/bash
+# Start Xvfb for headless GUI operation
+Xvfb :99 -screen 0 1024x768x24 &
+sleep 2
+
+# Start window manager
+fluxbox &
+sleep 1
+
+# Start the application
+exec ./xilem-app
+EOF
+
+# Make startup script executable
+USER root
+RUN chmod +x /app/start.sh
+USER app
+
+# Expose VNC port for remote GUI access (optional)
+EXPOSE 5900
+
+# Health check - check if process is running
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD pgrep xilem-app || exit 1
+
+# Run the application
+CMD ["/app/start.sh"]

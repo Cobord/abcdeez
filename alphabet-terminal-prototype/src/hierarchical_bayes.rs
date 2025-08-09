@@ -2,6 +2,7 @@ use crate::learner::OperationType;
 use crate::tasks::Task;
 use crate::topology::Topology;
 use rand::prelude::*;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use statrs::distribution::{Beta, Continuous, Gamma, Normal};
 use std::collections::HashMap;
@@ -64,6 +65,7 @@ pub struct HierarchicalBayesianModel {
     pub individual_models: HashMap<String, IndividualParameters>,
     pub item_bank: HashMap<String, ItemParameters>,
     pub data_points: Vec<ResponseData>,
+    rng: rand::rngs::StdRng,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,6 +88,15 @@ pub struct ResponseData {
 
 impl HierarchicalBayesianModel {
     pub fn new(_topology: &Topology) -> Self {
+        Self::with_seed(_topology, None)
+    }
+
+    pub fn with_seed(_topology: &Topology, seed: Option<u64>) -> Self {
+        let rng = match seed {
+            Some(s) => rand::rngs::StdRng::seed_from_u64(s),
+            None => rand::rngs::StdRng::from_entropy(),
+        };
+        
         let hyperparameters = Hyperparameters {
             mu_theta: 0.0,
             sigma_theta: 1.0,
@@ -110,6 +121,7 @@ impl HierarchicalBayesianModel {
             individual_models: HashMap::new(),
             item_bank: HashMap::new(),
             data_points: Vec::new(),
+            rng,
         }
     }
 
@@ -126,7 +138,6 @@ impl HierarchicalBayesianModel {
     /// Add a new learner to the model
     pub fn add_learner(&mut self, learner_id: String) -> IndividualParameters {
         // Sample from population distribution
-        let mut rng = thread_rng();
         let ability_dist = Normal::new(
             self.population_parameters.mean_ability,
             self.population_parameters.variance_ability.sqrt(),
@@ -139,8 +150,8 @@ impl HierarchicalBayesianModel {
         )
         .unwrap();
 
-        let ability = ability_dist.sample(&mut rng);
-        let learning_rate = learning_rate_dist.sample(&mut rng).max(0.001).min(1.0);
+        let ability = ability_dist.sample(&mut self.rng);
+        let learning_rate = learning_rate_dist.sample(&mut self.rng).max(0.001).min(1.0);
 
         // Initialize operation-specific abilities
         let mut operation_abilities = HashMap::new();
@@ -148,7 +159,7 @@ impl HierarchicalBayesianModel {
             let op_ability_dist = Normal::new(ability, 0.5).unwrap();
             operation_abilities.insert(
                 op.clone(),
-                op_ability_dist.sample(&mut rng) - pop_difficulty,
+                op_ability_dist.sample(&mut self.rng) - pop_difficulty,
             );
         }
 
@@ -345,14 +356,13 @@ impl HierarchicalBayesianModel {
     }
 
     /// Sample from Dirichlet distribution
-    fn sample_dirichlet(&self, alpha: &[f64]) -> Vec<f64> {
-        let mut rng = thread_rng();
+    fn sample_dirichlet(&mut self, alpha: &[f64]) -> Vec<f64> {
         let mut samples = Vec::new();
 
         // Sample from Gamma distributions
         for &a in alpha {
             let gamma = Gamma::new(a, 1.0).unwrap();
-            samples.push(gamma.sample(&mut rng));
+            samples.push(gamma.sample(&mut self.rng));
         }
 
         // Normalize
@@ -363,25 +373,24 @@ impl HierarchicalBayesianModel {
     /// Perform MCMC sampling for posterior inference
     pub fn mcmc_sample(&mut self, n_iterations: usize) -> Vec<MCMCSample> {
         let mut samples = Vec::new();
-        let mut rng = thread_rng();
 
         for _ in 0..n_iterations {
             // Sample hyperparameters
-            self.sample_hyperparameters(&mut rng);
+            self.sample_hyperparameters();
 
             // Sample population parameters
-            self.sample_population_parameters(&mut rng);
+            self.sample_population_parameters();
 
             // Sample individual parameters
             let learner_ids: Vec<String> = self.individual_models.keys().cloned().collect();
             for learner_id in learner_ids {
-                self.sample_individual_parameters_by_id(&learner_id, &mut rng);
+                self.sample_individual_parameters_by_id(&learner_id);
             }
 
             // Sample item parameters
             let item_ids: Vec<String> = self.item_bank.keys().cloned().collect();
             for item_id in item_ids {
-                self.sample_item_parameters_by_id(&item_id, &mut rng);
+                self.sample_item_parameters_by_id(&item_id);
             }
 
             // Store sample
@@ -391,34 +400,34 @@ impl HierarchicalBayesianModel {
         samples
     }
 
-    fn sample_hyperparameters(&mut self, rng: &mut ThreadRng) {
+    fn sample_hyperparameters(&mut self) {
         // Metropolis-Hastings for hyperparameters
         let proposal_std = 0.1;
 
         // Sample mu_theta
         let current = self.hyperparameters.mu_theta;
-        let proposal = Normal::new(current, proposal_std).unwrap().sample(rng);
+        let proposal = Normal::new(current, proposal_std).unwrap().sample(&mut self.rng);
         let log_ratio = self.log_posterior_hyperparameter(proposal, "mu_theta")
             - self.log_posterior_hyperparameter(current, "mu_theta");
 
-        if rng.gen::<f64>().ln() < log_ratio {
+        if self.rng.gen::<f64>().ln() < log_ratio {
             self.hyperparameters.mu_theta = proposal;
         }
 
         // Sample sigma_theta (must be positive)
         let current = self.hyperparameters.sigma_theta;
-        let proposal = (Normal::new(current, proposal_std).unwrap().sample(rng))
+        let proposal = (Normal::new(current, proposal_std).unwrap().sample(&mut self.rng))
             .abs()
             .max(0.1);
         let log_ratio = self.log_posterior_hyperparameter(proposal, "sigma_theta")
             - self.log_posterior_hyperparameter(current, "sigma_theta");
 
-        if rng.gen::<f64>().ln() < log_ratio {
+        if self.rng.gen::<f64>().ln() < log_ratio {
             self.hyperparameters.sigma_theta = proposal;
         }
     }
 
-    fn sample_population_parameters(&mut self, rng: &mut ThreadRng) {
+    fn sample_population_parameters(&mut self) {
         // Gibbs sampling for population parameters
         if self.individual_models.is_empty() {
             return;
@@ -438,7 +447,7 @@ impl HierarchicalBayesianModel {
                 + self.hyperparameters.mu_theta / self.hyperparameters.sigma_theta.powi(2));
 
         let dist = Normal::new(posterior_mean, posterior_var.sqrt()).unwrap();
-        self.population_parameters.mean_ability = dist.sample(rng);
+        self.population_parameters.mean_ability = dist.sample(&mut self.rng);
 
         // Sample variance (inverse gamma)
         let alpha = n / 2.0 + 1.0;
@@ -449,10 +458,10 @@ impl HierarchicalBayesianModel {
             / 2.0;
 
         let gamma = Gamma::new(alpha, 1.0 / beta).unwrap();
-        self.population_parameters.variance_ability = 1.0 / gamma.sample(rng);
+        self.population_parameters.variance_ability = 1.0 / gamma.sample(&mut self.rng);
     }
 
-    fn sample_individual_parameters_by_id(&mut self, learner_id: &str, rng: &mut ThreadRng) {
+    fn sample_individual_parameters_by_id(&mut self, learner_id: &str) {
         // Sample ability
         let responses: Vec<_> = self
             .data_points
@@ -488,7 +497,7 @@ impl HierarchicalBayesianModel {
             // Metropolis step
             let proposal_std = 0.2;
             let current = self.individual_models[learner_id].ability;
-            let proposal = Normal::new(current, proposal_std).unwrap().sample(rng);
+            let proposal = Normal::new(current, proposal_std).unwrap().sample(&mut self.rng);
 
             let log_prior_ratio = prior_dist.ln_pdf(proposal) - prior_dist.ln_pdf(current);
 
@@ -511,7 +520,7 @@ impl HierarchicalBayesianModel {
 
             let log_ratio = new_log_likelihood - log_likelihood + log_prior_ratio;
 
-            if rng.gen::<f64>().ln() >= log_ratio {
+            if self.rng.gen::<f64>().ln() >= log_ratio {
                 self.individual_models.get_mut(learner_id).unwrap().ability = old_ability;
                 // Reject proposal
             }
@@ -533,7 +542,7 @@ impl HierarchicalBayesianModel {
         }
     }
 
-    fn sample_item_parameters_by_id(&mut self, item_id: &str, rng: &mut ThreadRng) {
+    fn sample_item_parameters_by_id(&mut self, item_id: &str) {
         // Sample difficulty
         let responses: Vec<_> = self
             .data_points
@@ -551,7 +560,7 @@ impl HierarchicalBayesianModel {
             let beta = n_total - n_correct + 1.0;
 
             let beta_dist = Beta::new(alpha, beta).unwrap();
-            let p_correct = beta_dist.sample(rng);
+            let p_correct = beta_dist.sample(&mut self.rng);
 
             // Convert to difficulty (logit scale)
             if let Some(item) = self.item_bank.get_mut(item_id) {

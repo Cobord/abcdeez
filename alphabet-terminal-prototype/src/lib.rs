@@ -54,7 +54,7 @@ pub use ab_testing::{ABTestFramework, ABTest, TestVariant, ABTestResults};
 pub use adaptive::AdaptiveScheduler;
 pub use audio_recording::{AudioRecorder, AudioSession, ThinkAloudAnalyzer, ThinkAloudSegment, AudioMetrics};
 pub use bayesian::{BayesianLearnerModel, ResponseData};
-pub use citation_manager::{CitationManager, Reference, MethodologyReport, BibliographyStyle, BibliographyFormat};
+pub use citation_manager::{CitationManager, Reference, Author, ReferenceType, Publication, MethodologyReport, BibliographyStyle, BibliographyFormat};
 pub use error::{Error, Result};
 pub use experimental_design::{ExperimentalDesign, ExperimentalDesigner, CounterbalancingMethod, RandomizationType};
 pub use export::{LearnerDataExport, PopulationAnalyzer};

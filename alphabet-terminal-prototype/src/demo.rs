@@ -211,7 +211,7 @@ pub fn demonstrate_eig() {
         })),
     ];
 
-    let bayesian_model = scheduler.get_bayesian_model();
+    let bayesian_model = scheduler.get_bayesian_model_mut();
     let ranked = bayesian_model.rank_tasks_by_eig(candidates);
 
     println!("Tasks ranked by Expected Information Gain:");
@@ -515,7 +515,7 @@ pub fn demonstrate_extended_tasks() {
     println!("═══════════════════════════════════════════════════\n");
 
     let topology = crate::topology::Topology::alphabet();
-    let ext_gen = crate::extended_tasks::ExtendedTaskGenerator::new(topology.clone());
+    let mut ext_gen = crate::extended_tasks::ExtendedTaskGenerator::new(topology.clone());
 
     println!("1. Between Query (3-way comparison):");
     println!("──────────────────────────────────────────────────");

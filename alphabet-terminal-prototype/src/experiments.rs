@@ -302,9 +302,8 @@ impl ExperimentFramework {
 
         // Assign conditions (round-robin or randomized)
         if experiment.config.randomization.randomize_conditions {
-            let mut rng = thread_rng();
             for participant in &mut experiment.participants {
-                let condition_idx = rng.gen_range(0..n_conditions);
+                let condition_idx = self.rng.gen_range(0..n_conditions);
                 participant.condition = experiment.conditions[condition_idx].name.clone();
             }
         } else {
@@ -431,19 +430,18 @@ impl ExperimentFramework {
     }
 
     fn generate_task_for_condition(
-        &self,
+        &mut self,
         generator: &mut TaskGenerator,
         topology: &Topology,
         condition: &ExperimentCondition,
     ) -> crate::tasks::Task {
-        let mut rng = thread_rng();
-        let r: f64 = rng.gen();
+        let r: f64 = self.rng.gen();
 
         let dist = &condition.task_distribution;
 
         // Pick a random item from the topology
         let nodes = &topology.nodes;
-        let random_item = nodes[rng.gen_range(0..nodes.len())].label.clone();
+        let random_item = nodes[self.rng.gen_range(0..nodes.len())].label.clone();
 
         let task_type = if r < dist.successor_prob {
             crate::tasks::TaskType::Successor { item: random_item }
@@ -465,7 +463,7 @@ impl ExperimentFramework {
                 reverse: false,
             }
         } else {
-            let random_item2 = nodes[rng.gen_range(0..nodes.len())].label.clone();
+            let random_item2 = nodes[self.rng.gen_range(0..nodes.len())].label.clone();
             crate::tasks::TaskType::PairwiseOrder {
                 a: random_item,
                 b: random_item2,

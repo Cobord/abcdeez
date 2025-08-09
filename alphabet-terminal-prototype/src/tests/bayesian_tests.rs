@@ -6,7 +6,7 @@ use crate::topology::{Topology, TopologyType};
 #[test]
 fn test_bayesian_model_initialization() {
     let topo = Topology::alphabet();
-    let model = BayesianLearnerModel::new(&topo);
+    let mut model = BayesianLearnerModel::new(&topo);
 
     // Verify correct number of parameters
     assert_eq!(
@@ -87,7 +87,7 @@ fn test_bayesian_model_initialization() {
 #[test]
 fn test_monte_carlo_eig_positive() {
     let topo = Topology::alphabet();
-    let model = BayesianLearnerModel::new(&topo);
+    let mut model = BayesianLearnerModel::new(&topo);
 
     let task = Task {
         task_type: TaskType::Successor {
@@ -264,7 +264,7 @@ fn test_eig_high_for_uncertain_tasks() {
 #[test]
 fn test_task_ranking_by_eig() {
     let topo = Topology::alphabet();
-    let model = BayesianLearnerModel::new(&topo);
+    let mut model = BayesianLearnerModel::new(&topo);
 
     let tasks = vec![
         Task {
@@ -353,7 +353,7 @@ fn test_adaptive_observation_variance() {
 #[test]
 fn test_sampled_model_usage() {
     let topo = Topology::alphabet();
-    let model = BayesianLearnerModel::new(&topo);
+    let mut model = BayesianLearnerModel::new(&topo);
 
     // Test that we can rank tasks (which internally uses sampling)
     let tasks = vec![Task {

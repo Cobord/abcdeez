@@ -5,6 +5,7 @@ use axum::{
 };
 use serde_json::json;
 use std::fmt;
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub enum AppError {
@@ -99,15 +100,30 @@ impl IntoResponse for AppError {
                 "Internal server error".to_string(),
             ),
             AppError::DatabaseError(e) => {
-                tracing::error!("Database error: {:?}", e);
+                // Log sanitized error information
+                let error_id = uuid::Uuid::new_v4();
+                tracing::error!(
+                    error_id = %error_id,
+                    error_type = "database",
+                    "Database operation failed"
+                );
+                // Log full error details at debug level for troubleshooting
+                tracing::debug!("Database error details for {}: {:?}", error_id, e);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "Database error".to_string(),
+                    format!("Database operation failed. Error ID: {}", error_id),
                 )
             }
             AppError::RedisError(e) => {
-                tracing::error!("Redis error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Cache error".to_string())
+                // Log sanitized error information
+                let error_id = uuid::Uuid::new_v4();
+                tracing::error!(
+                    error_id = %error_id,
+                    error_type = "cache",
+                    "Cache operation failed"
+                );
+                tracing::debug!("Redis error details for {}: {:?}", error_id, e);
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Cache operation failed. Error ID: {}", error_id))
             }
             AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::AuthenticationError(msg) => (StatusCode::UNAUTHORIZED, msg),
@@ -118,10 +134,16 @@ impl IntoResponse for AppError {
 
             // Core library errors
             AppError::CoreError(e) => {
-                tracing::error!("Core library error: {:?}", e);
+                let error_id = uuid::Uuid::new_v4();
+                tracing::error!(
+                    error_id = %error_id,
+                    error_type = "core_library",
+                    "Core library operation failed"
+                );
+                tracing::debug!("Core library error details for {}: {:?}", error_id, e);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "Core library error".to_string(),
+                    format!("Internal operation failed. Error ID: {}", error_id),
                 )
             }
             AppError::TaskGenerationError(msg) => {
@@ -132,17 +154,29 @@ impl IntoResponse for AppError {
                 )
             }
             AppError::NumericalError(msg) => {
-                tracing::error!("Numerical error: {}", msg);
+                let error_id = uuid::Uuid::new_v4();
+                tracing::error!(
+                    error_id = %error_id,
+                    error_type = "numerical",
+                    "Numerical computation failed"
+                );
+                tracing::debug!("Numerical error details for {}: {}", error_id, msg);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "Numerical computation error".to_string(),
+                    format!("Computation failed. Error ID: {}", error_id),
                 )
             }
             AppError::StatisticalError(msg) => {
-                tracing::error!("Statistical error: {}", msg);
+                let error_id = uuid::Uuid::new_v4();
+                tracing::error!(
+                    error_id = %error_id,
+                    error_type = "statistical",
+                    "Statistical computation failed"
+                );
+                tracing::debug!("Statistical error details for {}: {}", error_id, msg);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "Statistical computation error".to_string(),
+                    format!("Analysis failed. Error ID: {}", error_id),
                 )
             }
             AppError::ConvergenceError {

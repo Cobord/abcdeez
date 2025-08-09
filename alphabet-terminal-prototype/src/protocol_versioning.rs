@@ -3,7 +3,7 @@ use crate::multi_session::MultiSessionExperiment;
 use crate::config::LearnerConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::File;
+
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -290,10 +290,15 @@ impl ProtocolVersionControl {
         configs: HashMap<String, LearnerConfig>,
     ) -> Result<SemanticVersion, String> {
         let repo_id = self.current_repo.as_ref().ok_or("No active repository")?.clone();
-        let repo = self.repositories.get_mut(&repo_id).ok_or("Repository not found")?;
+        
+        // Get current version before mutable borrow
+        let current_version = {
+            let repo = self.repositories.get(&repo_id).ok_or("Repository not found")?;
+            repo.current_version.clone()
+        };
 
         // Determine new version number based on changes
-        let new_version = self.calculate_new_version(&repo.current_version, &changes);
+        let new_version = self.calculate_new_version(&current_version, &changes);
 
         // Create experiment snapshot
         let snapshot = self.create_experiment_snapshot(experiment, design, configs)?;
@@ -309,13 +314,16 @@ impl ProtocolVersionControl {
             message,
             changes,
             experiment_snapshot: snapshot,
-            parent_version: Some(repo.current_version.clone()),
+            parent_version: Some(current_version),
             tags: Vec::new(),
             status: VersionStatus::Development,
         };
 
         // Validate the new version
         self.validate_version(&version)?;
+
+        // Now get mutable borrow for insertion
+        let repo = self.repositories.get_mut(&repo_id).ok_or("Repository not found")?;
 
         // Store version
         repo.versions.insert(new_version.to_string(), version);

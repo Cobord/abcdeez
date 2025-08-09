@@ -8,6 +8,7 @@ use std::sync::{
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
 
+pub mod business;
 pub mod database;
 pub mod health;
 pub mod metrics;
@@ -43,6 +44,95 @@ pub struct EndpointMetrics {
     pub error_count: u64,
     pub last_accessed: DateTime<Utc>,
     pub avg_duration_ms: f64,
+    pub response_time_histogram: ResponseTimeHistogram,
+}
+
+/// Histogram-based response time tracking for accurate percentiles
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseTimeHistogram {
+    pub buckets: Vec<HistogramBucket>,
+    pub total_samples: u64,
+    pub min_response_time_ms: f64,
+    pub max_response_time_ms: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistogramBucket {
+    pub upper_bound_ms: f64,
+    pub count: u64,
+}
+
+impl Default for ResponseTimeHistogram {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ResponseTimeHistogram {
+    pub fn new() -> Self {
+        // Create buckets for response times: 1ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s, +Inf
+        let bucket_bounds = vec![
+            1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 
+            1000.0, 2500.0, 5000.0, 10000.0, f64::INFINITY
+        ];
+        
+        let buckets = bucket_bounds.into_iter()
+            .map(|bound| HistogramBucket {
+                upper_bound_ms: bound,
+                count: 0,
+            })
+            .collect();
+        
+        Self {
+            buckets,
+            total_samples: 0,
+            min_response_time_ms: f64::INFINITY,
+            max_response_time_ms: 0.0,
+        }
+    }
+    
+    pub fn record_response_time(&mut self, response_time_ms: f64) {
+        self.total_samples += 1;
+        self.min_response_time_ms = self.min_response_time_ms.min(response_time_ms);
+        self.max_response_time_ms = self.max_response_time_ms.max(response_time_ms);
+        
+        // Find the appropriate bucket and increment its count
+        for bucket in &mut self.buckets {
+            if response_time_ms <= bucket.upper_bound_ms {
+                bucket.count += 1;
+                break;
+            }
+        }
+    }
+    
+    pub fn calculate_percentile(&self, percentile: f64) -> f64 {
+        if self.total_samples == 0 {
+            return 0.0;
+        }
+        
+        let target_count = (self.total_samples as f64 * percentile / 100.0).ceil() as u64;
+        let mut cumulative_count = 0u64;
+        
+        for (i, bucket) in self.buckets.iter().enumerate() {
+            cumulative_count += bucket.count;
+            
+            if cumulative_count >= target_count {
+                // Linear interpolation within bucket
+                if i == 0 {
+                    return bucket.upper_bound_ms * (target_count as f64 / bucket.count as f64);
+                }
+                
+                let prev_bound = if i > 0 { self.buckets[i - 1].upper_bound_ms } else { 0.0 };
+                let bucket_width = bucket.upper_bound_ms - prev_bound;
+                let bucket_start_count = cumulative_count - bucket.count;
+                let position_in_bucket = (target_count as f64 - bucket_start_count as f64) / bucket.count as f64;
+                
+                return prev_bound + (bucket_width * position_in_bucket);
+            }
+        }
+        
+        self.max_response_time_ms
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,13 +168,49 @@ pub struct PerformanceMetrics {
     pub request_rate_per_second: f64,
     pub avg_response_time_ms: f64,
     pub p50_response_time_ms: f64,
+    pub p90_response_time_ms: f64,
     pub p95_response_time_ms: f64,
     pub p99_response_time_ms: f64,
+    pub p999_response_time_ms: f64,
     pub error_rate_percent: f32,
     pub throughput_requests_per_minute: f64,
     pub active_users: u64,
     pub database_pool_utilization: f32,
     pub cache_hit_rate: f32,
+    pub database_p50_response_time_ms: f64,
+    pub database_p95_response_time_ms: f64,
+    pub database_p99_response_time_ms: f64,
+    pub slowest_endpoints: Vec<SlowEndpointInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlowEndpointInfo {
+    pub endpoint: String,
+    pub avg_response_time_ms: f64,
+    pub p95_response_time_ms: f64,
+    pub total_requests: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EndpointPerformanceMetrics {
+    pub endpoints: std::collections::HashMap<String, EndpointPerformanceDetails>,
+    pub total_endpoints: usize,
+    pub measurement_period_seconds: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EndpointPerformanceDetails {
+    pub total_requests: u64,
+    pub avg_response_time_ms: f64,
+    pub min_response_time_ms: f64,
+    pub max_response_time_ms: f64,
+    pub p50_response_time_ms: f64,
+    pub p95_response_time_ms: f64,
+    pub p99_response_time_ms: f64,
+    pub p999_response_time_ms: f64,
+    pub error_rate_percent: f64,
+    pub last_accessed: DateTime<Utc>,
+    pub histogram_buckets: Vec<HistogramBucket>,
 }
 
 impl Default for MetricsCollector {
@@ -135,6 +261,7 @@ impl MetricsCollector {
                 error_count: 0,
                 last_accessed: Utc::now(),
                 avg_duration_ms: 0.0,
+                response_time_histogram: ResponseTimeHistogram::new(),
             });
 
         metrics.total_requests += 1;
@@ -146,11 +273,22 @@ impl MetricsCollector {
         }
 
         metrics.avg_duration_ms = metrics.total_duration_ms as f64 / metrics.total_requests as f64;
+        
+        // Record response time in histogram for accurate percentile calculation
+        metrics.response_time_histogram.record_response_time(duration_ms as f64);
     }
 
     /// Record database query
     pub fn record_db_query(&self) {
         self.database_queries.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Record database query with response time
+    pub async fn record_db_query_with_timing(&self, duration_ms: u64) {
+        self.database_queries.fetch_add(1, Ordering::Relaxed);
+        
+        // Track database queries as a special endpoint for response time percentiles
+        self.record_request("database_queries", duration_ms, false).await;
     }
 
     /// Record cache hit/miss

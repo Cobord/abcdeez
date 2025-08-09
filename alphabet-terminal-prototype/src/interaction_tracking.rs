@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Comprehensive Interaction Pattern Tracking for Research Applications
 /// Captures keystroke dynamics, mouse movements, hesitations, and behavioral patterns

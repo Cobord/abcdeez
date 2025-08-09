@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use statrs::distribution::{Normal, StudentsT, ChiSquared, ContinuousCDF};
+use statrs::distribution::{StudentsT, ContinuousCDF};
 use statrs::statistics::Statistics;
 
 /// Mixed-Effects Modeling for Repeated Measures Analysis
@@ -681,8 +681,8 @@ impl MixedEffectsAnalyzer {
 
         // Calculate R-squared values (simplified)
         let residuals = &model.residuals;
-        let total_variance = data.observations.variance();
-        let residual_variance = residuals.variance();
+        let total_variance = data.observations.clone().variance();
+        let residual_variance = residuals.clone().variance();
         let conditional_r_squared = (total_variance - residual_variance) / total_variance;
 
         // Fixed effects only R-squared (would need more complex calculation)
@@ -904,9 +904,10 @@ mod tests {
     #[test]
     fn test_simple_mixed_model_fit() {
         let data = MixedEffectsData {
-            observations: vec![1.0, 1.5, 2.0, 3.0, 3.5, 4.0], // Two groups with different means
+            observations: vec![1.0, 1.5, 2.0, 3.0, 3.5, 4.0, 5.0, 5.5, 6.0], // Three groups with different means
             subject_ids: vec!["S1".to_string(), "S1".to_string(), "S1".to_string(),
-                             "S2".to_string(), "S2".to_string(), "S2".to_string()],
+                             "S2".to_string(), "S2".to_string(), "S2".to_string(),
+                             "S3".to_string(), "S3".to_string(), "S3".to_string()],
             predictors: HashMap::new(),
             grouping_factors: HashMap::new(),
         };

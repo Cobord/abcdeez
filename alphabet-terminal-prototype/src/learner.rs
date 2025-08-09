@@ -19,6 +19,19 @@ pub enum OperationType {
     Index,
 }
 
+impl std::fmt::Display for OperationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OperationType::Successor => write!(f, "Successor"),
+            OperationType::Predecessor => write!(f, "Predecessor"),
+            OperationType::PairwiseOrder => write!(f, "PairwiseOrder"),
+            OperationType::KJump(k) => write!(f, "KJump({})", k),
+            OperationType::Segment(size, ordered) => write!(f, "Segment({}, {})", size, ordered),
+            OperationType::Index => write!(f, "Index"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperationProficiency {
     pub operation: OperationType,

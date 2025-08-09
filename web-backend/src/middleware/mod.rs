@@ -1,6 +1,6 @@
 use axum::{
     extract::{Request, State},
-    http::{header, Method},
+    http::{header, Method, HeaderValue},
     middleware::Next,
     response::Response,
 };
@@ -16,7 +16,54 @@ use crate::{
     state::AppState,
 };
 
+/// Request correlation ID for tracing requests across the system
+#[derive(Debug, Clone)]
+pub struct CorrelationId(pub String);
+
 pub mod tracing;
+
+/// Correlation ID middleware that generates or extracts correlation IDs for request tracing
+pub async fn correlation_id_middleware(
+    mut request: Request,
+    next: Next,
+) -> Response {
+    // Check if correlation ID is provided in request headers
+    let correlation_id = request
+        .headers()
+        .get("x-correlation-id")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| {
+            // Generate new correlation ID if not provided
+            Uuid::new_v4().to_string()
+        });
+
+    // Add correlation ID to request extensions for use by other middleware and handlers
+    request.extensions_mut().insert(CorrelationId(correlation_id.clone()));
+
+    // Create a tracing span with the correlation ID
+    let _span = tracing::info_span!(
+        "request",
+        correlation_id = %correlation_id,
+        method = %request.method(),
+        uri = %request.uri()
+    ).entered();
+
+    // Process the request
+    let mut response = next.run(request).await;
+
+    // Add correlation ID to response headers for client tracing
+    if let Ok(header_value) = HeaderValue::from_str(&correlation_id) {
+        response.headers_mut().insert("x-correlation-id", header_value);
+    }
+
+    // Add additional tracing headers for debugging
+    if let Ok(trace_id) = HeaderValue::from_str(&format!("trace-{}", &correlation_id[..8])) {
+        response.headers_mut().insert("x-trace-id", trace_id);
+    }
+
+    response
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
@@ -270,7 +317,7 @@ pub async fn security_headers(
     response
 }
 
-/// Enhanced rate limiting with endpoint-specific limits and burst control
+/// Enhanced rate limiting with endpoint-specific limits, burst control, and global DoS protection
 pub async fn rate_limit(
     State(state): State<Arc<AppState>>,
     request: Request,
@@ -279,15 +326,117 @@ pub async fn rate_limit(
     let path = request.uri().path();
     let method = request.method();
 
-    // Endpoint-specific rate limits
+    let mut conn = state.cache_conn.clone();
+
+    // Global DoS protection - check total system load first
+    let global_requests_key = "global_rate_limit:total";
+    let global_count: i64 = crate::cache::cmd("GET")
+        .arg(global_requests_key)
+        .query_async::<String>(&mut conn)
+        .await
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+
+    // Global rate limit: max requests per minute across all users
+    let global_limit = (state.config.rate_limit_requests * 100) as i64; // 100x individual limit
+    if global_count > global_limit {
+        tracing::warn!("Global rate limit exceeded: {} requests", global_count);
+        
+        // Increment DoS counter for monitoring
+        let dos_key = "dos_events:global_rate_limit";
+        crate::cache::cmd("INCR")
+            .arg(dos_key)
+            .query_async::<String>(&mut conn)
+            .await
+            .ok();
+        crate::cache::cmd("EXPIRE")
+            .arg(dos_key)
+            .arg(3600) // 1 hour
+            .query_async::<()>(&mut conn)
+            .await
+            .ok();
+        
+        return Err(AppError::RateLimitExceeded);
+    }
+
+    // Increment global counter
+    crate::cache::cmd("INCR")
+        .arg(global_requests_key)
+        .query_async::<String>(&mut conn)
+        .await
+        .ok();
+    crate::cache::cmd("EXPIRE")
+        .arg(global_requests_key)
+        .arg(60) // 1 minute window
+        .query_async::<()>(&mut conn)
+        .await
+        .ok();
+
+    // IP-based global protection - detect and block aggressive IPs
+    let client_ip = get_client_ip(&request);
+    let ip_global_key = format!("ip_global_rate:{}", client_ip);
+    let ip_global_count: i64 = crate::cache::cmd("GET")
+        .arg(&ip_global_key)
+        .query_async::<String>(&mut conn)
+        .await
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+
+    // Per-IP global limit (prevents single IP from consuming all resources)
+    let ip_global_limit = (state.config.rate_limit_requests * 5) as i64; // 5x individual limit
+    if ip_global_count > ip_global_limit {
+        tracing::warn!("IP global rate limit exceeded for {}: {} requests", client_ip, ip_global_count);
+        
+        // Auto-block aggressive IPs temporarily
+        let block_key = format!("auto_block:{}", client_ip);
+        crate::cache::cmd("SETEX")
+            .arg(&block_key)
+            .arg(300) // 5 minute block
+            .arg("global_rate_limit_exceeded")
+            .query_async::<String>(&mut conn)
+            .await
+            .ok();
+        
+        return Err(AppError::RateLimitExceeded);
+    }
+
+    // Increment IP global counter
+    crate::cache::cmd("INCR")
+        .arg(&ip_global_key)
+        .query_async::<String>(&mut conn)
+        .await
+        .ok();
+    crate::cache::cmd("EXPIRE")
+        .arg(&ip_global_key)
+        .arg(60) // 1 minute window
+        .query_async::<()>(&mut conn)
+        .await
+        .ok();
+
+    // Check for auto-blocked IPs
+    let block_check_key = format!("auto_block:{}", client_ip);
+    let blocked = crate::cache::cmd("EXISTS")
+        .arg(&block_check_key)
+        .query_async::<String>(&mut conn)
+        .await
+        .ok()
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+    if blocked > 0
+    {
+        tracing::warn!("Blocked request from auto-blocked IP: {}", client_ip);
+        return Err(AppError::Forbidden);
+    }
+
+    // Endpoint-specific rate limits (existing logic)
     let (limit, window, burst_limit) = determine_rate_limits(&state.config, path, method);
 
     // Get client identifier with better IP detection
     let client_id = get_client_identifier(&request);
     let rate_key = format!("rate_limit:{}", client_id);
     let burst_key = format!("burst_limit:{}", client_id);
-
-    let mut conn = state.cache_conn.clone();
 
     // Check burst limit (shorter window, higher threshold)
     let burst_count: i64 = crate::cache::cmd("GET")
@@ -355,6 +504,7 @@ pub async fn rate_limit(
             .unwrap(),
     );
     headers.insert("X-RateLimit-Window", window.to_string().parse().unwrap());
+    headers.insert("X-RateLimit-Global", global_count.to_string().parse().unwrap());
 
     Ok(response)
 }
@@ -421,19 +571,7 @@ fn get_client_identifier(request: &Request) -> String {
     }
 
     // Extract IP address with proxy support
-    let ip = request
-        .headers()
-        .get("x-forwarded-for")
-        .and_then(|h| h.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(|s| s.trim())
-        .or_else(|| {
-            request
-                .headers()
-                .get("x-real-ip")
-                .and_then(|h| h.to_str().ok())
-        })
-        .unwrap_or("unknown");
+    let ip = get_client_ip(request);
 
     // Combine IP with user agent for better fingerprinting
     let user_agent = request
@@ -448,6 +586,31 @@ fn get_client_identifier(request: &Request) -> String {
         ip,
         user_agent.chars().take(20).collect::<String>()
     )
+}
+
+/// Extract client IP address with proper proxy support
+fn get_client_ip(request: &Request) -> String {
+    request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .or_else(|| {
+            request
+                .headers()
+                .get("x-real-ip")
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.to_string())
+        })
+        .or_else(|| {
+            request
+                .headers()
+                .get("cf-connecting-ip")  // Cloudflare
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 /// IP blocking middleware for security
@@ -578,7 +741,11 @@ pub async fn audit_middleware(
         return next.run(request).await;
     }
 
-    // Extract user context from request extensions (set by auth middleware)
+    // Extract correlation ID and user context from request extensions
+    let correlation_id = request
+        .extensions()
+        .get::<CorrelationId>()
+        .map(|c| c.0.clone());
     let claims = request.extensions().get::<Claims>().cloned();
     let audit_context = AuditContext::from_request(&request, claims.as_ref());
 
@@ -607,8 +774,32 @@ pub async fn audit_middleware(
         "duration_ms": duration.as_millis(),
         "api_call": true,
         "user_agent": audit_context.user_agent,
-        "session_id": audit_context.session_id
+        "session_id": audit_context.session_id,
+        "correlation_id": correlation_id
     });
+
+    // Enhanced logging with correlation ID
+    if let Some(ref corr_id) = correlation_id {
+        if status.is_client_error() || status.is_server_error() {
+            tracing::error!(
+                correlation_id = %corr_id,
+                method = %method,
+                path = %path,
+                status = %status.as_u16(),
+                duration_ms = duration.as_millis(),
+                "Request failed"
+            );
+        } else {
+            tracing::info!(
+                correlation_id = %corr_id,
+                method = %method,
+                path = %path,
+                status = %status.as_u16(),
+                duration_ms = duration.as_millis(),
+                "Request completed"
+            );
+        }
+    }
 
     // Log failed requests as security events
     if status.is_client_error() || status.is_server_error() {

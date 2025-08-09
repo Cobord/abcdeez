@@ -32,11 +32,11 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::Config;
 use crate::handlers::{
-    admin, analytics, auth, dashboard, experiment, gamification, learner, music, session, sync,
+    admin, analytics, auth, business, dashboard, experiment, gamification, learner, migration, music, session, sync,
     task_simple,
 };
 use crate::middleware::{
-    audit_middleware, auth_middleware, content_validation, ip_blocking, rate_limit, require_admin,
+    audit_middleware, auth_middleware, content_validation, correlation_id_middleware, ip_blocking, rate_limit, require_admin,
     require_analytics_permission, security_headers,
 };
 use crate::monitoring::{health, metrics, performance};
@@ -225,6 +225,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route("/admin/config", post(admin::update_config))
         .route("/admin/audit-report", get(admin::audit_report))
+        // Business metrics routes (admin only)
+        .route("/admin/business/dashboard", get(business::get_business_dashboard))
+        .route("/admin/business/daily-metrics", get(business::get_daily_metrics))
+        .route("/admin/business/learning-effectiveness", get(business::get_learning_effectiveness))
+        .route("/admin/business/user-journey", get(business::get_user_journey_analytics))
+        .route("/admin/business/revenue", get(business::get_revenue_metrics))
+        .route("/admin/business/export", get(business::export_business_data))
+        // Migration management routes (admin only)
+        .route("/admin/migrations/status", get(migration::get_migration_status))
+        .route("/admin/migrations/run", post(migration::run_migrations))
+        .route("/admin/migrations/rollback", post(migration::rollback_to_version))
+        .route("/admin/migrations/rollback-last", post(migration::rollback_last_migrations))
+        .route("/admin/migrations/validate", get(migration::validate_migrations))
+        .route("/admin/migrations/backup", post(migration::create_backup))
+        .route("/admin/migrations/history", get(migration::get_migration_history))
+        .route("/admin/migrations/preview/:version", get(migration::preview_rollback))
         // Apply admin-only middleware to admin routes
         .layer(axum_middleware::from_fn(require_admin))
         // Apply auth middleware to protected routes
@@ -255,6 +271,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/live", get(health::simple_health_check))
         .route("/ready", get(ready_check))
         .route("/health", get(health::detailed_health_check))
+        .route("/health/enhanced", get(health::enhanced_health_check))
         .route("/metrics", get(metrics::prometheus_metrics))
         .route("/metrics/json", get(metrics::json_metrics))
         .route("/performance", get(performance::get_performance_metrics))
@@ -289,6 +306,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))
         .layer(axum_middleware::from_fn(
             performance::performance_middleware,
+        ))
+        .layer(axum_middleware::from_fn(
+            correlation_id_middleware,
         ))
         .layer(axum_middleware::from_fn_with_state(
             app_state.clone(),

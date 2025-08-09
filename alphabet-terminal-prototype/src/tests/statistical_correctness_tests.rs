@@ -6,10 +6,12 @@ use crate::learner::OperationType;
 use crate::tasks::{Task, TaskType};
 use crate::topology::Topology;
 use rand::prelude::*;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
 #[test]
 fn test_monte_carlo_convergence_rate() {
-    let model = BayesianLearnerModel::new(&Topology::alphabet());
+    let mut model = BayesianLearnerModel::new(&Topology::alphabet());
     let task = Task {
         task_type: TaskType::Successor {
             item: "A".to_string(),
@@ -80,7 +82,7 @@ fn test_monte_carlo_convergence_rate() {
 fn test_correlation_significance_testing() {
     // Test with known positive correlation
     let n = 100;
-    let mut rng = thread_rng();
+    let mut rng = StdRng::seed_from_u64(12345);
 
     let x: Vec<f64> = (0..n).map(|i| i as f64).collect();
     let noise: Vec<f64> = (0..n).map(|_| rng.gen::<f64>() * 10.0 - 5.0).collect();
@@ -252,7 +254,7 @@ fn erf(x: f64) -> f64 {
 }
 
 fn bootstrap_confidence_interval(data: &[f64], n_bootstrap: usize, confidence: f64) -> (f64, f64) {
-    let mut rng = thread_rng();
+    let mut rng = StdRng::seed_from_u64(54321);
     let mut bootstrap_means = Vec::new();
 
     for _ in 0..n_bootstrap {

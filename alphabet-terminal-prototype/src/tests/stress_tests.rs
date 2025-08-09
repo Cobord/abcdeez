@@ -206,7 +206,7 @@ fn test_large_scale_performance() {
     let large_topo = Topology::new_linear(large_nodes);
 
     let start = Instant::now();
-    let model = BayesianLearnerModel::new(&large_topo);
+    let mut model = BayesianLearnerModel::new(&large_topo);
     let init_time = start.elapsed();
 
     assert!(
@@ -391,7 +391,7 @@ fn test_outlier_detection_edge_cases() {
 #[test]
 fn test_adaptive_monte_carlo_convergence_edge_cases() {
     let topo = Topology::alphabet();
-    let model = BayesianLearnerModel::new(&topo);
+    let mut model = BayesianLearnerModel::new(&topo);
 
     // Test with task that should converge quickly (low variance)
     let simple_task = Task {

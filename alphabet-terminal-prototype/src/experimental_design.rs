@@ -3,7 +3,7 @@ use crate::topology::Topology;
 use rand::prelude::*;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Experimental Design Tools for Research Applications
 /// Provides counterbalancing, randomization, and design validation

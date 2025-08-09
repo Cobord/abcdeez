@@ -1,8 +1,7 @@
-use crate::citation_manager::{CitationManager, Reference};
-use crate::experimental_design::ExperimentalDesign;
+use crate::citation_manager::CitationManager;
 use crate::multi_session::MultiSessionExperiment;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -140,7 +139,7 @@ pub enum RiskCategory {
     Dignity,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RiskLevel {
     NoMoreThanMinimal,
     MinimalRisk,
@@ -1377,6 +1376,40 @@ This report provides a comprehensive risk assessment for the proposed research s
             },
             
             chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        )
+    }
+}
+
+impl Default for IRBComplianceGenerator {
+    fn default() -> Self {
+        Self::new(
+            InstitutionInfo {
+                name: "Default Institution".to_string(),
+                address: "123 Default St, Default City, Default State 12345".to_string(),
+                irb_contact: "Default Contact".to_string(),
+                irb_phone: "555-0100".to_string(),
+                irb_email: "irb@default.edu".to_string(),
+                federal_wide_assurance: Some("FWA00000000".to_string()),
+                jurisdiction: Jurisdiction::US,
+                policies: Vec::new(),
+            },
+            PrincipalInvestigator {
+                name: "Default PI".to_string(),
+                title: "Principal Investigator".to_string(),
+                department: "Research Department".to_string(),
+                institution: "Default Institution".to_string(),
+                email: "pi@default.edu".to_string(),
+                phone: "555-0101".to_string(),
+                qualifications: vec!["PhD in Research".to_string(), "Human Subjects Training".to_string()],
+                human_subjects_training: TrainingRecord {
+                    program_name: "CITI Program".to_string(),
+                    completion_date: chrono::Utc::now().naive_utc().date(),
+                    expiration_date: Some(chrono::Utc::now().naive_utc().date() + chrono::Duration::days(365)),
+                    certificate_number: Some("CITI-DEFAULT-123456".to_string()),
+                    refresher_required: false,
+                },
+                previous_irb_approvals: Vec::new(),
+            }
         )
     }
 }

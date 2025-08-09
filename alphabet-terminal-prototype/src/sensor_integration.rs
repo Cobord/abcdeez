@@ -63,7 +63,7 @@ pub enum SensorType {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum EEGChannel {
     Fp1, Fp2, F3, F4, C3, C4, P3, P4, O1, O2,
     F7, F8, T3, T4, T5, T6, Fz, Cz, Pz,
@@ -444,19 +444,21 @@ impl SensorManager {
 
     /// Stop recording from all sensors
     pub fn stop_recording(&mut self) -> Result<(), String> {
-        let mut recording_active = self.recording_active.lock().unwrap();
-        if !*recording_active {
-            return Err("Not currently recording".to_string());
-        }
-
-        // Stop all sensors
-        for (sensor_id, sensor) in &mut self.sensors {
-            if let Err(e) = sensor.stop_recording() {
-                eprintln!("Failed to stop recording for sensor {}: {}", sensor_id, e);
+        {
+            let mut recording_active = self.recording_active.lock().unwrap();
+            if !*recording_active {
+                return Err("Not currently recording".to_string());
             }
-        }
 
-        *recording_active = false;
+            // Stop all sensors
+            for (sensor_id, sensor) in &mut self.sensors {
+                if let Err(e) = sensor.stop_recording() {
+                    eprintln!("Failed to stop recording for sensor {}: {}", sensor_id, e);
+                }
+            }
+
+            *recording_active = false;
+        } // Release the lock before calling add_sync_event
 
         // Add sync event
         self.add_sync_event(SyncEventType::TaskEnd, None);

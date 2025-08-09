@@ -40,7 +40,7 @@ impl AdaptationService {
         task: &Task,
     ) -> Result<f64> {
         // Use sophisticated Bayesian EIG calculation instead of simple heuristics
-        let bayesian_model = self
+        let mut bayesian_model = self
             .learner_service
             .get_bayesian_model(learner_id, topology)
             .await?;

@@ -300,7 +300,7 @@ proptest! {
             .map(|i| ((65 + i) as u8 as char).to_string())
             .collect();
         let topo = Topology::new_linear(nodes);
-        let model = BayesianLearnerModel::new(&topo);
+        let mut model = BayesianLearnerModel::new(&topo);
 
         // Create a task
         let task = crate::tasks::Task {

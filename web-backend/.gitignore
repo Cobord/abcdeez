@@ -1,0 +1,61 @@
+# Environment and Secrets
+.env
+.env.*
+!.env.template
+*.pem
+*.p8
+*.key
+*.crt
+*.pfx
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Test and temporary files
+test.db*
+temp/
+tmp/
+*.tmp
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+target/
+Cargo.lock
+dist/
+build/
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Credentials and keys
+credentials/
+secrets/
+private/
+*.secret
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Cache
+.cache/
+*.cache
+
+# Coverage reports
+coverage/
+*.lcov
+tarpaulin-report.*

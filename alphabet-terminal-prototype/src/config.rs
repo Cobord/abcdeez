@@ -146,6 +146,12 @@ impl LearnerConfig {
     }
 }
 
+impl Default for LearnerConfig {
+    fn default() -> Self {
+        Self::adult()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdaptiveSchedulingConfig {
     /// Initial exploration rate (default: 0.15)

@@ -1,6 +1,6 @@
 use crate::config::LearnerConfig;
 use crate::experimental_design::{ExperimentalDesign, ParticipantAssignment};
-use crate::power_analysis::{RealTimeMonitor, StatisticalTestType};
+use crate::power_analysis::StatisticalTestType;
 use crate::topology::Topology;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -383,6 +383,17 @@ impl MultiSessionManager {
              experiment.scheduling_rules.clone())
         };
         
+        // Check requirements first (immutable borrow)
+        let requirements_met = {
+            let progress = self.participant_progress.get(participant_id)
+                .ok_or("Participant not found")?;
+            self.check_session_requirements(progress, &session_plan)?
+        };
+        
+        if !requirements_met {
+            return Err("Session requirements not met".to_string());
+        }
+        
         // Now get mutable progress
         let progress = self.participant_progress.get_mut(participant_id)
             .ok_or("Participant not found")?;
@@ -391,12 +402,6 @@ impl MultiSessionManager {
         if next_session_index >= sessions_len {
             progress.status = ParticipantStatus::Completed;
             return Ok(None);
-        }
-        
-        // Check requirements for scheduling
-        let requirements_met = self.check_session_requirements(progress, &session_plan)?;
-        if !requirements_met {
-            return Err("Session requirements not met".to_string());
         }
         
         // Find available time slot
@@ -437,14 +442,14 @@ impl MultiSessionManager {
         start_time: chrono::DateTime<chrono::Utc>,
         end_time: chrono::DateTime<chrono::Utc>,
     ) -> Result<(), String> {
+        // Calculate data quality score first (immutable borrow)
+        let data_quality_score = self.calculate_data_quality_score(&performance_data);
+        
         let progress = self.participant_progress.get_mut(participant_id)
             .ok_or("Participant not found")?;
         
         // Remove from scheduled sessions
         progress.scheduled_sessions.retain(|s| s.session_id != session_id);
-        
-        // Calculate data quality score
-        let data_quality_score = self.calculate_data_quality_score(&performance_data);
         
         // Add to completed sessions
         let completed_session = CompletedSession {

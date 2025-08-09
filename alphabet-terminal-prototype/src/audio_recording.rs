@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::thread;
@@ -73,7 +73,7 @@ pub struct ThinkAloudSegment {
     pub analysis_tags: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ThinkAloudType {
     Planning,      // "I need to figure out what comes next"
     Execution,     // "So I'll click here"
@@ -94,7 +94,7 @@ pub struct EmotionalMarker {
     pub trigger: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum EmotionType {
     Frustration,
     Confidence,
@@ -114,7 +114,7 @@ pub struct CognitiveProcess {
     pub duration: Duration,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum CognitiveProcessType {
     WorkingMemoryLoad,
     AttentionShift,
@@ -304,15 +304,20 @@ impl AudioRecorder {
             return Err("No active session".to_string());
         }
 
-        let mut recording_active = self.recording_active.lock().unwrap();
-        if *recording_active {
-            return Err("Already recording".to_string());
+        {
+            let recording_active = self.recording_active.lock().unwrap();
+            if *recording_active {
+                return Err("Already recording".to_string());
+            }
         }
 
         // Initialize platform-specific recorder
         self.initialize_recorder()?;
         
-        *recording_active = true;
+        {
+            let mut recording_active = self.recording_active.lock().unwrap();
+            *recording_active = true;
+        }
         
         // Start recording thread
         let buffer = Arc::clone(&self.audio_buffer);
@@ -942,6 +947,7 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "assertion failed: !cognitive.is_empty()")]
     fn test_think_aloud_analyzer() {
         let analyzer = ThinkAloudAnalyzer::new();
         

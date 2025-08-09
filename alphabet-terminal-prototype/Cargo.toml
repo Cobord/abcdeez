@@ -31,6 +31,11 @@ name = "research_dashboard_demo"
 path = "src/bin/research_dashboard_demo.rs"
 required-features = ["cli"]
 
+[[bin]]
+name = "research_backend"
+path = "src/bin/research_backend.rs"
+required-features = ["backend-server"]
+
 # Package metadata for distribution
 [package.metadata.dist]
 # Specify this package should be distributed
@@ -57,25 +62,28 @@ crossterm = { version = "0.27", optional = true }
 ratatui = { version = "0.26", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = "0.9"
 rand = { workspace = true }
 rand_distr = { workspace = true }
 chrono = { workspace = true }
 statrs = { workspace = true }
 uuid = { workspace = true }
-tokio = { workspace = true, optional = true, features = ["sync", "time", "rt-multi-thread", "macros"] }
+tokio = { workspace = true, optional = true, features = ["sync", "time", "rt-multi-thread", "macros", "test-util"] }
 tracing = { workspace = true }
 anyhow = "1.0"
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 toml = "0.8"
 axum = { version = "0.7", optional = true }
 sha2 = "0.10"
+md5 = "0.7"
+tempfile = "3.8"
 
 [dev-dependencies]
 proptest = "1.0"
 criterion = "0.5"
 
 [features]
-default = ["cli"]
+default = ["cli", "async"]
 cli = ["crossterm", "ratatui"]
 async = ["tokio"]
 backend-server = ["tokio", "axum"]

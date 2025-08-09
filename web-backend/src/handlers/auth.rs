@@ -19,6 +19,7 @@ use crate::{
         AppleSignInRequest, CreateUserRequest, LoginRequest, OAuthAuthUrlResponse,
         OAuthCallbackRequest, TokenResponse, User, UserResponse,
     },
+    monitoring::business::global_business_metrics,
     services::{
         audit::AuditService,
         oauth_service::{OAuthAuthRequest, OAuthProvider, OAuthService, OAuthUserProfile},
@@ -146,6 +147,9 @@ pub async fn register(
     )
     .await
     .ok();
+
+    // Track business metrics for new user signup
+    global_business_metrics().record_user_signup(user_id, true).await; // true for trial by default
 
     Ok((
         StatusCode::CREATED,
@@ -287,6 +291,7 @@ pub async fn login(
         .acquire()
         .await
         .map_err(|e| AppError::DatabaseError(e))?;
+    // Only select password_hash for authentication, keep separate from user data
     let user_row = sqlx::query(
         "SELECT id, username, email, password_hash, created_at, updated_at, metadata
          FROM users WHERE username = ?",
@@ -578,6 +583,14 @@ pub async fn logout(
     }
 
     // Log audit event
+    // Hash session ID before logging for security
+    let session_fingerprint = claims.session_id.as_ref().map(|sid| {
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(sid.as_bytes());
+        format!("{:x}", hasher.finalize())
+    });
+    
     AuditService::log_event(
         &state.db_pool,
         Some(user_id),
@@ -585,7 +598,7 @@ pub async fn logout(
         "auth".to_string(),
         user_id.to_string(),
         Some(serde_json::json!({
-            "session_id": claims.session_id,
+            "session_fingerprint": session_fingerprint,
             "role": claims.role
         })),
         None,
@@ -610,8 +623,10 @@ pub async fn me(
         .acquire()
         .await
         .map_err(|e| AppError::DatabaseError(e))?;
+    // Don't fetch password_hash for user profile queries
     let user_row = sqlx::query(
-        "SELECT id, username, email, password_hash, created_at, updated_at, metadata
+        "SELECT id, username, email, created_at, updated_at, metadata,
+                apple_user_id, github_user_id, oauth_provider_id, auth_provider, is_private_email
          FROM users WHERE id = ?",
     )
     .bind(&user_id_bytes[..])
@@ -625,7 +640,7 @@ pub async fn me(
         id: user_id,
         username: user_row.get("username"),
         email: user_row.get("email"),
-        password_hash: user_row.get("password_hash"),
+        password_hash: None,  // Never expose password hash in user profile endpoints
         apple_user_id: user_row.get("apple_user_id"),
         github_user_id: user_row.get("github_user_id"),
         oauth_provider_id: user_row.get("oauth_provider_id"),

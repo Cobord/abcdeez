@@ -11,6 +11,7 @@ pub enum MixtureStrategyType {
     Pattern,
 }
 use rand::prelude::*;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use statrs::distribution::{Continuous, Normal};
 use std::collections::HashMap;
@@ -42,10 +43,27 @@ pub struct StrategyMixtureModel {
     pub transition_matrix: Vec<Vec<f64>>,
     pub current_strategy_index: usize,
     pub evidence_accumulator: HashMap<String, Vec<f64>>,
+    #[serde(skip)]
+    #[serde(default = "default_rng")]
+    rng: rand::rngs::StdRng,
+}
+
+fn default_rng() -> rand::rngs::StdRng {
+    use rand::SeedableRng;
+    rand::rngs::StdRng::from_entropy()
 }
 
 impl StrategyMixtureModel {
     pub fn new(topology: &Topology) -> Self {
+        Self::with_seed(topology, None)
+    }
+
+    pub fn with_seed(topology: &Topology, seed: Option<u64>) -> Self {
+        let rng = match seed {
+            Some(s) => rand::rngs::StdRng::seed_from_u64(s),
+            None => rand::rngs::StdRng::from_entropy(),
+        };
+        
         let strategies = Self::initialize_strategies(topology);
         let n = strategies.len();
         let mixture_weights = vec![1.0 / n as f64; n];
@@ -57,6 +75,7 @@ impl StrategyMixtureModel {
             transition_matrix,
             current_strategy_index: 0,
             evidence_accumulator: HashMap::new(),
+            rng,
         }
     }
 
@@ -270,7 +289,6 @@ impl StrategyMixtureModel {
 
     /// Select next strategy based on mixture weights and transition probabilities
     pub fn select_strategy(&mut self) -> usize {
-        let mut rng = thread_rng();
 
         // Combine mixture weights with transition probabilities
         let mut probabilities = Vec::new();
@@ -287,7 +305,7 @@ impl StrategyMixtureModel {
         }
 
         // Sample from categorical distribution
-        let r: f64 = rng.gen();
+        let r: f64 = self.rng.gen();
         let mut cumsum = 0.0;
         for (i, &prob) in probabilities.iter().enumerate() {
             cumsum += prob;
@@ -301,9 +319,8 @@ impl StrategyMixtureModel {
     }
 
     /// Generate response based on current strategy
-    pub fn generate_response(&self, task: &Task, model: &LearnerModel) -> (String, f64) {
+    pub fn generate_response(&mut self, task: &Task, model: &LearnerModel) -> (String, f64) {
         let strategy = &self.strategies[self.current_strategy_index];
-        let mut rng = thread_rng();
 
         match strategy.strategy_type {
             MixtureStrategyType::Sequential => {
@@ -314,12 +331,12 @@ impl StrategyMixtureModel {
                     .map(|p| p.theta)
                     .unwrap_or(0.5);
 
-                if rng.gen::<f64>() < confidence {
+                if self.rng.gen::<f64>() < confidence {
                     (task.correct_answer.clone(), confidence)
                 } else {
                     // Make sequential error
                     let options = &task.options;
-                    let idx = rng.gen_range(0..options.len());
+                    let idx = self.rng.gen_range(0..options.len());
                     (options[idx].clone(), confidence * 0.5)
                 }
             }
@@ -331,10 +348,10 @@ impl StrategyMixtureModel {
 
                 let confidence = if in_chunk { 0.85 } else { 0.5 };
 
-                if rng.gen::<f64>() < confidence {
+                if self.rng.gen::<f64>() < confidence {
                     (task.correct_answer.clone(), confidence)
                 } else {
-                    let idx = rng.gen_range(0..task.options.len());
+                    let idx = self.rng.gen_range(0..task.options.len());
                     (task.options[idx].clone(), confidence * 0.5)
                 }
             }
@@ -348,18 +365,18 @@ impl StrategyMixtureModel {
 
                 let confidence = if is_anchor { 0.95 } else { 0.6 };
 
-                if rng.gen::<f64>() < confidence {
+                if self.rng.gen::<f64>() < confidence {
                     (task.correct_answer.clone(), confidence)
                 } else {
                     // Error biased toward anchors
-                    if !strategy.parameters.anchor_points.is_empty() && rng.gen_bool(0.5) {
-                        let idx = rng.gen_range(0..strategy.parameters.anchor_points.len());
+                    if !strategy.parameters.anchor_points.is_empty() && self.rng.gen_bool(0.5) {
+                        let idx = self.rng.gen_range(0..strategy.parameters.anchor_points.len());
                         (
                             strategy.parameters.anchor_points[idx].clone(),
                             confidence * 0.3,
                         )
                     } else {
-                        let idx = rng.gen_range(0..task.options.len());
+                        let idx = self.rng.gen_range(0..task.options.len());
                         (task.options[idx].clone(), confidence * 0.5)
                     }
                 }
@@ -367,7 +384,7 @@ impl StrategyMixtureModel {
 
             MixtureStrategyType::Random => {
                 // Random guessing
-                let idx = rng.gen_range(0..task.options.len());
+                let idx = self.rng.gen_range(0..task.options.len());
                 (task.options[idx].clone(), 0.25)
             }
 
@@ -380,10 +397,10 @@ impl StrategyMixtureModel {
                     .sum::<f64>()
                     / model.operation_proficiencies.len() as f64;
 
-                if rng.gen::<f64>() < confidence {
+                if self.rng.gen::<f64>() < confidence {
                     (task.correct_answer.clone(), confidence)
                 } else {
-                    let idx = rng.gen_range(0..task.options.len());
+                    let idx = self.rng.gen_range(0..task.options.len());
                     (task.options[idx].clone(), confidence * 0.5)
                 }
             }

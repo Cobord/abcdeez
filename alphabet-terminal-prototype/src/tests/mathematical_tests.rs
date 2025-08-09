@@ -138,7 +138,7 @@ fn test_kl_divergence_calculation() {
 fn test_adaptive_monte_carlo_convergence() {
     // Test that adaptive Monte Carlo actually converges
     let topo = Topology::alphabet();
-    let model = BayesianLearnerModel::new(&topo);
+    let mut model = BayesianLearnerModel::new(&topo);
 
     let task = crate::tasks::Task {
         task_type: crate::tasks::TaskType::Successor {

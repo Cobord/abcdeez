@@ -8,7 +8,7 @@ use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
-    style::{Color, Print, ResetColor, SetForegroundColor, SetBackgroundColor, Attribute},
+    style::{Color, Print, ResetColor, SetForegroundColor, SetBackgroundColor},
     terminal::{self, Clear, ClearType},
 };
 use std::io::{self, Write};
@@ -17,15 +17,12 @@ use chrono::{DateTime, Utc, Local};
 use std::collections::HashMap;
 
 use crate::preregistration::{
-    PreRegistration, StudyMetadata, Hypothesis, Hypotheses, EffectPrediction,
-    PlannedAnalysis, PowerAnalysisSpec, DataCollectionPlan, BlindingLevel,
-    StoppingRule, ExclusionCriteria, OutlierStrategy, DecisionRules,
-    RegistrationStatus, Deviation, TransparencyReport, AnalysisValidator,
-    ValidationResult, PreRegistrationBuilder, AnalysisPlan, RobustnessCheck,
+    PreRegistration, StudyMetadata, PowerAnalysisSpec,
+    RegistrationStatus, TransparencyReport, AnalysisValidator,
 };
-use crate::power_analysis::PowerAnalyzer;
+use crate::power_analysis::{PowerAnalyzer, StatisticalTestType};
 use crate::audio_recording::{AudioRecorder, AudioSession, ThinkAloudAnalyzer};
-use crate::sensor_integration::{SensorManager, SensorSession, SensorType};
+use crate::sensor_integration::{SensorManager, SensorSession, SensorType, EEGChannel, EEGReference, GSRPlacement, EyeTrackingMode};
 use crate::irb_compliance::{IRBComplianceGenerator, StudySummary};
 use crate::mixed_effects::{MixedEffectsAnalyzer, MixedEffectsData};
 
@@ -319,21 +316,32 @@ impl ResearchDashboard {
             recording_state: AudioRecordingState::Idle,
             sensor_configs: vec![
                 SensorConfiguration {
-                    sensor_type: SensorType::EEG,
+                    sensor_type: SensorType::EEG {
+                        channels: vec![EEGChannel::Fz, EEGChannel::Cz, EEGChannel::Pz],
+                        reference_type: EEGReference::CommonAverage,
+                        impedance_threshold: 5.0,
+                    },
                     enabled: false,
                     sample_rate: 250,
                     buffer_size: 1024,
                     status: SensorStatus::Disconnected,
                 },
                 SensorConfiguration {
-                    sensor_type: SensorType::GSR,
+                    sensor_type: SensorType::GSR {
+                        measurement_range: (0.0, 100.0),
+                        electrode_placement: GSRPlacement::Fingers,
+                    },
                     enabled: false,
                     sample_rate: 100,
                     buffer_size: 512,
                     status: SensorStatus::Disconnected,
                 },
                 SensorConfiguration {
-                    sensor_type: SensorType::EyeTracker,
+                    sensor_type: SensorType::EyeTracking {
+                        tracking_mode: EyeTrackingMode::Binocular,
+                        accuracy: 0.5,
+                        sampling_frequency: 60.0,
+                    },
                     enabled: false,
                     sample_rate: 60,
                     buffer_size: 256,
@@ -355,22 +363,23 @@ impl ResearchDashboard {
             self.render_header(&mut stdout)?;
 
             // Render current view
-            match &self.current_view {
+            let current_view = self.current_view.clone();
+            match current_view {
                 DashboardView::Overview => self.render_overview(&mut stdout)?,
                 DashboardView::PreRegistrationList => self.render_registration_list(&mut stdout)?,
                 DashboardView::CreatePreRegistration => self.render_create_form(&mut stdout)?,
                 DashboardView::EditPreRegistration { id } => {
-                    self.render_edit_form(&mut stdout, id)?
+                    self.render_edit_form(&mut stdout, &id)?
                 }
                 DashboardView::ViewPreRegistration { id } => {
-                    self.render_registration_viewer(&mut stdout, id)?
+                    self.render_registration_viewer(&mut stdout, &id)?
                 }
                 DashboardView::PowerAnalysisCalculator => {
                     self.render_power_calculator(&mut stdout)?
                 }
                 DashboardView::AnalysisValidation => self.render_analysis_validation(&mut stdout)?,
                 DashboardView::TransparencyReport { id } => {
-                    self.render_transparency_report(&mut stdout, id)?
+                    self.render_transparency_report(&mut stdout, &id)?
                 }
                 // Research data collection views
                 DashboardView::ExperimentManagement => self.render_experiment_management(&mut stdout)?,
@@ -379,7 +388,7 @@ impl ResearchDashboard {
                 }
                 DashboardView::SensorIntegration => self.render_sensor_integration(&mut stdout)?,
                 DashboardView::DataCollection { experiment_id } => {
-                    self.render_data_collection(&mut stdout, experiment_id)?
+                    self.render_data_collection(&mut stdout, &experiment_id)?
                 }
                 DashboardView::IRBCompliance => self.render_irb_compliance(&mut stdout)?,
                 DashboardView::StatisticalAnalysis => self.render_statistical_analysis(&mut stdout)?,
@@ -1026,17 +1035,27 @@ impl ResearchDashboard {
             self.form_inputs.alpha_level.parse::<f64>(),
             self.form_inputs.effect_size.parse::<f64>(),
         ) {
-            let analyzer = PowerAnalyzer::new();
-            let required_n = analyzer.calculate_sample_size(effect, alpha, power);
-            
-            execute!(
-                stdout,
-                SetForegroundColor(Color::Cyan),
-                Print("───────────────────────────────────────\n"),
-                Print(format!("Required Sample Size: {} per group\n", required_n)),
-                Print(format!("Total N (two groups): {}\n", required_n * 2)),
-                ResetColor
-            )?;
+            let analyzer = PowerAnalyzer::new(0.05, 0.8);
+            match analyzer.calculate_sample_size(StatisticalTestType::IndependentTTest, effect, power) {
+                Ok(required_n) => {
+                    execute!(
+                        stdout,
+                        SetForegroundColor(Color::Cyan),
+                        Print("───────────────────────────────────────\n"),
+                        Print(format!("Required Sample Size: {} per group\n", required_n)),
+                        Print(format!("Total N (two groups): {}\n", required_n * 2)),
+                        ResetColor
+                    )?;
+                }
+                Err(e) => {
+                    execute!(
+                        stdout,
+                        SetForegroundColor(Color::Red),
+                        Print(format!("Error calculating sample size: {}\n", e)),
+                        ResetColor
+                    )?;
+                }
+            }
         }
 
         execute!(
@@ -1920,15 +1939,20 @@ impl ResearchDashboard {
             self.power_calculator.alpha.parse::<f64>(),
             self.power_calculator.power.parse::<f64>(),
         ) {
-            let analyzer = PowerAnalyzer::new();
-            let required_n = analyzer.calculate_sample_size(effect, alpha, power);
-            
-            self.power_calculator.calculated_result = Some(PowerCalculationResult {
-                required_n,
-                actual_power: power,
-                effect_size: effect,
-                alpha,
-            });
+            let analyzer = PowerAnalyzer::new(0.05, 0.8);
+            match analyzer.calculate_sample_size(StatisticalTestType::IndependentTTest, effect, power) {
+                Ok(required_n) => {
+                    self.power_calculator.calculated_result = Some(PowerCalculationResult {
+                        required_n,
+                        actual_power: power,
+                        effect_size: effect,
+                        alpha,
+                    });
+                }
+                Err(e) => {
+                    self.message = Some((format!("Power calculation error: {}", e), MessageType::Error));
+                }
+            }
         } else {
             self.message = Some(("Invalid input values".to_string(), MessageType::Error));
         }
@@ -1976,6 +2000,96 @@ impl ResearchDashboard {
         if let Ok(n) = self.form_inputs.sample_size.parse::<usize>() {
             self.draft_registration.data_collection.target_sample_size = n;
         }
+    }
+
+    fn render_experiment_management(&mut self, stdout: &mut io::Stdout) -> io::Result<()> {
+        execute!(
+            stdout,
+            Clear(ClearType::All),
+            cursor::MoveTo(0, 0),
+            SetForegroundColor(Color::Cyan),
+            Print("=== EXPERIMENT MANAGEMENT ===\n\n"),
+            ResetColor,
+            Print("Experiment management functionality coming soon...\n\n"),
+            SetForegroundColor(Color::DarkGrey),
+            Print("[B] Back | [Q] Quit\n"),
+            ResetColor
+        )
+    }
+
+    fn render_audio_recording(&mut self, stdout: &mut io::Stdout, _session_id: Option<&str>) -> io::Result<()> {
+        execute!(
+            stdout,
+            Clear(ClearType::All),
+            cursor::MoveTo(0, 0),
+            SetForegroundColor(Color::Cyan),
+            Print("=== AUDIO RECORDING ===\n\n"),
+            ResetColor,
+            Print("Audio recording functionality coming soon...\n\n"),
+            SetForegroundColor(Color::DarkGrey),
+            Print("[B] Back | [Q] Quit\n"),
+            ResetColor
+        )
+    }
+
+    fn render_sensor_integration(&mut self, stdout: &mut io::Stdout) -> io::Result<()> {
+        execute!(
+            stdout,
+            Clear(ClearType::All),
+            cursor::MoveTo(0, 0),
+            SetForegroundColor(Color::Cyan),
+            Print("=== SENSOR INTEGRATION ===\n\n"),
+            ResetColor,
+            Print("Sensor integration functionality coming soon...\n\n"),
+            SetForegroundColor(Color::DarkGrey),
+            Print("[B] Back | [Q] Quit\n"),
+            ResetColor
+        )
+    }
+
+    fn render_data_collection(&mut self, stdout: &mut io::Stdout, _experiment_id: &str) -> io::Result<()> {
+        execute!(
+            stdout,
+            Clear(ClearType::All),
+            cursor::MoveTo(0, 0),
+            SetForegroundColor(Color::Cyan),
+            Print("=== DATA COLLECTION ===\n\n"),
+            ResetColor,
+            Print("Data collection functionality coming soon...\n\n"),
+            SetForegroundColor(Color::DarkGrey),
+            Print("[B] Back | [Q] Quit\n"),
+            ResetColor
+        )
+    }
+
+    fn render_irb_compliance(&mut self, stdout: &mut io::Stdout) -> io::Result<()> {
+        execute!(
+            stdout,
+            Clear(ClearType::All),
+            cursor::MoveTo(0, 0),
+            SetForegroundColor(Color::Cyan),
+            Print("=== IRB COMPLIANCE ===\n\n"),
+            ResetColor,
+            Print("IRB compliance functionality coming soon...\n\n"),
+            SetForegroundColor(Color::DarkGrey),
+            Print("[B] Back | [Q] Quit\n"),
+            ResetColor
+        )
+    }
+
+    fn render_statistical_analysis(&mut self, stdout: &mut io::Stdout) -> io::Result<()> {
+        execute!(
+            stdout,
+            Clear(ClearType::All),
+            cursor::MoveTo(0, 0),
+            SetForegroundColor(Color::Cyan),
+            Print("=== STATISTICAL ANALYSIS ===\n\n"),
+            ResetColor,
+            Print("Statistical analysis functionality coming soon...\n\n"),
+            SetForegroundColor(Color::DarkGrey),
+            Print("[B] Back | [Q] Quit\n"),
+            ResetColor
+        )
     }
 }
 

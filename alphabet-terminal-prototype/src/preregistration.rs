@@ -18,6 +18,7 @@ pub struct PreRegistration {
     pub registered_at: DateTime<Utc>,
     
     /// Cryptographic hash of the registration for verification
+    #[serde(skip)]
     pub registration_hash: String,
     
     /// Study metadata
@@ -296,10 +297,10 @@ impl PreRegistration {
             return Err("Target sample size must be specified".to_string());
         }
         
-        // Generate cryptographic hash of the registration
-        self.registration_hash = self.generate_hash();
+        // Set timestamp and status first, then generate hash
         self.registered_at = Utc::now();
         self.status = RegistrationStatus::Registered;
+        self.registration_hash = self.generate_hash();
         
         Ok(self.registration_hash.clone())
     }

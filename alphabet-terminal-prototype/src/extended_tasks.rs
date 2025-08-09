@@ -2,6 +2,7 @@ use crate::learner::OperationType;
 use crate::tasks::{Task, TaskType};
 use crate::topology::Topology;
 use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -77,10 +78,20 @@ pub struct ExtendedTaskGenerator {
     topology: Topology,
     semantic_attributes: HashMap<String, Vec<String>>,
     macros: HashMap<String, Vec<String>>,
+    rng: rand::rngs::StdRng,
 }
 
 impl ExtendedTaskGenerator {
     pub fn new(topology: Topology) -> Self {
+        Self::with_seed(topology, None)
+    }
+
+    pub fn with_seed(topology: Topology, seed: Option<u64>) -> Self {
+        let rng = match seed {
+            Some(s) => rand::rngs::StdRng::seed_from_u64(s),
+            None => rand::rngs::StdRng::from_entropy(),
+        };
+        
         let mut semantic_attributes = HashMap::new();
 
         // For alphabet, add vowel/consonant categories
@@ -118,12 +129,13 @@ impl ExtendedTaskGenerator {
             topology,
             semantic_attributes,
             macros,
+            rng,
         }
     }
 
     /// Generate a Reverse-N Treadmill Drill task
     /// The learner must recite N items backward, then continue for 'steps' iterations
-    pub fn generate_reverse_n_treadmill(&self, start: String, n: usize, steps: usize) -> Task {
+    pub fn generate_reverse_n_treadmill(&mut self, start: String, n: usize, steps: usize) -> Task {
         let prompt = format!(
             "Starting from '{}', go back {} items, then continue backwards for {} more steps. What is the final item?",
             start, n, steps
@@ -196,7 +208,7 @@ impl ExtendedTaskGenerator {
             options.push(path[n].clone());
         }
 
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
 
         Task {
             task_type: TaskType::Segment {
@@ -384,7 +396,7 @@ impl ExtendedTaskGenerator {
     }
 
     /// Generate all valid linear extensions (topological sorts) of a partial order
-    pub fn generate_linear_extension_task(&self, partial_order: Vec<(String, String)>) -> Task {
+    pub fn generate_linear_extension_task(&mut self, partial_order: Vec<(String, String)>) -> Task {
         let prompt = format!(
             "Given the partial order constraints {:?}, which of the following is a valid linear extension?",
             partial_order
@@ -429,7 +441,7 @@ impl ExtendedTaskGenerator {
 
         // Invalid option 2: Random permutation
         let mut random_perm: Vec<String> = all_nodes.iter().cloned().collect();
-        random_perm.shuffle(&mut rand::thread_rng());
+        random_perm.shuffle(&mut self.rng);
         options.push(random_perm.join(", "));
 
         // Invalid option 3: Reverse the valid extension
@@ -437,7 +449,7 @@ impl ExtendedTaskGenerator {
         reversed.reverse();
         options.push(reversed.join(", "));
 
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
         let correct_answer = valid_extension.join(", ");
 
         Task {
@@ -503,7 +515,7 @@ impl ExtendedTaskGenerator {
     }
 
     pub fn generate_insertion_adaptation(
-        &self,
+        &mut self,
         item: String,
         after: String,
         before: String,
@@ -568,7 +580,7 @@ impl ExtendedTaskGenerator {
                     opts.push("No valid position".to_string());
                 }
 
-                opts.shuffle(&mut rand::thread_rng());
+                opts.shuffle(&mut self.rng);
                 (answer, opts)
             } else {
                 // Invalid ordering (before comes before after)
@@ -600,7 +612,7 @@ impl ExtendedTaskGenerator {
         }
     }
 
-    pub fn generate_next_step_prediction(&self, current: String, goal: String) -> Task {
+    pub fn generate_next_step_prediction(&mut self, current: String, goal: String) -> Task {
         let prompt = format!(
             "You are at '{}'. To reach '{}', what should be your next step?",
             current, goal
@@ -647,7 +659,7 @@ impl ExtendedTaskGenerator {
             }
         }
 
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
 
         Task {
             task_type: TaskType::ShortestPath {
@@ -825,7 +837,7 @@ impl ExtendedTaskGenerator {
         "Random sequence".to_string()
     }
 
-    pub fn generate_semantic_filter(&self, category: String, position: usize) -> Task {
+    pub fn generate_semantic_filter(&mut self, category: String, position: usize) -> Task {
         let prompt = format!(
             "What is the {}th item in the '{}' category?",
             position, category
@@ -855,7 +867,7 @@ impl ExtendedTaskGenerator {
             }
         }
 
-        options.shuffle(&mut rand::thread_rng());
+        options.shuffle(&mut self.rng);
 
         Task {
             task_type: TaskType::Index {

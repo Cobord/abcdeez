@@ -3,8 +3,9 @@ use crate::learner::LearnerModel;
 use crate::tasks::{Task, TaskGenerator, TaskType};
 use crate::topology::Topology;
 use rand::Rng;
-use tracing::{debug, info, warn, error, instrument, span, Level};
+use tracing::{debug, info, warn, instrument, span, Level};
 
+#[derive(Debug)]
 pub struct AdaptiveScheduler {
     learner_model: LearnerModel,
     bayesian_model: BayesianLearnerModel,
@@ -14,6 +15,7 @@ pub struct AdaptiveScheduler {
     use_eig: bool,
     trials_completed: usize,
     exploration_decay: f64,
+    rng: rand::rngs::StdRng,
 }
 
 impl AdaptiveScheduler {
@@ -27,6 +29,7 @@ impl AdaptiveScheduler {
         let task_generator = TaskGenerator::new(topology.clone());
         let bayesian_model = BayesianLearnerModel::new(&topology);
         
+        use rand::SeedableRng;
         let scheduler = AdaptiveScheduler {
             learner_model,
             bayesian_model,
@@ -36,6 +39,7 @@ impl AdaptiveScheduler {
             use_eig: true,
             trials_completed: 0,
             exploration_decay: 0.995, // Decay epsilon over time
+            rng: rand::rngs::StdRng::from_entropy(),
         };
         
         debug!(
@@ -50,6 +54,8 @@ impl AdaptiveScheduler {
     pub fn new_with_eig(learner_model: LearnerModel, topology: Topology, use_eig: bool) -> Self {
         let task_generator = TaskGenerator::new(topology.clone());
         let bayesian_model = BayesianLearnerModel::new(&topology);
+        
+        use rand::SeedableRng;
         AdaptiveScheduler {
             learner_model,
             bayesian_model,
@@ -59,13 +65,14 @@ impl AdaptiveScheduler {
             use_eig,
             trials_completed: 0,
             exploration_decay: 0.995, // Decay epsilon over time
+            rng: rand::rngs::StdRng::from_entropy(),
         }
     }
 
     #[instrument(level = "debug", fields(trials_completed = self.trials_completed))]
     pub fn select_next_task(&mut self) -> Task {
         let _span = span!(Level::DEBUG, "task_selection").entered();
-        let mut rng = rand::thread_rng();
+        // Use task generator's RNG for consistent randomization
 
         // Adaptive epsilon-greedy: decay exploration over time
         let current_epsilon =
@@ -81,7 +88,7 @@ impl AdaptiveScheduler {
 
         self.trials_completed += 1;
 
-        let exploration_roll = rng.gen::<f64>();
+        let exploration_roll = self.rng.gen::<f64>();
         let is_exploration = exploration_roll < effective_epsilon;
 
         debug!(
@@ -153,7 +160,7 @@ impl AdaptiveScheduler {
         );
     }
 
-    fn select_best_task_by_eig(&self, candidates: Vec<Task>) -> Task {
+    fn select_best_task_by_eig(&mut self, candidates: Vec<Task>) -> Task {
         let ranked = self.bayesian_model.rank_tasks_by_eig(candidates);
 
         // Filter by difficulty zone (70-80% success rate)
@@ -195,11 +202,11 @@ impl AdaptiveScheduler {
 
         let nodes = self.topology.nodes.clone();
         let n = nodes.len();
-        let mut rng = rand::thread_rng();
+        // Use task generator's RNG for consistent randomization
 
         for _ in 0..5 {
-            let idx1 = rng.gen_range(0..n);
-            let idx2 = rng.gen_range(0..n);
+            let idx1 = self.rng.gen_range(0..n);
+            let idx2 = self.rng.gen_range(0..n);
             candidates.push(
                 self.task_generator
                     .generate_task(Some(TaskType::PairwiseOrder {
@@ -210,14 +217,14 @@ impl AdaptiveScheduler {
         }
 
         for _ in 0..3 {
-            let idx = rng.gen_range(0..n - 1);
+            let idx = self.rng.gen_range(0..n - 1);
             candidates.push(self.task_generator.generate_task(Some(TaskType::Successor {
                 item: nodes[idx].label.clone(),
             })));
         }
 
         for _ in 0..3 {
-            let idx = rng.gen_range(1..n);
+            let idx = self.rng.gen_range(1..n);
             candidates.push(
                 self.task_generator
                     .generate_task(Some(TaskType::Predecessor {
@@ -227,18 +234,18 @@ impl AdaptiveScheduler {
         }
 
         for _ in 0..3 {
-            let idx = rng.gen_range(0..n);
-            let k = rng.gen_range(1..4);
+            let idx = self.rng.gen_range(0..n);
+            let k = self.rng.gen_range(1..4);
             candidates.push(self.task_generator.generate_task(Some(TaskType::KJump {
                 start: nodes[idx].label.clone(),
-                k: if rng.gen_bool(0.5) { k } else { -k },
+                k: if self.rng.gen_bool(0.5) { k } else { -k },
             })));
         }
 
         for _ in 0..2 {
-            let idx = rng.gen_range(0..n.saturating_sub(3));
-            let count = rng.gen_range(2..5);
-            let reverse = rng.gen_bool(0.5);
+            let idx = self.rng.gen_range(0..n.saturating_sub(3));
+            let count = self.rng.gen_range(2..5);
+            let reverse = self.rng.gen_bool(0.5);
             candidates.push(self.task_generator.generate_task(Some(TaskType::Segment {
                 start: nodes[idx].label.clone(),
                 count,
@@ -447,6 +454,10 @@ impl AdaptiveScheduler {
 
     pub fn get_bayesian_model(&self) -> &BayesianLearnerModel {
         &self.bayesian_model
+    }
+
+    pub fn get_bayesian_model_mut(&mut self) -> &mut BayesianLearnerModel {
+        &mut self.bayesian_model
     }
 
     pub fn get_model_entropy(&self) -> f64 {

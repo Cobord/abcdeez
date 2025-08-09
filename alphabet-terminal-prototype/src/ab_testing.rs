@@ -1,5 +1,5 @@
-use crate::experimental_design::{ExperimentalDesign, ExperimentalDesigner};
-use crate::power_analysis::{PowerAnalyzer, RealTimeMonitor, StatisticalTestType, EffectSizeCalculator};
+use crate::experimental_design::ExperimentalDesign;
+use crate::power_analysis::PowerAnalyzer;
 use crate::statistical_validation::StatisticalValidator;
 use crate::statistics::TestResult;
 use crate::config::LearnerConfig;
@@ -404,20 +404,25 @@ impl ABTestFramework {
         participant_id: String,
         context: Option<HashMap<String, serde_json::Value>>,
     ) -> Result<String, String> {
-        let test = self.tests.get(test_id)
-            .ok_or("Test not found")?;
-        
-        if test.status != TestStatus::Running {
-            return Err("Test is not currently running".to_string());
-        }
-        
-        // Check if participant is already assigned
+        // Check if participant is already assigned first
         if let Some(existing) = self.assignments.get(&participant_id) {
             return Ok(existing.variant_id.clone());
         }
         
+        // Clone test data to avoid borrowing conflicts
+        let test = {
+            let test_ref = self.tests.get(test_id)
+                .ok_or("Test not found")?;
+            
+            if test_ref.status != TestStatus::Running {
+                return Err("Test is not currently running".to_string());
+            }
+            
+            test_ref.clone()
+        };
+        
         // Select variant based on allocation strategy
-        let variant_id = self.select_variant(test, &context)?;
+        let variant_id = self.select_variant(&test, &context)?;
         
         // Record assignment
         let assignment = ParticipantAssignment {
@@ -456,20 +461,22 @@ impl ABTestFramework {
 
     /// Run interim analysis and check stopping criteria
     pub fn run_interim_analysis(&mut self, test_id: &str) -> Result<InterimAnalysisResult, String> {
+        // Clone test data to avoid borrowing conflicts
         let test = self.tests.get(test_id)
-            .ok_or("Test not found")?;
+            .ok_or("Test not found")?
+            .clone();
         
         // Collect current data for all variants
-        let variant_data = self.collect_variant_data(test)?;
+        let variant_data = self.collect_variant_data(&test)?;
         
         // Perform statistical tests
-        let statistical_results = self.perform_statistical_tests(test, &variant_data)?;
+        let statistical_results = self.perform_statistical_tests(&test, &variant_data)?;
         
         // Check stopping criteria
-        let stopping_decision = self.evaluate_stopping_criteria(test, &statistical_results)?;
+        let stopping_decision = self.evaluate_stopping_criteria(&test, &statistical_results)?;
         
-        // Check guard metrics
-        let guard_violations = self.check_guard_metrics(test, &variant_data)?;
+        // Check guard metrics (requires &mut self for RNG)
+        let guard_violations = self.check_guard_metrics(&test, &variant_data)?;
         
         // Generate recommendations
         let recommendations = self.generate_interim_recommendations(
@@ -493,29 +500,34 @@ impl ABTestFramework {
 
     /// Finalize test and generate comprehensive results
     pub fn finalize_test(&mut self, test_id: &str) -> Result<ABTestResults, String> {
-        let test = self.tests.get_mut(test_id)
-            .ok_or("Test not found")?;
-        
-        if test.status != TestStatus::Running {
-            return Err("Test is not running".to_string());
-        }
+        // First check test status and clone test data
+        let test_clone = {
+            let test = self.tests.get(test_id)
+                .ok_or("Test not found")?;
+            
+            if test.status != TestStatus::Running {
+                return Err("Test is not running".to_string());
+            }
+            
+            test.clone()
+        };
         
         // Collect all data
-        let variant_data = self.collect_variant_data(test)?;
+        let variant_data = self.collect_variant_data(&test_clone)?;
         
         // Perform comprehensive analysis
-        let primary_analysis = self.perform_primary_analysis(test, &variant_data)?;
-        let secondary_analyses = self.perform_secondary_analyses(test, &variant_data)?;
+        let primary_analysis = self.perform_primary_analysis(&test_clone, &variant_data)?;
+        let secondary_analyses = self.perform_secondary_analyses(&test_clone, &variant_data)?;
         let variant_performance = self.calculate_variant_performance(&variant_data)?;
         
         // Statistical tests with multiple testing correction
-        let statistical_tests = self.perform_final_statistical_tests(test, &variant_data)?;
+        let statistical_tests = self.perform_final_statistical_tests(&test_clone, &variant_data)?;
         
         // Calculate confidence intervals
         let confidence_intervals = self.calculate_confidence_intervals(&variant_data, 0.95)?;
         
         // Practical significance assessment
-        let practical_significance = self.assess_practical_significance(test, &primary_analysis)?;
+        let practical_significance = self.assess_practical_significance(&test_clone, &primary_analysis)?;
         
         // Generate final recommendation
         let recommendation = self.generate_final_recommendation(
@@ -536,6 +548,8 @@ impl ABTestFramework {
         };
         
         // Update test status and results
+        let test = self.tests.get_mut(test_id)
+            .ok_or("Test not found")?;
         test.status = TestStatus::Completed;
         test.ended_at = Some(chrono::Utc::now());
         test.results = Some(results.clone());
@@ -740,7 +754,7 @@ impl ABTestFramework {
     }
 
     fn check_guard_metrics(
-        &self,
+        &mut self,
         test: &ABTest,
         variant_data: &HashMap<String, Vec<f64>>,
     ) -> Result<Vec<GuardViolation>, String> {
