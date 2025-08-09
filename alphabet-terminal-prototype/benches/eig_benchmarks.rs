@@ -5,7 +5,7 @@ use graph_learning_core::tasks::{Task, TaskType};
 use graph_learning_core::topology::Topology;
 
 fn benchmark_eig_calculation(c: &mut Criterion) {
-    let model = BayesianLearnerModel::new(&Topology::alphabet());
+    let mut model = BayesianLearnerModel::new(&Topology::alphabet());
     let task = Task {
         task_type: TaskType::Successor {
             item: "A".to_string(),
@@ -23,7 +23,7 @@ fn benchmark_eig_calculation(c: &mut Criterion) {
 }
 
 fn benchmark_eig_different_sample_sizes(c: &mut Criterion) {
-    let model = BayesianLearnerModel::new(&Topology::alphabet());
+    let mut model = BayesianLearnerModel::new(&Topology::alphabet());
     let task = Task {
         task_type: TaskType::PairwiseOrder {
             a: "A".to_string(),
@@ -72,7 +72,7 @@ fn benchmark_bayesian_update(c: &mut Criterion) {
 }
 
 fn benchmark_adaptive_monte_carlo(c: &mut Criterion) {
-    let model = BayesianLearnerModel::new(&Topology::alphabet());
+    let mut model = BayesianLearnerModel::new(&Topology::alphabet());
     let task = Task {
         task_type: TaskType::KJump {
             start: "E".to_string(),
@@ -116,7 +116,7 @@ fn benchmark_large_topology_performance(c: &mut Criterion) {
     let large_items: Vec<String> = (0..1000).map(|i| format!("item_{:04}", i)).collect();
     let large_topo = Topology::new_linear(large_items);
 
-    let model = BayesianLearnerModel::new(&large_topo);
+    let mut model = BayesianLearnerModel::new(&large_topo);
     let task = Task {
         task_type: TaskType::PairwiseOrder {
             a: "item_0100".to_string(),
@@ -139,7 +139,7 @@ fn benchmark_large_topology_performance(c: &mut Criterion) {
 }
 
 fn benchmark_performance_requirements(c: &mut Criterion) {
-    let model = BayesianLearnerModel::new(&Topology::alphabet());
+    let mut model = BayesianLearnerModel::new(&Topology::alphabet());
     let task = Task {
         task_type: TaskType::Index {
             item: "M".to_string(),
@@ -188,7 +188,7 @@ fn benchmark_concurrent_performance(c: &mut Criterion) {
                 let task_clone = Arc::clone(&task);
 
                 let handle = thread::spawn(move || {
-                    let model_ref = model_clone.lock().unwrap();
+                    let mut model_ref = model_clone.lock().unwrap();
                     model_ref.monte_carlo_eig(&task_clone, 500)
                 });
 
