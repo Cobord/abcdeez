@@ -18,7 +18,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         };
 
         card(
-            "🎯 Current Session",
+            "Current Session",
             flex((
                 flex((
                     label(format!(
@@ -50,7 +50,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         )
     } else {
         card(
-            "💤 No Active Session",
+            "No Active Session",
             prose("Start a new session to begin tracking your progress")
                 .alignment(TextAlignment::Middle),
         )
@@ -58,7 +58,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
 
     // Enhanced overall metrics with visual indicators
     let overall_metrics = card(
-        "📊 Performance Overview",
+        "Performance Overview",
         flex((
             // Top row metrics
             flex((
@@ -103,15 +103,15 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             // Performance rating
             label({
                 let rating = if data.current_metrics.accuracy_rate >= 0.9 {
-                    "Mastery Level"
+                    "⭐⭐⭐⭐⭐ Excellent!"
                 } else if data.current_metrics.accuracy_rate >= 0.8 {
-                    "Proficient"
+                    "⭐⭐⭐⭐ Great!"
                 } else if data.current_metrics.accuracy_rate >= 0.7 {
-                    "Developing"
+                    "⭐⭐⭐ Good!"
                 } else if data.current_metrics.accuracy_rate >= 0.6 {
-                    "Building Foundation"
+                    "⭐⭐ Keep practicing!"
                 } else {
-                    "Early Learning"
+                    "⭐ Just getting started!"
                 };
                 rating
             })
@@ -132,7 +132,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 // Bidirectionality with visual indicator
                 flex((
                     metric_display(
-                        "Bidirectionality",
+                        "↔️ Bidirectionality",
                         format!("{:.3}", m.bidirectionality_index),
                         Color::from_rgb8(0, 128, 255),
                     ),
@@ -148,7 +148,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 // Distance effect with visual indicator
                 flex((
                     metric_display(
-                        "Distance Effect",
+                        "📏 Distance Effect",
                         format!("{:.3}", m.symbolic_distance_slope),
                         Color::from_rgb8(128, 0, 255),
                     ),
@@ -184,7 +184,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         let placeholder = if core.is_none() {
             Some(
                 flex((
-                    label("Complete more tasks to unlock detailed analytics")
+                    label("📊 Complete more tasks to unlock detailed analytics")
                         .alignment(TextAlignment::Middle),
                     prose("Analytics appear after 5+ responses")
                         .brush(Color::from_rgb8(128, 128, 128))
@@ -197,7 +197,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         };
 
         card(
-            "🔬 Learning Analytics",
+            "Learning Analytics",
             flex((metrics_block, placeholder)).direction(Axis::Vertical),
         )
     };
@@ -240,7 +240,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         let no_data = if data.current_learner.is_none() {
             Some(
                 flex((
-                    label("No proficiency data yet").alignment(TextAlignment::Middle),
+                    label("🎯 No proficiency data yet").alignment(TextAlignment::Middle),
                     prose("Complete tasks to build your skill profile")
                         .brush(Color::from_rgb8(128, 128, 128))
                         .alignment(TextAlignment::Middle),
@@ -252,7 +252,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         };
 
         card(
-            "🎯 Skill Proficiencies",
+            "Skill Proficiencies",
             flex((profs_block, no_data)).direction(Axis::Vertical),
         )
     };
@@ -266,7 +266,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             .take(10)
             .enumerate()
             .map(|(i, response)| {
-                let status = if response.correct { "Correct" } else { "Incorrect" };
+                let status = if response.correct { "✅" } else { "❌" };
                 let color = if response.correct {
                     Color::from_rgb8(0, 200, 0)
                 } else {
@@ -279,7 +279,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     label(format!("{} {}", status, prompt_preview))
                         .brush(color)
                         .alignment(TextAlignment::Start),
-                    label(format!("{}ms", response.response_time_ms))
+                    label(format!("⚡{}ms", response.response_time_ms))
                         .brush(Color::from_rgb8(128, 128, 128))
                         .alignment(TextAlignment::End),
                 ))
@@ -300,7 +300,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         };
 
         card(
-            "🕒 Recent Activity",
+            "Recent Activity",
             flex((
                 list_block,
                 empty_block,
@@ -327,7 +327,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
 
         if enough {
             card(
-                "📈 Performance Visualizations",
+                "Performance Visualizations",
                 flex((
                     // Row 1: Learning curve and response time histogram
                     flex((
@@ -418,9 +418,9 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             )
         } else {
             card(
-                "📈 Performance Visualizations",
+                "Performance Visualizations",
                 flex((
-                    label("Beautiful charts will appear after 5+ responses")
+                    label("📊 Beautiful charts will appear after 5+ responses")
                         .alignment(TextAlignment::Middle),
                     prose("Keep practicing to unlock detailed visualizations with learning curves, heatmaps, and more!")
                         .brush(Color::from_rgb8(128, 128, 128))
@@ -443,16 +443,16 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
 
     // Export section with multiple formats
     let export_section = card(
-        "📦 Data Export",
+        "Data Export",
         flex((
             prose("Export your learning data for analysis or backup")
                 .alignment(TextAlignment::Start),
             flex((
                 button(
                     if data.export_data_in_flight {
-                        "⏳ Exporting..."
+                        "Exporting..."
                     } else {
-                        "💾 Export JSON"
+                        "📄 Export JSON"
                     },
                     |data: &mut AppData| {
                         if !data.export_data_in_flight {
@@ -466,7 +466,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     data.export_current_data();
                     data.success_message = Some("CSV export coming soon!".to_string());
                 }),
-                button("🎬 Export Replay", |data: &mut AppData| {
+                button("🔄 Export Replay", |data: &mut AppData| {
                     data.export_format = ExportFormat::Replay;
                     data.export_current_data();
                     data.success_message = Some("Replay export coming soon!".to_string());
@@ -479,7 +479,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
 
     // Session controls
     let controls = card(
-        "🎮 Actions",
+        "Actions",
         flex((
             button("▶️ Resume Session", |data: &mut AppData| {
                 if data.current_session.is_some() {
@@ -503,7 +503,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
 
     // Main layout
     flex((
-        label("🚀 Performance Dashboard")
+        label("📊 Performance Dashboard")
             .brush(Color::from_rgb8(0, 128, 255))
             .alignment(TextAlignment::Middle),
         session_summary,

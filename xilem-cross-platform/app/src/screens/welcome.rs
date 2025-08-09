@@ -29,19 +29,18 @@ pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     data.password_input = value;
                 }),
             ),
-            button(
-                if data.login_request_in_flight {
-                    "Logging in..."
-                } else {
-                    "Login"
-                }
-                .to_string(),
+            if data.login_request_in_flight {
+                // Proper loading state with disabled button
+                button("Login", |_: &mut AppData| {})
+                    .disabled(true)
+            } else {
+                button("Login",
                 |data: &mut AppData| {
                     if !data.login_request_in_flight {
                         data.login();
                     }
-                },
-            ),
+                }),
+            },
             
             // OAuth Section - App Store Compliant
             label("── Or ──").alignment(TextAlignment::Middle),
@@ -55,28 +54,17 @@ pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             prose("Start learning immediately without creating an account")
                 .alignment(TextAlignment::Middle),
             button("Start as Guest", |data: &mut AppData| {
-                // Create a guest user and learner
-                data.current_user = Some(User {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    username: "Guest".to_string(),
-                    email: "guest@example.com".to_string(),
-                    password_hash: String::new(),
-                    apple_user_id: None,
-                    github_user_id: None,
-                    oauth_provider_id: None,
-                    auth_provider: "guest".to_string(),
-                    is_private_email: Some(false),
-                    created_at: chrono::Utc::now(),
-                    updated_at: chrono::Utc::now(),
-                });
+                // Proper guest/anonymous user pattern
+                data.current_user = None; // No fake user object
+                data.is_guest_mode = true;
                 data.create_learner();
                 data.current_screen = Screen::DomainSelection;
             }),
-            button("Quick Tour 📚", |data: &mut AppData| {
+            button("Quick Tour", |data: &mut AppData| {
                 // Start the interactive guided tour
                 data.demo_start();
             }),
-            button("Training Demo 🎯", |data: &mut AppData| {
+            button("Training Demo", |data: &mut AppData| {
                 // Start the full training demo
                 data.demo_start_training();
             }),

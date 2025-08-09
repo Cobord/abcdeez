@@ -68,6 +68,7 @@ pub struct AppData {
 
     // Authentication
     pub current_user: Option<User>,
+    pub is_guest_mode: bool,  // Proper guest mode flag
     pub username_input: String,
     pub password_input: String,
     pub email_input: String,
@@ -167,6 +168,7 @@ impl Default for AppData {
             success_message: None,
             show_end_session_confirmation: false,
             current_user: None,
+            is_guest_mode: false,
             username_input: String::new(),
             password_input: String::new(),
             email_input: String::new(),

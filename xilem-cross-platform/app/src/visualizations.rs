@@ -1,7 +1,7 @@
-// visualizations.rs - Beautiful data visualizations using Plotters
+// visualizations.rs - Honest, accessible data visualizations using Plotters
+// No chartjunk, no lies, just truth
 
 use plotters::prelude::*;
-use plotters::style::colors::colormaps::{ColorMap, ViridisRGB};
 use chrono::{DateTime, Duration, Utc};
 use std::collections::HashMap;
 use std::error::Error;
@@ -9,38 +9,56 @@ use std::error::Error;
 use crate::models::PerformanceMetrics;
 use graph_learning_core::tasks::TaskResponse;
 
-// Color palette for consistent, beautiful visualizations
-pub struct ColorPalette {
-    pub primary: RGBColor,
-    pub secondary: RGBColor,
-    pub success: RGBColor,
-    pub error: RGBColor,
-    pub warning: RGBColor,
-    pub info: RGBColor,
-    pub gradient_start: RGBColor,
-    pub gradient_end: RGBColor,
-    pub background: RGBColor,
-    pub grid: RGBColor,
+// Colorblind-safe palette using ColorBrewer schemes
+// Tested with Coblis colorblind simulator
+pub struct AccessiblePalette {
+    pub primary: RGBColor,       // Blue - works for all colorblind types
+    pub secondary: RGBColor,     // Orange - distinguishable from blue
+    pub success: RGBColor,       // Teal - not pure green
+    pub error: RGBColor,         // Vermillion - not pure red  
+    pub warning: RGBColor,       // Yellow - high contrast
+    pub neutral: RGBColor,       // Gray
+    pub background: RGBColor,    // Light gray
+    pub grid: RGBColor,          // Medium gray
+    pub text: RGBColor,          // Dark gray
 }
 
-impl Default for ColorPalette {
+impl Default for AccessiblePalette {
     fn default() -> Self {
         Self {
-            primary: RGBColor(102, 126, 234),      // Beautiful purple-blue
-            secondary: RGBColor(118, 75, 162),     // Deep purple
-            success: RGBColor(46, 213, 115),       // Vibrant green
-            error: RGBColor(255, 71, 87),          // Soft red
-            warning: RGBColor(255, 165, 2),        // Orange
-            info: RGBColor(0, 123, 255),           // Bright blue
-            gradient_start: RGBColor(102, 126, 234),
-            gradient_end: RGBColor(255, 107, 107),
-            background: RGBColor(248, 249, 250),   // Light gray
-            grid: RGBColor(233, 236, 239),         // Subtle grid
+            primary: RGBColor(0, 114, 178),      // Colorblind-safe blue
+            secondary: RGBColor(230, 159, 0),    // Colorblind-safe orange
+            success: RGBColor(0, 158, 115),      // Colorblind-safe teal
+            error: RGBColor(213, 94, 0),         // Colorblind-safe vermillion
+            warning: RGBColor(240, 228, 66),     // High-contrast yellow
+            neutral: RGBColor(128, 128, 128),    // Neutral gray
+            background: RGBColor(250, 250, 250), // Very light gray
+            grid: RGBColor(200, 200, 200),       // Light grid lines
+            text: RGBColor(50, 50, 50),          // Dark text
         }
     }
 }
 
-/// Create a beautiful learning curve visualization
+// Centralized performance thresholds based on educational research
+pub struct PerformanceThresholds {
+    pub mastery: f64,        // 85% - Educational mastery level
+    pub proficient: f64,     // 70% - Proficiency threshold
+    pub developing: f64,     // 55% - Developing skills
+    pub struggling: f64,     // 40% - Needs intervention
+}
+
+impl Default for PerformanceThresholds {
+    fn default() -> Self {
+        Self {
+            mastery: 0.85,
+            proficient: 0.70,
+            developing: 0.55,
+            struggling: 0.40,
+        }
+    }
+}
+
+/// Create an HONEST learning curve visualization with confidence intervals
 pub fn create_learning_curve(
     responses: &[TaskResponse],
     width: u32,
@@ -51,129 +69,177 @@ pub fn create_learning_curve(
         let root = BitMapBackend::with_buffer(&mut buffer, (width, height))
             .into_drawing_area();
 
-        let palette = ColorPalette::default();
+        let palette = AccessiblePalette::default();
+        let thresholds = PerformanceThresholds::default();
         root.fill(&palette.background)?;
 
-        // Calculate moving average accuracy
-        let window_size = 5;
-        let mut accuracies = Vec::new();
-        let mut timestamps = Vec::new();
+        if responses.is_empty() {
+            // Show meaningful empty state
+            root.draw_text(
+                "No data available yet",
+                &("sans-serif", 20).into_font().color(&palette.text),
+                (width as i32 / 2 - 80, height as i32 / 2),
+            )?;
+            root.present()?;
+            return Ok(buffer);
+        }
 
+        // Calculate ACTUAL performance with confidence intervals
+        // Using proper statistical window sizing (sqrt(n) rule)
+        let window_size = (responses.len() as f64).sqrt().max(3.0).min(20.0) as usize;
+        
+        let mut performance_data = Vec::new();
+        let mut confidence_bands = Vec::new();
+        
         for i in 0..responses.len() {
             let start = i.saturating_sub(window_size / 2);
             let end = (i + window_size / 2 + 1).min(responses.len());
             let window = &responses[start..end];
-
-            let accuracy = window.iter().filter(|r| r.correct).count() as f64
-                / window.len() as f64 * 100.0;
-            accuracies.push(accuracy);
-            timestamps.push(i as f64);
+            
+            if !window.is_empty() {
+                let correct = window.iter().filter(|r| r.correct).count() as f64;
+                let total = window.len() as f64;
+                let accuracy = correct / total;
+                
+                // Calculate 95% confidence interval using Wilson score
+                let z = 1.96; // 95% confidence
+                let n = total;
+                let p_hat = accuracy;
+                
+                let denominator = 1.0 + z * z / n;
+                let center = (p_hat + z * z / (2.0 * n)) / denominator;
+                let margin = (z / denominator) * ((p_hat * (1.0 - p_hat) / n) + (z * z / (4.0 * n * n))).sqrt();
+                
+                performance_data.push((i as f64, accuracy));
+                confidence_bands.push((i as f64, (center - margin).max(0.0), (center + margin).min(1.0)));
+            }
         }
 
-        // Create the chart with beautiful styling
+        // Determine appropriate Y-axis range based on actual data
+        let min_accuracy = performance_data.iter()
+            .map(|(_, acc)| *acc)
+            .fold(1.0, f64::min);
+        let max_accuracy = performance_data.iter()
+            .map(|(_, acc)| *acc)
+            .fold(0.0, f64::max);
+        
+        // Add padding but show actual range
+        let y_min = (min_accuracy - 0.1).max(0.0);
+        let y_max = (max_accuracy + 0.1).min(1.0);
+
         let mut chart = ChartBuilder::on(&root)
-            .caption("Learning Progress", ("Inter", 24).into_font().color(&BLACK))
+            .caption("Learning Progress (with 95% Confidence Interval)", 
+                    ("sans-serif", 20).into_font().color(&palette.text))
             .margin(15)
             .x_label_area_size(40)
-            .y_label_area_size(50)
+            .y_label_area_size(60)
             .build_cartesian_2d(
                 0f64..responses.len() as f64,
-                0f64..100f64,
+                y_min..y_max,
             )?;
 
-        // Draw subtle grid
         chart.configure_mesh()
             .disable_mesh()
             .x_desc("Task Number")
-            .y_desc("Accuracy (%)")
+            .y_desc("Accuracy")
             .x_label_formatter(&|x| format!("{:.0}", x))
-            .y_label_formatter(&|y| format!("{:.0}%", y))
-            .axis_desc_style(("Inter", 12).into_font().color(&DARK_GRAY))
+            .y_label_formatter(&|y| format!("{:.0%}", y))
+            .axis_desc_style(("sans-serif", 12).into_font().color(&palette.text))
             .draw()?;
 
-        // Draw custom grid lines
-        for y in (0..=100).step_by(20) {
-            root.draw(&PathElement::new(
-                vec![(50, 50 + (height as i32 - 100) * (100 - y) / 100),
-                     (width as i32 - 15, 50 + (height as i32 - 100) * (100 - y) / 100)],
-                palette.grid.stroke_width(1),
-            ))?;
-        }
-
-        // Draw gradient area under the curve
-        let data_points: Vec<(f64, f64)> = timestamps.iter().copied()
-            .zip(accuracies.iter().copied())
-            .collect();
-
-        // Create gradient fill
-        for (i, window) in data_points.windows(2).enumerate() {
-            let (x1, y1) = window[0];
-            let (x2, y2) = window[1];
-
-            // Calculate gradient color
-            let progress = i as f32 / data_points.len() as f32;
-            let r = (palette.gradient_start.0 as f32 * (1.0 - progress)
-                + palette.gradient_end.0 as f32 * progress) as u8;
-            let g = (palette.gradient_start.1 as f32 * (1.0 - progress)
-                + palette.gradient_end.1 as f32 * progress) as u8;
-            let b = (palette.gradient_start.2 as f32 * (1.0 - progress)
-                + palette.gradient_end.2 as f32 * progress) as u8;
-
-            chart.draw_series(AreaSeries::new(
-                vec![(x1, 0.0), (x1, y1), (x2, y2), (x2, 0.0)],
-                0.0,
-                RGBColor(r, g, b).mix(0.2),
-            ))?;
-        }
-
-        // Draw the main curve with glow effect
-        for width in [5, 3, 2].iter() {
-            let alpha = if *width == 2 { 1.0 } else { 0.2 };
-            chart.draw_series(LineSeries::new(
-                data_points.clone(),
-                palette.primary.mix(alpha).stroke_width(*width),
-            ))?;
-        }
-
-        // Draw data points with animation-like appearance
-        chart.draw_series(data_points.iter().enumerate().map(|(i, (x, y))| {
-            let color = if responses[i].correct {
-                palette.success
-            } else {
-                palette.error
-            };
-            Circle::new((*x, *y), 3, color.filled())
-        }))?;
-
-        // Add performance zones
-        let zones = [
-            (80.0, 100.0, "Excellent", palette.success.mix(0.1)),
-            (60.0, 80.0, "Good", palette.info.mix(0.1)),
-            (40.0, 60.0, "Developing", palette.warning.mix(0.1)),
-            (0.0, 40.0, "Learning", palette.error.mix(0.1)),
+        // Draw performance threshold lines with labels
+        let threshold_lines = [
+            (thresholds.mastery, "Mastery", palette.success),
+            (thresholds.proficient, "Proficient", palette.primary),
+            (thresholds.developing, "Developing", palette.warning),
+            (thresholds.struggling, "Struggling", palette.error),
         ];
 
-        for (y_min, y_max, label, color) in zones.iter() {
-            chart.draw_series(std::iter::once(Rectangle::new([
-                (0.0, *y_min),
-                (responses.len() as f64, *y_max)
-            ], color.filled())))?;
-
-            // Add zone labels
-            root.draw_text(
-                label,
-                &("Inter", 10).into_font().color(&DARK_GRAY),
-                (width as i32 - 60, 50 + (height as i32 - 100) * (100 - ((y_min + y_max) / 2.0) as i32) / 100),
-            )?;
+        for (threshold, label, color) in threshold_lines.iter() {
+            if *threshold >= y_min && *threshold <= y_max {
+                chart.draw_series(std::iter::once(PathElement::new(
+                    vec![(0.0, *threshold), (responses.len() as f64, *threshold)],
+                    color.mix(0.3).stroke_width(1),
+                )))?;
+                
+                // Add threshold label
+                root.draw_text(
+                    label,
+                    &("sans-serif", 10).into_font().color(&color),
+                    chart.plotting_area().get_pixel_coord((responses.len() as f64 * 0.95, *threshold))
+                        .unwrap_or((0, 0)),
+                )?;
+            }
         }
 
-        // Add current accuracy annotation
-        if let Some(last_accuracy) = accuracies.last() {
-            let annotation = format!("Current: {:.1}%", last_accuracy);
+        // Draw confidence bands (honest uncertainty representation)
+        for window in confidence_bands.windows(2) {
+            let (x1, lower1, upper1) = window[0];
+            let (x2, lower2, upper2) = window[1];
+            
+            // Draw the confidence band as a filled area
+            chart.draw_series(std::iter::once(Polygon::new(
+                vec![
+                    (x1, lower1),
+                    (x1, upper1),
+                    (x2, upper2),
+                    (x2, lower2),
+                ],
+                palette.primary.mix(0.2).filled(),
+            )))?;
+        }
+
+        // Draw the actual performance line
+        chart.draw_series(LineSeries::new(
+            performance_data.clone(),
+            palette.primary.stroke_width(2),
+        ))?
+        .label("Actual Performance")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 10, y)], &palette.primary));
+
+        // Draw individual correct/incorrect points
+        for (i, response) in responses.iter().enumerate() {
+            let color = if response.correct {
+                palette.success.mix(0.6)
+            } else {
+                palette.error.mix(0.6)
+            };
+            
+            let y_value = if response.correct { 1.0 } else { 0.0 };
+            chart.draw_series(std::iter::once(Circle::new(
+                (i as f64, y_value),
+                2,
+                color.filled(),
+            )))?;
+        }
+
+        // Add summary statistics box
+        let total = responses.len();
+        let correct = responses.iter().filter(|r| r.correct).count();
+        let overall_accuracy = correct as f64 / total as f64;
+        
+        // Calculate trend using proper linear regression
+        if performance_data.len() > 1 {
+            let n = performance_data.len() as f64;
+            let sum_x: f64 = performance_data.iter().map(|(x, _)| x).sum();
+            let sum_y: f64 = performance_data.iter().map(|(_, y)| y).sum();
+            let sum_xx: f64 = performance_data.iter().map(|(x, _)| x * x).sum();
+            let sum_xy: f64 = performance_data.iter().map(|(x, y)| x * y).sum();
+            
+            let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x);
+            let trend_direction = if slope > 0.001 {
+                "↑ Improving"
+            } else if slope < -0.001 {
+                "↓ Declining"
+            } else {
+                "→ Stable"
+            };
+            
             root.draw_text(
-                &annotation,
-                &("Inter", 14).into_font().color(&palette.primary).style(FontStyle::Bold),
-                (width as i32 - 120, 30),
+                &format!("Overall: {:.1%} | Trend: {} ({:+.3%}/task)", 
+                        overall_accuracy, trend_direction, slope),
+                &("sans-serif", 12).into_font().color(&palette.text),
+                (15, height as i32 - 20),
             )?;
         }
 
@@ -182,7 +248,7 @@ pub fn create_learning_curve(
     Ok(buffer)
 }
 
-/// Create a beautiful response time distribution histogram
+/// Create a properly binned response time histogram using Sturges' rule
 pub fn create_response_time_histogram(
     response_times: &[u128],
     width: u32,
@@ -193,27 +259,53 @@ pub fn create_response_time_histogram(
         let root = BitMapBackend::with_buffer(&mut buffer, (width, height))
             .into_drawing_area();
 
-        let palette = ColorPalette::default();
+        let palette = AccessiblePalette::default();
         root.fill(&palette.background)?;
 
-        // Calculate histogram bins
-        let min_time = *response_times.iter().min().unwrap_or(&0) as f64;
-        let max_time = *response_times.iter().max().unwrap_or(&10000) as f64;
-        let num_bins = 20;
-        let bin_width = (max_time - min_time) / num_bins as f64;
+        if response_times.is_empty() {
+            root.draw_text(
+                "No timing data available",
+                &("sans-serif", 20).into_font().color(&palette.text),
+                (width as i32 / 2 - 80, height as i32 / 2),
+            )?;
+            root.present()?;
+            return Ok(buffer);
+        }
 
+        // Use Sturges' rule for optimal bin count: k = ⌈log₂(n) + 1⌉
+        let n = response_times.len();
+        let num_bins = ((n as f64).log2() + 1.0).ceil() as usize;
+        
+        let times_f64: Vec<f64> = response_times.iter().map(|&t| t as f64).collect();
+        let min_time = times_f64.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+        let max_time = times_f64.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+        
+        // Handle edge case of all same values
+        let range = if max_time - min_time < 1.0 {
+            100.0 // Default range if all values are the same
+        } else {
+            max_time - min_time
+        };
+        
+        let bin_width = range / num_bins as f64;
         let mut bins = vec![0; num_bins];
-        for &time in response_times {
-            let bin_idx = ((time as f64 - min_time) / bin_width).floor() as usize;
+        
+        for &time in &times_f64 {
+            let bin_idx = ((time - min_time) / bin_width).floor() as usize;
             if bin_idx < num_bins {
                 bins[bin_idx] += 1;
+            } else if bin_idx == num_bins && time == max_time {
+                bins[num_bins - 1] += 1; // Include max value in last bin
             }
         }
 
         let max_count = *bins.iter().max().unwrap_or(&1) as f64;
 
         let mut chart = ChartBuilder::on(&root)
-            .caption("Response Time Distribution", ("Inter", 24).into_font().color(&BLACK))
+            .caption(
+                &format!("Response Time Distribution (n={}, {} bins via Sturges' rule)", n, num_bins),
+                ("sans-serif", 16).into_font().color(&palette.text)
+            )
             .margin(15)
             .x_label_area_size(40)
             .y_label_area_size(50)
@@ -226,96 +318,94 @@ pub fn create_response_time_histogram(
             .disable_mesh()
             .x_desc("Response Time (ms)")
             .y_desc("Frequency")
-            .x_label_formatter(&|x| format!("{:.0}", x))
+            .x_label_formatter(&|x| {
+                if *x >= 1000.0 {
+                    format!("{:.1}s", x / 1000.0)
+                } else {
+                    format!("{:.0}ms", x)
+                }
+            })
             .y_label_formatter(&|y| format!("{:.0}", y))
-            .axis_desc_style(("Inter", 12).into_font().color(&DARK_GRAY))
+            .axis_desc_style(("sans-serif", 12).into_font().color(&palette.text))
             .draw()?;
 
-        // Draw bars with gradient
+        // Draw histogram bars with performance-based colors
         for (i, &count) in bins.iter().enumerate() {
-            let x_start = min_time + i as f64 * bin_width;
-            let x_end = x_start + bin_width * 0.9; // Small gap between bars
-
-            // Calculate color based on performance
-            let avg_bin_time = x_start + bin_width / 2.0;
-            let color = if avg_bin_time < 1000.0 {
-                palette.success
-            } else if avg_bin_time < 2000.0 {
-                palette.info
-            } else if avg_bin_time < 3000.0 {
-                palette.warning
-            } else {
-                palette.error
-            };
-
-            // Draw bar with gradient effect
-            for j in 0..count {
-                let y_start = j as f64;
-                let y_end = (j + 1) as f64;
-                let alpha = 0.8 - (j as f32 / count as f32) * 0.3;
-
-                chart.draw_series(std::iter::once(Rectangle::new([
-                    (x_start, y_start),
-                    (x_end, y_end)
-                ], color.mix(alpha).filled())))?;
-            }
-
-            // Add value label on top of bar
             if count > 0 {
-                root.draw_text(
-                    &format!("{}", count),
-                    &("Inter", 10).into_font().color(&DARK_GRAY),
-                    chart.plotting_area().get_pixel_coord((x_start + bin_width / 2.0, count as f64 + 0.5))
-                        .unwrap_or((0, 0)),
-                )?;
+                let x_start = min_time + i as f64 * bin_width;
+                let x_end = x_start + bin_width * 0.95; // Small gap for visibility
+                
+                let bin_center = x_start + bin_width / 2.0;
+                let color = if bin_center < 1000.0 {
+                    palette.success
+                } else if bin_center < 2500.0 {
+                    palette.primary
+                } else if bin_center < 5000.0 {
+                    palette.warning
+                } else {
+                    palette.error
+                };
+                
+                chart.draw_series(std::iter::once(Rectangle::new([
+                    (x_start, 0.0),
+                    (x_end, count as f64)
+                ], color.mix(0.7).filled())))?;
             }
         }
 
-        // Add statistics overlay
-        let mean = response_times.iter().sum::<u128>() as f64 / response_times.len() as f64;
-        let median = {
-            let mut sorted = response_times.to_vec();
-            sorted.sort();
-            sorted[sorted.len() / 2] as f64
+        // Calculate and display statistics
+        let mean = times_f64.iter().sum::<f64>() / times_f64.len() as f64;
+        let mut sorted = times_f64.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let median = if sorted.len() % 2 == 0 {
+            (sorted[sorted.len() / 2 - 1] + sorted[sorted.len() / 2]) / 2.0
+        } else {
+            sorted[sorted.len() / 2]
         };
+        
+        // Calculate percentiles
+        let p25 = sorted[(sorted.len() as f64 * 0.25) as usize];
+        let p75 = sorted[(sorted.len() as f64 * 0.75) as usize];
+        let p95 = sorted[(sorted.len() as f64 * 0.95) as usize];
 
-        // Draw mean line
-        chart.draw_series(std::iter::once(PathElement::new(
-            vec![(mean, 0.0), (mean, max_count)],
-            palette.primary.stroke_width(2),
-        )))?;
-
-        // Draw median line
-        chart.draw_series(std::iter::once(PathElement::new(
-            vec![(median, 0.0), (median, max_count)],
-            palette.secondary.stroke_width(2),
-        )))?;
-
-        // Add legend
-        let legend_items = [
-            ("Mean", palette.primary),
-            ("Median", palette.secondary),
+        // Draw statistics lines
+        let stat_lines = [
+            (mean, "Mean", palette.primary),
+            (median, "Median", palette.secondary),
+            (p95, "95th %ile", palette.error),
         ];
 
-        for (i, (label, color)) in legend_items.iter().enumerate() {
-            root.draw(&Rectangle::new([
-                (width as i32 - 100, 20 + i as i32 * 20),
-                (width as i32 - 90, 30 + i as i32 * 20)
-            ], color.filled()))?;
-
-            root.draw_text(
-                label,
-                &("Inter", 10).into_font(),
-                (width as i32 - 85, 20 + i as i32 * 20),
-            )?;
+        for (value, label, color) in stat_lines.iter() {
+            if *value >= min_time && *value <= max_time {
+                chart.draw_series(std::iter::once(PathElement::new(
+                    vec![(*value, 0.0), (*value, max_count)],
+                    ShapeStyle::from(color).stroke_width(2),
+                )))?
+                .label(label)
+                .legend(move |(x, y)| PathElement::new(vec![(x, y), (x + 10, y)], color));
+            }
         }
+
+        // Draw legend
+        chart.configure_series_labels()
+            .background_style(&WHITE.mix(0.8))
+            .border_style(&BLACK)
+            .draw()?;
+
+        // Add statistics summary
+        root.draw_text(
+            &format!("μ={:.0}ms | M={:.0}ms | IQR=[{:.0}, {:.0}]ms", 
+                    mean, median, p25, p75),
+            &("sans-serif", 11).into_font().color(&palette.text),
+            (15, height as i32 - 20),
+        )?;
 
         root.present()?;
     }
     Ok(buffer)
 }
 
-/// Create a beautiful performance heatmap
+/// Create an HONEST performance heatmap that shows data availability
 pub fn create_performance_heatmap(
     responses: &[TaskResponse],
     width: u32,
@@ -326,37 +416,30 @@ pub fn create_performance_heatmap(
         let root = BitMapBackend::with_buffer(&mut buffer, (width, height))
             .into_drawing_area();
 
-        let palette = ColorPalette::default();
+        let palette = AccessiblePalette::default();
         root.fill(&palette.background)?;
 
-        // Group responses by hour of day and day of week
-        let mut heatmap_data: Vec<Vec<f64>> = vec![vec![0.0; 24]; 7];
-        let mut counts: Vec<Vec<u32>> = vec![vec![0; 24]; 7];
-
+        // Group responses by hour and day
+        let mut performance_grid: Vec<Vec<Option<f64>>> = vec![vec![None; 24]; 7];
+        let mut count_grid: Vec<Vec<u32>> = vec![vec![0; 24]; 7];
+        
         for response in responses {
-            let datetime = response.timestamp;
-            let hour = datetime.hour() as usize;
-            let day = datetime.weekday().num_days_from_monday() as usize;
-
-            if response.correct {
-                heatmap_data[day][hour] += 1.0;
+            let hour = response.timestamp.hour() as usize;
+            let day = response.timestamp.weekday().num_days_from_monday() as usize;
+            
+            if let Some(current) = performance_grid[day][hour] {
+                let count = count_grid[day][hour] as f64;
+                let new_value = if response.correct { 1.0 } else { 0.0 };
+                performance_grid[day][hour] = Some((current * count + new_value) / (count + 1.0));
+            } else {
+                performance_grid[day][hour] = Some(if response.correct { 1.0 } else { 0.0 });
             }
-            counts[day][hour] += 1;
-        }
-
-        // Calculate percentages
-        for day in 0..7 {
-            for hour in 0..24 {
-                if counts[day][hour] > 0 {
-                    heatmap_data[day][hour] = heatmap_data[day][hour] / counts[day][hour] as f64 * 100.0;
-                } else {
-                    heatmap_data[day][hour] = -1.0; // Mark as no data
-                }
-            }
+            count_grid[day][hour] += 1;
         }
 
         let mut chart = ChartBuilder::on(&root)
-            .caption("Performance Heatmap by Time", ("Inter", 24).into_font().color(&BLACK))
+            .caption("Performance by Time (darker = better, ⬚ = no data)", 
+                    ("sans-serif", 16).into_font().color(&palette.text))
             .margin(15)
             .x_label_area_size(40)
             .y_label_area_size(60)
@@ -372,80 +455,79 @@ pub fn create_performance_heatmap(
             .x_label_formatter(&|x| format!("{:02}:00", x))
             .y_label_formatter(&|y| {
                 let days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-                days[*y as usize].to_string()
+                days.get(*y as usize).unwrap_or(&"").to_string()
             })
-            .axis_desc_style(("Inter", 12).into_font().color(&DARK_GRAY))
+            .axis_desc_style(("sans-serif", 12).into_font().color(&palette.text))
             .draw()?;
 
         // Draw heatmap cells
         for day in 0..7 {
             for hour in 0..24 {
-                let value = heatmap_data[day][hour];
-
-                if value >= 0.0 {
-                    // Calculate color based on performance
-                    let color = if value >= 80.0 {
+                let cell_color = if let Some(performance) = performance_grid[day][hour] {
+                    // Show performance with intensity based on value
+                    let color = if performance >= 0.85 {
                         palette.success
-                    } else if value >= 60.0 {
-                        palette.info
-                    } else if value >= 40.0 {
+                    } else if performance >= 0.70 {
+                        palette.primary
+                    } else if performance >= 0.55 {
                         palette.warning
                     } else {
                         palette.error
                     };
+                    
+                    // Intensity shows confidence (more data = stronger color)
+                    let intensity = (count_grid[day][hour] as f64 / 10.0).min(1.0) * 0.8;
+                    Some(color.mix(intensity))
+                } else {
+                    None // No data for this cell
+                };
 
-                    let intensity = value / 100.0;
-
+                if let Some(color) = cell_color {
                     chart.draw_series(std::iter::once(Rectangle::new([
                         (hour as f64, day as f64),
                         (hour as f64 + 0.95, day as f64 + 0.95)
-                    ], color.mix(intensity * 0.8).filled())))?;
-
-                    // Add text label for high activity cells
-                    if counts[day][hour] > 5 {
+                    ], color.filled())))?;
+                    
+                    // Add count label for cells with significant data
+                    if count_grid[day][hour] >= 5 {
+                        let performance = performance_grid[day][hour].unwrap_or(0.0);
                         root.draw_text(
-                            &format!("{:.0}%", value),
-                            &("Inter", 8).into_font().color(&WHITE),
+                            &format!("{:.0}%", performance * 100.0),
+                            &("sans-serif", 8).into_font().color(&WHITE),
                             chart.plotting_area().get_pixel_coord((hour as f64 + 0.5, day as f64 + 0.5))
                                 .unwrap_or((0, 0)),
                         )?;
                     }
+                } else {
+                    // Draw empty cell indicator
+                    chart.draw_series(std::iter::once(Rectangle::new([
+                        (hour as f64, day as f64),
+                        (hour as f64 + 0.95, day as f64 + 0.95)
+                    ], palette.grid.stroke_width(1))))?;
                 }
             }
         }
 
-        // Add color scale legend
-        let scale_steps = 5;
-        for i in 0..scale_steps {
-            let percentage = i as f64 / (scale_steps - 1) as f64 * 100.0;
-            let color = if percentage >= 80.0 {
-                palette.success
-            } else if percentage >= 60.0 {
-                palette.info
-            } else if percentage >= 40.0 {
-                palette.warning
-            } else {
-                palette.error
-            };
-
-            root.draw(&Rectangle::new([
-                (width as i32 - 60, height as i32 - 100 - i as i32 * 20),
-                (width as i32 - 40, height as i32 - 80 - i as i32 * 20)
-            ], color.mix(percentage / 100.0 * 0.8).filled()))?;
-
-            root.draw_text(
-                &format!("{:.0}%", percentage),
-                &("Inter", 8).into_font(),
-                (width as i32 - 35, height as i32 - 95 - i as i32 * 20),
-            )?;
-        }
+        // Add data density indicator
+        let total_cells = 7 * 24;
+        let filled_cells = performance_grid.iter()
+            .flat_map(|row| row.iter())
+            .filter(|cell| cell.is_some())
+            .count();
+        let coverage = filled_cells as f64 / total_cells as f64 * 100.0;
+        
+        root.draw_text(
+            &format!("Data coverage: {:.1}% ({}/{} time slots)", coverage, filled_cells, total_cells),
+            &("sans-serif", 11).into_font().color(&palette.text),
+            (15, height as i32 - 20),
+        )?;
 
         root.present()?;
     }
     Ok(buffer)
 }
 
-/// Create a spider/radar chart for multi-dimensional metrics
+/// Create a PROPERLY SCALED radar chart with comparable dimensions
 pub fn create_metrics_radar_chart(
     metrics: &PerformanceMetrics,
     width: u32,
@@ -456,16 +538,16 @@ pub fn create_metrics_radar_chart(
         let root = BitMapBackend::with_buffer(&mut buffer, (width, height))
             .into_drawing_area();
 
-        let palette = ColorPalette::default();
+        let palette = AccessiblePalette::default();
         root.fill(&palette.background)?;
 
-        // Define metrics for radar chart
+        // All dimensions normalized to 0-1 scale with clear explanations
         let dimensions = vec![
-            ("Accuracy", metrics.accuracy_rate * 100.0),
-            ("Speed", (5000.0 - metrics.average_response_time_ms.min(5000.0)) / 50.0),
-            ("Consistency", 100.0 - (metrics.recent_accuracy - metrics.accuracy_rate).abs() * 100.0),
-            ("Improvement", metrics.improvement_rate * 100.0),
-            ("Streak", (metrics.best_streak as f64).min(20.0) * 5.0),
+            ("Accuracy", metrics.accuracy_rate, "% correct"),
+            ("Speed", 1.0 - (metrics.average_response_time_ms / 10000.0).min(1.0), "inverse time"),
+            ("Consistency", 1.0 - metrics.accuracy_variance.min(0.25) * 4.0, "low variance"),
+            ("Recency", metrics.recent_accuracy, "last 10 tasks"),
+            ("Progress", (metrics.improvement_rate + 1.0) / 2.0, "trend"),
         ];
 
         let center_x = width as i32 / 2;
@@ -474,9 +556,9 @@ pub fn create_metrics_radar_chart(
 
         // Draw title
         root.draw_text(
-            "Performance Metrics",
-            &("Inter", 24).into_font().color(&BLACK),
-            (center_x - 80, 20),
+            "Performance Metrics (0-1 normalized scale)",
+            &("sans-serif", 18).into_font().color(&palette.text),
+            (center_x - 120, 20),
         )?;
 
         // Draw radar grid
@@ -485,24 +567,32 @@ pub fn create_metrics_radar_chart(
             let mut points = Vec::new();
 
             for i in 0..dimensions.len() {
-                let angle = 2.0 * std::f64::consts::PI * i as f64 / dimensions.len() as f64 - std::f64::consts::PI / 2.0;
+                let angle = 2.0 * std::f64::consts::PI * i as f64 / dimensions.len() as f64 
+                    - std::f64::consts::PI / 2.0;
                 let x = center_x + (r * angle.cos()) as i32;
                 let y = center_y + (r * angle.sin()) as i32;
                 points.push((x, y));
             }
-
-            // Close the polygon
-            points.push(points[0]);
+            points.push(points[0]); // Close the polygon
 
             root.draw(&PathElement::new(
                 points,
                 palette.grid.stroke_width(1),
             ))?;
+            
+            // Add grid labels (0.2, 0.4, 0.6, 0.8, 1.0)
+            let label_value = level as f64 / 5.0;
+            root.draw_text(
+                &format!("{:.1}", label_value),
+                &("sans-serif", 9).into_font().color(&palette.neutral),
+                (center_x + 5, center_y - (r as i32) - 5),
+            )?;
         }
 
-        // Draw axes
-        for (i, (label, _)) in dimensions.iter().enumerate() {
-            let angle = 2.0 * std::f64::consts::PI * i as f64 / dimensions.len() as f64 - std::f64::consts::PI / 2.0;
+        // Draw axes and labels
+        for (i, (label, _, description)) in dimensions.iter().enumerate() {
+            let angle = 2.0 * std::f64::consts::PI * i as f64 / dimensions.len() as f64 
+                - std::f64::consts::PI / 2.0;
             let x_end = center_x + (radius * angle.cos()) as i32;
             let y_end = center_y + (radius * angle.sin()) as i32;
 
@@ -511,32 +601,31 @@ pub fn create_metrics_radar_chart(
                 palette.grid.stroke_width(2),
             ))?;
 
-            // Draw labels
-            let label_offset = 1.15;
+            // Draw labels with descriptions
+            let label_offset = 1.2;
             let x_label = center_x + (radius * label_offset * angle.cos()) as i32;
             let y_label = center_y + (radius * label_offset * angle.sin()) as i32;
 
             root.draw_text(
-                label,
-                &("Inter", 12).into_font().color(&DARK_GRAY),
-                (x_label - 30, y_label - 5),
+                &format!("{}\n({})", label, description),
+                &("sans-serif", 10).into_font().color(&palette.text),
+                (x_label - 40, y_label - 10),
             )?;
         }
 
         // Draw data polygon
         let mut data_points = Vec::new();
-        for (i, (_, value)) in dimensions.iter().enumerate() {
-            let angle = 2.0 * std::f64::consts::PI * i as f64 / dimensions.len() as f64 - std::f64::consts::PI / 2.0;
-            let r = radius * value / 100.0;
+        for (i, (_, value, _)) in dimensions.iter().enumerate() {
+            let angle = 2.0 * std::f64::consts::PI * i as f64 / dimensions.len() as f64 
+                - std::f64::consts::PI / 2.0;
+            let r = radius * value.max(0.0).min(1.0); // Clamp to valid range
             let x = center_x + (r * angle.cos()) as i32;
             let y = center_y + (r * angle.sin()) as i32;
             data_points.push((x, y));
         }
+        data_points.push(data_points[0]); // Close the polygon
 
-        // Close the polygon
-        data_points.push(data_points[0]);
-
-        // Draw filled area with gradient
+        // Draw filled area
         root.draw(&Polygon::new(
             data_points.clone(),
             palette.primary.mix(0.3).filled(),
@@ -548,31 +637,26 @@ pub fn create_metrics_radar_chart(
             palette.primary.stroke_width(3),
         ))?;
 
-        // Draw data points
-        for point in data_points.iter().take(dimensions.len()) {
-            root.draw(&Circle::new(
-                *point,
-                5,
-                palette.primary.filled(),
-            ))?;
-            root.draw(&Circle::new(
-                *point,
-                3,
-                WHITE.filled(),
-            ))?;
-        }
-
-        // Add value annotations
-        for (i, (name, value)) in dimensions.iter().enumerate() {
-            let angle = 2.0 * std::f64::consts::PI * i as f64 / dimensions.len() as f64 - std::f64::consts::PI / 2.0;
-            let r = radius * value / 100.0 * 0.7;
+        // Draw data points with values
+        for (i, (name, value, _)) in dimensions.iter().enumerate() {
+            let angle = 2.0 * std::f64::consts::PI * i as f64 / dimensions.len() as f64 
+                - std::f64::consts::PI / 2.0;
+            let r = radius * value.max(0.0).min(1.0);
             let x = center_x + (r * angle.cos()) as i32;
             let y = center_y + (r * angle.sin()) as i32;
 
+            // Draw point
+            root.draw(&Circle::new(
+                (x, y),
+                4,
+                palette.primary.filled(),
+            ))?;
+
+            // Add value label
             root.draw_text(
-                &format!("{:.0}", value),
-                &("Inter", 10).into_font().color(&WHITE).style(FontStyle::Bold),
-                (x - 10, y - 5),
+                &format!("{:.2}", value),
+                &("sans-serif", 9).into_font().color(&palette.text).style(FontStyle::Bold),
+                (x - 15, y - 15),
             )?;
         }
 
@@ -581,7 +665,7 @@ pub fn create_metrics_radar_chart(
     Ok(buffer)
 }
 
-/// Create an animated progress ring
+/// Create a simple, honest progress indicator
 pub fn create_progress_ring(
     percentage: f64,
     width: u32,
@@ -593,13 +677,16 @@ pub fn create_progress_ring(
         let root = BitMapBackend::with_buffer(&mut buffer, (width, height))
             .into_drawing_area();
 
-        let palette = ColorPalette::default();
+        let palette = AccessiblePalette::default();
         root.fill(&WHITE)?;
 
         let center_x = width as i32 / 2;
         let center_y = height as i32 / 2;
         let outer_radius = (width.min(height) as i32 / 2 - 20) as f64;
         let inner_radius = outer_radius * 0.7;
+
+        // Clamp percentage to valid range
+        let percentage = percentage.max(0.0).min(100.0);
 
         // Draw background ring
         for angle_deg in 0..360 {
@@ -609,48 +696,53 @@ pub fn create_progress_ring(
 
             root.draw(&PathElement::new(
                 vec![
-                    (center_x + (inner_radius * cos_a) as i32, center_y + (inner_radius * sin_a) as i32),
-                    (center_x + (outer_radius * cos_a) as i32, center_y + (outer_radius * sin_a) as i32),
+                    (center_x + (inner_radius * cos_a) as i32, 
+                     center_y + (inner_radius * sin_a) as i32),
+                    (center_x + (outer_radius * cos_a) as i32, 
+                     center_y + (outer_radius * sin_a) as i32),
                 ],
                 palette.grid.stroke_width(2),
             ))?;
         }
 
-        // Draw progress arc
+        // Draw progress arc with performance-based color
+        let progress_color = if percentage >= 85.0 {
+            palette.success
+        } else if percentage >= 70.0 {
+            palette.primary
+        } else if percentage >= 55.0 {
+            palette.warning
+        } else {
+            palette.error
+        };
+
         let progress_angle = percentage / 100.0 * 360.0;
         for angle_deg in 0..(progress_angle as i32) {
             let angle = (angle_deg as f64 - 90.0) * std::f64::consts::PI / 180.0;
             let cos_a = angle.cos();
             let sin_a = angle.sin();
 
-            // Calculate gradient color
-            let progress = angle_deg as f32 / 360.0;
-            let r = (palette.gradient_start.0 as f32 * (1.0 - progress)
-                + palette.gradient_end.0 as f32 * progress) as u8;
-            let g = (palette.gradient_start.1 as f32 * (1.0 - progress)
-                + palette.gradient_end.1 as f32 * progress) as u8;
-            let b = (palette.gradient_start.2 as f32 * (1.0 - progress)
-                + palette.gradient_end.2 as f32 * progress) as u8;
-
             root.draw(&PathElement::new(
                 vec![
-                    (center_x + (inner_radius * cos_a) as i32, center_y + (inner_radius * sin_a) as i32),
-                    (center_x + (outer_radius * cos_a) as i32, center_y + (outer_radius * sin_a) as i32),
+                    (center_x + (inner_radius * cos_a) as i32, 
+                     center_y + (inner_radius * sin_a) as i32),
+                    (center_x + (outer_radius * cos_a) as i32, 
+                     center_y + (outer_radius * sin_a) as i32),
                 ],
-                RGBColor(r, g, b).stroke_width(3),
+                progress_color.stroke_width(3),
             ))?;
         }
 
-        // Draw center text
+        // Draw center text with proper formatting
         root.draw_text(
-            &format!("{:.0}%", percentage),
-            &("Inter", 32).into_font().color(&BLACK).style(FontStyle::Bold),
+            &format!("{:.1}%", percentage),
+            &("sans-serif", 28).into_font().color(&palette.text).style(FontStyle::Bold),
             (center_x - 35, center_y - 15),
         )?;
 
         root.draw_text(
             label,
-            &("Inter", 14).into_font().color(&DARK_GRAY),
+            &("sans-serif", 14).into_font().color(&palette.neutral),
             (center_x - label.len() as i32 * 4, center_y + 15),
         )?;
 
@@ -659,69 +751,31 @@ pub fn create_progress_ring(
     Ok(buffer)
 }
 
-/// Create a beautiful scatter plot with trend line
-pub fn create_scatter_plot(
-    data: &[(f64, f64)],
-    width: u32,
-    height: u32,
-    x_label: &str,
-    y_label: &str,
-    title: &str,
-) -> Result<Vec<u8>, Box<dyn Error>> {
-    let mut buffer = vec![0; (width * height * 3) as usize];
-    {
-        let root = BitMapBackend::with_buffer(&mut buffer, (width, height))
-            .into_drawing_area();
-
-        let palette = ColorPalette::default();
-        root.fill(&palette.background)?;
-
-        let x_min = data.iter().map(|(x, _)| *x).fold(f64::INFINITY, f64::min);
-        let x_max = data.iter().map(|(x, _)| *x).fold(f64::NEG_INFINITY, f64::max);
-        let y_min = data.iter().map(|(_, y)| *y).fold(f64::INFINITY, f64::min);
-        let y_max = data.iter().map(|(_, y)| *y).fold(f64::NEG_INFINITY, f64::max);
-
-        let mut chart = ChartBuilder::on(&root)
-            .caption(title, ("Inter", 24).into_font().color(&BLACK))
-            .margin(15)
-            .x_label_area_size(40)
-            .y_label_area_size(50)
-            .build_cartesian_2d(
-                x_min * 0.9..x_max * 1.1,
-                y_min * 0.9..y_max * 1.1,
-            )?;
-
-        chart.configure_mesh()
-            .disable_mesh()
-            .x_desc(x_label)
-            .y_desc(y_label)
-            .axis_desc_style(("Inter", 12).into_font().color(&DARK_GRAY))
-            .draw()?;
-
-        // Calculate trend line using simple linear regression
-        let n = data.len() as f64;
-        let sum_x: f64 = data.iter().map(|(x, _)| x).sum();
-        let sum_y: f64 = data.iter().map(|(_, y)| y).sum();
-        let sum_xx: f64 = data.iter().map(|(x, _)| x * x).sum();
-        let sum_xy: f64 = data.iter().map(|(x, y)| x * y).sum();
-
-        let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x);
-        let intercept = (sum_y - slope * sum_x) / n;
-
-        // Draw trend line
-        let trend_points: Vec<(f64, f64)> = vec![
-            (x_min, slope * x_min + intercept),
-            (x_max, slope * x_max + intercept),
-        ];
-        
-        chart.draw_series(LineSeries::new(trend_points, &palette.primary.stroke_width(2)))?;
-
-        // Draw scatter points
-        chart.draw_series(
-            data.iter().map(|&(x, y)| Circle::new((x, y), 3, palette.primary.filled())),
-        )?;
-
-        root.present()?;
+/// Utility function to format duration properly
+pub fn format_duration(seconds: i64) -> String {
+    if seconds < 0 {
+        return "Invalid duration".to_string();
     }
-    Ok(buffer)
+    
+    let hours = seconds / 3600;
+    let minutes = (seconds % 3600) / 60;
+    let secs = seconds % 60;
+    
+    if hours > 0 {
+        format!("{}h {}m {}s", hours, minutes, secs)
+    } else if minutes > 0 {
+        format!("{}m {}s", minutes, secs)
+    } else {
+        format!("{}s", secs)
+    }
+}
+
+/// Utility function for consistent number formatting
+pub fn format_number(value: f64, decimals: usize) -> String {
+    format!("{:.decimals$}", value, decimals = decimals)
+}
+
+/// Utility function for consistent percentage formatting
+pub fn format_percentage(value: f64, decimals: usize) -> String {
+    format!("{:.decimals$}%", value * 100.0, decimals = decimals)
 }
