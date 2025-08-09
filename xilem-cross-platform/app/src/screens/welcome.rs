@@ -3,13 +3,14 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{components::*, models::*, AppData, Screen};
+use crate::{components::*, models::*, apple_signin_button::standard_apple_signin_button, AppData, Screen};
 
 // Welcome/Login Screen
 pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
     flex((
-        label("Adaptive Learning System")
-            .brush(Color::from_rgb8(0, 128, 255)),
+        button("Adaptive Learning System", |data: &mut AppData| {
+            data.try_crab_triple_click();
+        }),
 
         prose("An intelligent learning system that adapts to your knowledge and optimizes your learning path using graph-based cognitive models."),
 
@@ -41,6 +42,13 @@ pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     }
                 },
             ),
+            
+            // OAuth Section - App Store Compliant
+            label("── Or ──").alignment(TextAlignment::Middle),
+            
+            // App Store compliant Apple Sign In button
+            standard_apple_signin_button(data),
+            
         )).direction(Axis::Vertical)),
 
         card("Quick Start", flex((
@@ -53,6 +61,11 @@ pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     username: "Guest".to_string(),
                     email: "guest@example.com".to_string(),
                     password_hash: String::new(),
+                    apple_user_id: None,
+                    github_user_id: None,
+                    oauth_provider_id: None,
+                    auth_provider: "guest".to_string(),
+                    is_private_email: Some(false),
                     created_at: chrono::Utc::now(),
                     updated_at: chrono::Utc::now(),
                 });

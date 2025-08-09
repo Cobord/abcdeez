@@ -8,6 +8,10 @@ mod models;
 mod monitoring;
 mod services;
 mod state;
+#[cfg(test)]
+mod tests;
+mod tls;
+mod utils;
 mod websocket;
 
 use std::net::SocketAddr;
@@ -16,6 +20,7 @@ use std::sync::Arc;
 use axum::{
     http::{header, Method},
     middleware as axum_middleware,
+    response::Html,
     routing::{delete, get, patch, post},
     Router,
 };
@@ -26,10 +31,20 @@ use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::Config;
-use crate::handlers::{admin, analytics, auth, experiment, learner, music, session, task, task_simple};
+use crate::handlers::{admin, analytics, auth, experiment, gamification, learner, music, session, sync, task, task_simple};
 use crate::middleware::{audit_middleware, auth_middleware, content_validation, ip_blocking, rate_limit, require_admin, require_analytics_permission, security_headers};
 use crate::monitoring::{health, metrics, performance};
 use crate::state::AppState;
+
+// Handler to serve the admin panel HTML
+async fn serve_admin_panel() -> Result<Html<String>, error::AppError> {
+    let admin_html = std::fs::read_to_string("static/admin.html")
+        .map_err(|e| {
+            error!("Failed to read admin panel HTML: {}", e);
+            error::AppError::InternalServerError
+        })?;
+    Ok(Html(admin_html))
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -55,11 +70,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.environment, config.port);
 
     // Initialize database
-    let db_pool = db::init_pool(&config.database_url).await?;
+    let db_pool = match db::init_pool(&config.database_url).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            error!("Failed to initialize database pool: {}", e);
+            return Err(e.into());
+        }
+    };
 
     // Run migrations
-    sqlx::migrate!("./migrations").run(&db_pool).await?;
-    info!("Database migrations completed");
+    match db::run_migrations(&db_pool).await {
+        Ok(_) => info!("Database migrations completed"),
+        Err(e) => {
+            error!("Failed to run database migrations: {}", e);
+            return Err(e.into());
+        }
+    }
 
     // Initialize in-memory cache manager (no external Redis required)
     let cache_conn = crate::cache::connection_manager();
@@ -128,6 +154,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/music/progressions", get(music::progressions))
         .route("/music/tasks", post(music::tasks))
         .route("/music/audio/:note", get(music::audio))
+        // Gamification routes (protected)
+        .route("/gamification/profile", get(gamification::get_profile))
+        .route("/gamification/achievements", get(gamification::get_achievements))
+        .route("/gamification/achievements/:id/unlock", post(gamification::unlock_achievement))
+        .route("/gamification/leaderboard", get(gamification::get_leaderboard))
+        .route("/gamification/leaderboard/update", post(gamification::update_leaderboard_score))
+        .route("/gamification/xp/add", post(gamification::add_xp))
+        // Sync routes (protected)
+        .route("/sync/devices", post(sync::register_device))
+        .route("/sync/status", get(sync::sync_status))
+        .route("/sync/pull", get(sync::sync_pull))
+        .route("/sync/push", post(sync::sync_push))
+        .route("/sync/conflicts/resolve", post(sync::resolve_conflict))
         // Admin routes (protected with admin permissions)
         .route("/admin/dashboard", get(admin::dashboard))
         .route("/admin/users", get(admin::list_users))
@@ -173,11 +212,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/performance", get(performance::get_performance_metrics))
         .route("/performance/endpoints", get(performance::get_endpoint_performance));
 
+    // Static routes
+    let static_routes = Router::new()
+        .route("/admin", get(serve_admin_panel));
+
     // Combine all routes
     let app = Router::new()
         .nest("/api", api_routes)
         .nest("/api", ws_routes)
         .nest("/health", health_routes)
+        .merge(static_routes)
         .layer(axum_middleware::from_fn_with_state(
             app_state.clone(),
             audit_middleware,
@@ -229,12 +273,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         oauth_validator_state.batch_job_service.start_oauth_validation_scheduler().await;
     });
 
-    // Start server
-    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
-    info!("Server listening on {}", addr);
+    // Setup TLS if configured
+    let tls_manager = crate::tls::TlsManager::new(Arc::new(config.clone()));
+    let tls_acceptor = tls_manager.create_tls_acceptor().await?;
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    // Start certificate renewal scheduler
+    let renewal_config = Arc::new(config.clone());
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(86400)); // Check daily
+        loop {
+            interval.tick().await;
+            let renewal_manager = crate::tls::TlsManager::new(renewal_config.clone());
+            if let Err(e) = renewal_manager.check_certificate_renewal().await {
+                error!("Certificate renewal check failed: {}", e);
+            }
+        }
+    });
+
+    // Server addresses
+    let http_addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+    let https_addr = SocketAddr::from(([0, 0, 0, 0], config.tls_port));
+
+    // Add ACME challenge route to the app
+    let app = app.route("/.well-known/acme-challenge/:token", 
+                       axum::routing::get(crate::tls::handle_acme_challenge));
+
+    info!("Starting server with TLS support - HTTP: {}, HTTPS: {}", http_addr, https_addr);
+
+    // Start server with TLS support
+    crate::tls::serve_with_tls(app, http_addr, https_addr, tls_acceptor).await?;
 
     Ok(())
 }

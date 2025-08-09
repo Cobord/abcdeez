@@ -96,7 +96,7 @@ pub async fn auth_middleware(
         "SELECT CASE WHEN metadata->>'$.status' IS NULL OR metadata->>'$.status' != 'disabled' THEN true ELSE false END
          FROM users WHERE id = ?"
     )
-    .bind(user_id_bytes)
+    .bind(&user_id_bytes[..])
     .fetch_optional(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?

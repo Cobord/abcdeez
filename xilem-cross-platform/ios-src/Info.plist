@@ -29,5 +29,13 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
+	<!-- Apple Sign In Configuration -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<!-- Backend API URL Configuration -->
+	<key>APIBaseURL</key>
+	<string>http://localhost:8080</string>
 </dict>
 </plist>

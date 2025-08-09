@@ -327,13 +327,15 @@ impl OAuthService {
         let now = Utc::now();
         let error_json = error_details.map(|e| serde_json::json!({"error": e}).to_string());
 
+        let check_id_bytes = check_id.as_bytes();
+        let user_id_bytes = user_id.as_bytes();
         sqlx::query(
             "INSERT OR REPLACE INTO oauth_credential_checks 
              (id, user_id, provider, provider_user_id, last_check_time, credential_state, error_details, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
-        .bind(check_id.as_bytes())
-        .bind(user_id.as_bytes())
+        .bind(&check_id_bytes[..])
+        .bind(&user_id_bytes[..])
         .bind(provider.to_string())
         .bind(provider_user_id)
         .bind(now)
@@ -363,12 +365,13 @@ impl OAuthService {
         let mut conn = app_state.db_pool.acquire().await
             .map_err(|e| AppError::DatabaseError(e))?;
 
+        let user_id_bytes = user_id.as_bytes();
         let result = sqlx::query(
             "SELECT last_check_time, credential_state FROM oauth_credential_checks
              WHERE user_id = ? AND provider = ?
              ORDER BY last_check_time DESC LIMIT 1"
         )
-        .bind(user_id.as_bytes())
+        .bind(&user_id_bytes[..])
         .bind(provider.to_string())
         .fetch_optional(&mut *conn)
         .await

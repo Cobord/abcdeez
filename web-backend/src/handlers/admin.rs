@@ -427,7 +427,7 @@ pub async fn trigger_job(
     sqlx::query(
         "INSERT INTO job_queue (id, job_type, payload, status) VALUES (?, ?, ?, 'pending')",
     )
-    .bind(job_id_bytes)
+    .bind(&job_id_bytes[..])
     .bind(&job_type)
     .bind(payload.to_string())
     .execute(&mut *conn)
@@ -517,7 +517,7 @@ pub async fn update_config(
 }
 
 // Helper functions
-async fn get_database_status(db: &sqlx::PgPool) -> AppResult<DatabaseStatus> {
+async fn get_database_status(db: &crate::db::DbPool) -> AppResult<DatabaseStatus> {
     // Test database connection
     let mut conn = db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
     let connected = sqlx::query("SELECT 1").fetch_one(&mut *conn).await.is_ok();

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 /// Bayesian Expected Information Gain implementation for adaptive task selection
 /// Based on the paper's equation: EIG = E[KL(p(θ|D_t) || p(θ|D_t, Response to q))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BayesianLearnerModel {
     /// Posterior distributions for node positions
     pub node_positions: HashMap<String, PosteriorDistribution>,
@@ -75,13 +75,13 @@ impl PosteriorDistribution {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChunkBoundaryPosterior {
     pub position: usize,
     pub strength: PosteriorDistribution,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseData {
     pub task: crate::tasks::Task,
     pub correct: bool,

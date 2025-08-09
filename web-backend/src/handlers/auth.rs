@@ -384,7 +384,7 @@ pub async fn login(
     if let Some(mut conn) = conn_update {
         sqlx::query("UPDATE users SET updated_at = ? WHERE id = ?")
             .bind(now)
-            .bind(user_id_bytes)
+            .bind(&user_id_bytes[..])
             .execute(&mut *conn)
             .await
             .ok();
@@ -481,7 +481,7 @@ pub async fn refresh(
         .map_err(|e| AppError::DatabaseError(e))?;
 
     let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = ?")
-        .bind(user_id.as_bytes())
+        .bind(&user_id.as_bytes()[..])
         .fetch_one(&mut *conn)
         .await
         .map_err(|e| AppError::DatabaseError(e))?;
@@ -565,7 +565,7 @@ pub async fn me(
         "SELECT id, username, email, password_hash, created_at, updated_at, metadata
          FROM users WHERE id = ?"
     )
-    .bind(user_id_bytes)
+    .bind(&user_id_bytes[..])
     .fetch_optional(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
@@ -743,17 +743,26 @@ async fn get_or_create_oauth_user(
         .map_err(|e| AppError::DatabaseError(e))?;
 
     // Check if user exists by OAuth provider ID
-    let provider_field = match oauth_profile.provider {
-        OAuthProvider::Apple => "apple_user_id",
-        OAuthProvider::GitHub => "github_user_id",
+    let existing_user = match oauth_profile.provider {
+        OAuthProvider::Apple => {
+            sqlx::query_as::<_, User>(
+                "SELECT * FROM users WHERE apple_user_id = ?"
+            )
+            .bind(&oauth_profile.provider_user_id)
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?
+        },
+        OAuthProvider::GitHub => {
+            sqlx::query_as::<_, User>(
+                "SELECT * FROM users WHERE github_user_id = ?"
+            )
+            .bind(&oauth_profile.provider_user_id)
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?
+        },
     };
-
-    let query = format!("SELECT * FROM users WHERE {} = ?", provider_field);
-    let existing_user = sqlx::query_as::<_, User>(&query)
-        .bind(&oauth_profile.provider_user_id)
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(|e| AppError::DatabaseError(e))?;
 
     if let Some(user) = existing_user {
         // Update last login
@@ -804,7 +813,7 @@ async fn create_oauth_user(
             oauth_provider_id, auth_provider, is_private_email, created_at, updated_at, metadata
         ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(user_id.as_bytes())
+    .bind(user_id.as_bytes().as_slice())
     .bind(&username)
     .bind(&email)
     .bind(&apple_user_id)
@@ -881,7 +890,7 @@ async fn update_user_last_login(
         .map_err(|e| AppError::DatabaseError(e))?;
 
     sqlx::query("UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-        .bind(user_id.as_bytes())
+        .bind(&user_id.as_bytes()[..])
         .execute(&mut *conn)
         .await
         .map_err(|e| AppError::DatabaseError(e))?;

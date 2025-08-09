@@ -5,8 +5,12 @@
 #![windows_subsystem = "windows"]
 
 mod api;
+mod apple_signin_button;
 mod components;
 mod demo;
+mod easter_egg;
+#[cfg(target_os = "ios")]
+mod ios_auth;
 pub mod models;
 mod offline;
 mod screens;
@@ -36,6 +40,7 @@ use graph_learning_core::{
 use api::{ApiClient, MockApiClient};
 use components::*;
 use demo::DemoController;
+use easter_egg::LittleCrab;
 use models::*;
 use offline::{ConnectivityMonitor, OfflineStorage, SyncStatus};
 use screens::{
@@ -66,6 +71,11 @@ pub struct AppData {
     pub username_input: String,
     pub password_input: String,
     pub email_input: String,
+    
+    // OAuth Authentication
+    #[cfg(target_os = "ios")]
+    pub ios_auth_bridge: Option<ios_auth::IOSAuthBridge>,
+    pub oauth_login_in_flight: bool,
 
     // Async request states
     pub login_request_in_flight: bool,
@@ -140,6 +150,11 @@ pub struct AppData {
 
     // Runtime for async operations
     pub runtime: Arc<tokio::runtime::Runtime>,
+    
+    // Easter egg: The little crab
+    pub little_crab: Option<LittleCrab>,
+    pub crab_trigger_clicks: usize,
+    pub last_click_time: Option<std::time::Instant>,
 }
 
 impl Default for AppData {
@@ -155,6 +170,11 @@ impl Default for AppData {
             username_input: String::new(),
             password_input: String::new(),
             email_input: String::new(),
+            
+            // OAuth Authentication
+            #[cfg(target_os = "ios")]
+            ios_auth_bridge: None,
+            oauth_login_in_flight: false,
             current_learner: None,
             current_session: None,
             selected_domain: Domain::Alphabet,
@@ -221,12 +241,25 @@ impl Default for AppData {
 
             // Runtime for async operations
             runtime: Arc::new(runtime),
+            
+            // Easter egg: The little crab
+            little_crab: Some(easter_egg::init_random_crab()),
+            crab_trigger_clicks: 0,
+            last_click_time: None,
         }
     }
 }
 
 // Main app logic
 fn app_logic(data: &mut AppData) -> impl WidgetView<AppData> {
+    // Update the little crab behavior
+    if let Some(crab) = &mut data.little_crab {
+        crab.update(data);
+        
+        // Check for crab discovery triggers
+        data.check_crab_triggers();
+    }
+
     // Clear old messages after some time (in a real app, use a timer)
     if data.error_message.is_some() || data.success_message.is_some() {
         // Messages will auto-clear after being displayed
@@ -243,6 +276,11 @@ fn app_logic(data: &mut AppData) -> impl WidgetView<AppData> {
             username: username.clone(),
             email: format!("{}@example.com", username),
             password_hash: String::new(),
+            apple_user_id: None,
+            github_user_id: None,
+            oauth_provider_id: None,
+            auth_provider: "local".to_string(),
+            is_private_email: Some(false),
             created_at: Utc::now(),
             updated_at: Utc::now(),
         });
@@ -429,8 +467,12 @@ fn app_logic(data: &mut AppData) -> impl WidgetView<AppData> {
         None
     };
 
-    // Compose content + overlay (overlay last so it appears after main content)
-    flex((content, overlay)).direction(Axis::Vertical)
+    // The little crab overlay (appears in corner of screen)
+    let crab_overlay = data.little_crab.as_ref()
+        .and_then(|crab| easter_egg::render_crab_overlay(crab));
+
+    // Compose content + overlay + crab (crab last so it appears on top)
+    flex((content, overlay, crab_overlay)).direction(Axis::Vertical)
 }
 
 // Helper functions for app logic
@@ -544,6 +586,73 @@ impl AppData {
         }
     }
 
+    // OAuth authentication methods
+    #[cfg(target_os = "ios")]
+    pub fn init_ios_auth(&mut self) {
+        if self.ios_auth_bridge.is_none() {
+            self.ios_auth_bridge = Some(ios_auth::IOSAuthBridge::new(self.api_client.clone()));
+        }
+    }
+
+    #[cfg(target_os = "ios")]
+    pub fn apple_sign_in(&mut self) {
+        self.init_ios_auth();
+        
+        if let Some(bridge) = &self.ios_auth_bridge {
+            if !self.oauth_login_in_flight {
+                self.oauth_login_in_flight = true;
+                self.error_message = None;
+                self.success_message = None;
+                
+                let bridge_clone = bridge.clone();
+                let runtime = self.runtime.clone();
+                
+                // Start Apple Sign In flow
+                runtime.spawn(async move {
+                    let result = bridge_clone.sign_in_with_apple(Box::new(|result| {
+                        match result {
+                            Ok(user) => {
+                                println!("Apple Sign In successful: {:?}", user);
+                                // In a real app, you'd update the app state here
+                            }
+                            Err(error) => {
+                                println!("Apple Sign In failed: {}", error);
+                            }
+                        }
+                    })).await;
+                    
+                    if let Err(e) = result {
+                        println!("Failed to start Apple Sign In: {}", e);
+                    }
+                });
+            }
+        }
+    }
+
+    #[cfg(target_os = "ios")]
+    pub fn handle_oauth_login_result(&mut self, result: Result<User, String>) {
+        self.oauth_login_in_flight = false;
+        
+        match result {
+            Ok(user) => {
+                self.current_user = Some(user);
+                self.current_screen = Screen::DomainSelection;
+                self.success_message = Some("Successfully signed in with Apple!".to_string());
+                self.error_message = None;
+                self.create_learner();
+            }
+            Err(error) => {
+                self.error_message = Some(format!("Sign in failed: {}", error));
+                self.success_message = None;
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    pub fn apple_sign_in(&mut self) {
+        self.error_message = Some("Apple Sign In is only available on iOS".to_string());
+    }
+
     pub fn create_learner(&mut self) {
         // Create topology based on selected domain
         let topology = self.create_topology_for_domain();
@@ -574,6 +683,48 @@ impl AppData {
         self.demo_showcase_with_seed(None);
     }
 
+    /// Try to discover the crab with triple-click
+    pub fn try_crab_triple_click(&mut self) {
+        let now = std::time::Instant::now();
+        
+        // Reset counter if too much time has passed
+        if let Some(last_click) = self.last_click_time {
+            if now.duration_since(last_click) > std::time::Duration::from_secs(2) {
+                self.crab_trigger_clicks = 0;
+            }
+        }
+        
+        self.crab_trigger_clicks += 1;
+        self.last_click_time = Some(now);
+        
+        if self.crab_trigger_clicks >= 3 {
+            if let Some(crab) = &mut self.little_crab {
+                if crab.try_discover(easter_egg::CrabTrigger::TripleClick) {
+                    self.success_message = Some("🦀 You found the secret crab! 🦀".to_string());
+                }
+            }
+            self.crab_trigger_clicks = 0;
+        }
+    }
+
+    /// Check for other crab discovery triggers
+    pub fn check_crab_triggers(&mut self) {
+        if let Some(crab) = &mut self.little_crab {
+            // Perfect streak trigger
+            if self.current_metrics.streak_count >= 10 {
+                crab.try_discover(easter_egg::CrabTrigger::PerfectStreak(self.current_metrics.streak_count));
+            }
+            
+            // Check if user typed "crab" (would need text input tracking in real app)
+            // For now, we'll use the username input as a trigger
+            if self.username_input.to_lowercase().contains("crab") {
+                if crab.try_discover(easter_egg::CrabTrigger::SecretWord(self.username_input.clone())) {
+                    self.success_message = Some("🦀 The crab heard you call! 🦀".to_string());
+                }
+            }
+        }
+    }
+
     /// Demo showcase with optional seed for deterministic behavior
     pub fn demo_showcase_with_seed(&mut self, seed: Option<u64>) {
         // Initialize RNG with seed if provided (for deterministic demos)
@@ -590,6 +741,11 @@ impl AppData {
                 username: "DemoUser".to_string(),
                 email: "demo@example.com".to_string(),
                 password_hash: String::new(),
+                apple_user_id: None,
+                github_user_id: None,
+                oauth_provider_id: None,
+                auth_provider: "demo".to_string(),
+                is_private_email: Some(false),
                 created_at: Utc::now(),
                 updated_at: Utc::now(),
             });

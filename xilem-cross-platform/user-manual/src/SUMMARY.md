@@ -28,6 +28,7 @@
     - [Metrics Overview](./general/dashboard/metrics.md)
     - [Progress Tracking](./general/dashboard/progress.md)
     - [Learning Analytics](./general/dashboard/analytics.md)
+  - [Easter Eggs & Hidden Features](./general/easter-eggs.md)
 
 - [Guided Demos](./general/demos.md)
   - [Quick Tour](./general/demos/quick-tour.md)

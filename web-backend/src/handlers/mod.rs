@@ -7,3 +7,5 @@ pub mod analytics;
 pub mod experiment;
 pub mod music;
 pub mod admin;
+pub mod gamification;
+pub mod sync;

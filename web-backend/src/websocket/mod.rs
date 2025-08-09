@@ -1,6 +1,7 @@
 use axum::{
-    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, Path, State},
+    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, Path, State, Query},
     response::Response,
+    http::StatusCode,
 };
 use futures_util::{sink::SinkExt, stream::StreamExt};
 use std::sync::Arc;
@@ -8,6 +9,7 @@ use uuid::Uuid;
 use tokio::time::{interval, Duration};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
 
 use graph_learning_core::{
     Task,
@@ -16,6 +18,8 @@ use graph_learning_core::{
 use crate::{
     state::AppState,
     services::{AdaptationService, AnalyticsService, LearnerService},
+    middleware::Claims,
+    error::AppError,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -91,23 +95,91 @@ pub struct LiveMetrics {
     pub timestamp: i64,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct WebSocketQuery {
+    token: String,
+}
+
 pub async fn session_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
     Path(session_id): Path<Uuid>,
-) -> Response {
-    ws.on_upgrade(move |socket| handle_session_socket(socket, state, session_id))
+    Query(query): Query<WebSocketQuery>,
+) -> Result<Response, (StatusCode, String)> {
+    // Validate JWT token
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.validate_exp = true;
+    validation.validate_nbf = true;
+    validation.leeway = 60;
+    
+    let token_data = decode::<Claims>(
+        &query.token,
+        &DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
+        &validation,
+    )
+    .map_err(|e| {
+        tracing::warn!("WebSocket auth failed: {:?}", e);
+        (StatusCode::UNAUTHORIZED, "Invalid token".to_string())
+    })?;
+    
+    // Verify session belongs to user
+    let session_id_bytes = session_id.as_bytes();
+    let user_id_bytes = token_data.claims.sub.as_bytes();
+    
+    let mut conn = state.db_pool.acquire().await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e)))?;
+    
+    let session_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM sessions s 
+         JOIN learners l ON s.learner_id = l.id 
+         WHERE s.id = ? AND l.user_id = ?)"
+    )
+    .bind(&session_id_bytes[..])
+    .bind(&user_id_bytes[..])
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e)))?;
+    
+    if !session_exists {
+        return Err((StatusCode::FORBIDDEN, "Session access denied".to_string()));
+    }
+    
+    Ok(ws.on_upgrade(move |socket| handle_session_socket(socket, state, session_id, token_data.claims)))
 }
 
 pub async fn analytics_handler(
     ws: WebSocketUpgrade,
     State(state): State<Arc<AppState>>,
-) -> Response {
-    ws.on_upgrade(move |socket| handle_analytics_socket(socket, state))
+    Query(query): Query<WebSocketQuery>,
+) -> Result<Response, (StatusCode, String)> {
+    // Validate JWT token
+    let mut validation = Validation::new(Algorithm::HS256);
+    validation.validate_exp = true;
+    validation.validate_nbf = true;
+    validation.leeway = 60;
+    
+    let token_data = decode::<Claims>(
+        &query.token,
+        &DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
+        &validation,
+    )
+    .map_err(|e| {
+        tracing::warn!("Analytics WebSocket auth failed: {:?}", e);
+        (StatusCode::UNAUTHORIZED, "Invalid token".to_string())
+    })?;
+    
+    // Check for analytics permission
+    if !token_data.claims.permissions.contains(&"analytics_access".to_string()) 
+        && token_data.claims.role != "admin" 
+        && token_data.claims.role != "researcher" {
+        return Err((StatusCode::FORBIDDEN, "Analytics access denied".to_string()));
+    }
+    
+    Ok(ws.on_upgrade(move |socket| handle_analytics_socket(socket, state, token_data.claims)))
 }
 
-async fn handle_session_socket(socket: WebSocket, state: Arc<AppState>, session_id: Uuid) {
-    tracing::info!("WebSocket connected for session {}", session_id);
+async fn handle_session_socket(socket: WebSocket, state: Arc<AppState>, session_id: Uuid, claims: Claims) {
+    tracing::info!("WebSocket connected for session {} by user {}", session_id, claims.username);
 
     let (mut sender, mut receiver) = socket.split();
     
@@ -192,8 +264,8 @@ async fn handle_session_socket(socket: WebSocket, state: Arc<AppState>, session_
     tracing::info!("WebSocket connection closed for session {}", session_id);
 }
 
-async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>) {
-    tracing::info!("Analytics WebSocket connected");
+async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>, claims: Claims) {
+    tracing::info!("Analytics WebSocket connected for user {}", claims.username);
 
     let (mut sender, mut receiver) = socket.split();
     
@@ -461,13 +533,13 @@ async fn get_session_info(state: &AppState, session_id: Uuid) -> Result<SessionI
     let row = sqlx::query(
         "SELECT learner_id, topology_type FROM sessions WHERE id = ? AND status = 'active'"
     )
-    .bind(session_id_bytes)
+    .bind(&session_id_bytes[..])
     .fetch_one(&mut *conn)
     .await?;
     
-    let learner_id_bytes: Vec<u8> = row.get::<Vec<u8>, _>("learner_id");
+    let learner_id_bytes: Vec<u8> = row.try_get("learner_id")?;
     let learner_id = Uuid::from_bytes(learner_id_bytes.try_into().unwrap_or_default());
-    let topology_type: String = row.get::<String, _>("topology_type");
+    let topology_type: String = row.try_get("topology_type")?;
 
     Ok(SessionInfo {
         learner_id,
@@ -480,14 +552,12 @@ async fn get_session_topology(state: &AppState, session_id: Uuid) -> Result<grap
     
     // Use a raw query with proper binding
     let mut conn = state.db_pool.acquire().await?;
-    let row = sqlx::query(
+    let topology_data: String = sqlx::query_scalar(
         "SELECT topology_data FROM sessions WHERE id = ?"
     )
-    .bind(session_id_bytes)
+    .bind(&session_id_bytes[..])
     .fetch_one(&mut *conn)
     .await?;
-    
-    let topology_data: String = row.get::<String, _>("topology_data");
     let topology: graph_learning_core::Topology = serde_json::from_str(&topology_data)
         .unwrap_or_else(|_| graph_learning_core::Topology::alphabet());
 

@@ -3,7 +3,7 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{components::*, models::*, AppData, Screen};
+use crate::{components::*, models::*, visualization_components::*, AppData, Screen};
 
 // Enhanced Performance Dashboard with interactive features
 pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
@@ -316,7 +316,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         )
     };
 
-    // Enhanced visualization section
+    // Enhanced visualization section with beautiful Plotters charts
     let visualizations = {
         let enough = data.session_responses.len() > 5;
 
@@ -324,48 +324,112 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             card(
                 "Performance Visualizations",
                 flex((
-                    // Response time distribution
+                    // Row 1: Learning curve and response time histogram
                     flex((
-                        label("📊 Response Time Distribution")
-                            .brush(Color::from_rgb8(0, 128, 255))
-                            .alignment(TextAlignment::Start),
-                        response_time_histogram(
+                        learning_curve_chart(&data.session_responses, 400, 300),
+                        response_time_histogram_chart(
                             &data
                                 .session_responses
                                 .iter()
                                 .map(|r| r.response_time_ms as u128)
                                 .collect::<Vec<_>>(),
+                            400,
+                            300,
                         ),
                     ))
-                    .direction(Axis::Vertical),
-                    // Learning curve
+                    .direction(Axis::Horizontal),
+                    // Row 2: Performance heatmap and metrics radar
                     flex((
-                        label("📈 Learning Progress")
-                            .brush(Color::from_rgb8(0, 200, 0))
-                            .alignment(TextAlignment::Start),
-                        learning_curve_display(&data.session_responses),
+                        performance_heatmap_chart(&data.session_responses, 400, 300),
+                        metrics_radar_chart(&data.current_metrics, 400, 300),
                     ))
-                    .direction(Axis::Vertical),
-                    // Error pattern analysis
+                    .direction(Axis::Horizontal),
+                    // Row 3: Progress rings for key metrics
                     flex((
-                        label("🔍 Error Patterns")
-                            .brush(Color::from_rgb8(255, 128, 0))
-                            .alignment(TextAlignment::Start),
-                        error_analysis_display(&data.session_responses),
+                        progress_ring_chart(
+                            data.current_metrics.accuracy_rate * 100.0,
+                            "Accuracy",
+                            150,
+                        ),
+                        progress_ring_chart(
+                            (data.current_metrics.streak_count as f64 / 10.0 * 100.0).min(100.0),
+                            "Streak Progress",
+                            150,
+                        ),
+                        progress_ring_chart(
+                            data.current_metrics.improvement_rate * 100.0,
+                            "Improvement",
+                            150,
+                        ),
+                        progress_ring_chart(
+                            if data.current_metrics.average_response_time_ms < 1000.0 {
+                                100.0
+                            } else if data.current_metrics.average_response_time_ms < 3000.0 {
+                                100.0
+                                    - ((data.current_metrics.average_response_time_ms - 1000.0)
+                                        / 2000.0
+                                        * 50.0)
+                            } else {
+                                25.0
+                            },
+                            "Speed Score",
+                            150,
+                        ),
                     ))
-                    .direction(Axis::Vertical),
+                    .direction(Axis::Horizontal),
+                    // Row 4: Sparklines for recent trends
+                    flex((
+                        label("Recent Trends:").brush(Color::from_rgb8(64, 64, 64)),
+                        sparkline(
+                            &data
+                                .session_responses
+                                .iter()
+                                .rev()
+                                .take(20)
+                                .map(|r| if r.correct { 1.0 } else { 0.0 })
+                                .collect::<Vec<_>>(),
+                            100,
+                            20,
+                            Color::from_rgb8(46, 213, 115),
+                        ),
+                        label("(Accuracy)").brush(Color::from_rgb8(128, 128, 128)),
+                        sparkline(
+                            &data
+                                .session_responses
+                                .iter()
+                                .rev()
+                                .take(20)
+                                .map(|r| r.response_time_ms as f64 / 1000.0)
+                                .collect::<Vec<_>>(),
+                            100,
+                            20,
+                            Color::from_rgb8(0, 123, 255),
+                        ),
+                        label("(Speed)").brush(Color::from_rgb8(128, 128, 128)),
+                    ))
+                    .direction(Axis::Horizontal),
                 ))
-                .direction(Axis::Horizontal),
+                .direction(Axis::Vertical),
             )
         } else {
             card(
                 "Performance Visualizations",
                 flex((
-                    label("📊 Charts will appear after 5+ responses")
+                    label("📊 Beautiful charts will appear after 5+ responses")
                         .alignment(TextAlignment::Middle),
-                    prose("Keep practicing to unlock detailed visualizations!")
+                    prose("Keep practicing to unlock detailed visualizations with learning curves, heatmaps, and more!")
                         .brush(Color::from_rgb8(128, 128, 128))
                         .alignment(TextAlignment::Middle),
+                    // Show a preview of what's coming
+                    flex((
+                        label("Coming soon:").brush(Color::from_rgb8(102, 126, 234)),
+                        label("• Learning progress curves").brush(Color::from_rgb8(128, 128, 128)),
+                        label("• Response time distributions").brush(Color::from_rgb8(128, 128, 128)),
+                        label("• Performance heatmaps").brush(Color::from_rgb8(128, 128, 128)),
+                        label("• Multi-metric radar charts").brush(Color::from_rgb8(128, 128, 128)),
+                        label("• Animated progress rings").brush(Color::from_rgb8(128, 128, 128)),
+                    ))
+                    .direction(Axis::Vertical),
                 ))
                 .direction(Axis::Vertical),
             )

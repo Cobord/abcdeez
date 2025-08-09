@@ -216,46 +216,78 @@ impl LearnerService {
         self.get_or_create_bayesian_model(learner_id, topology).await
     }
 
-    /// Load Bayesian model from database (placeholder - always return error to force regeneration)
-    async fn load_bayesian_model_from_db(&self, _learner_id: Uuid) -> Result<BayesianLearnerModel> {
-        // Always return error to force regeneration until we have serialization support
-        Err(anyhow::anyhow!("Bayesian model loading not implemented"))
+    /// Load Bayesian model from database
+    async fn load_bayesian_model_from_db(&self, learner_id: Uuid) -> Result<BayesianLearnerModel> {
+        let learner_id_bytes = learner_id.as_bytes();
+        
+        let mut conn = self.db.acquire().await?;
+        let result = sqlx::query(
+            "SELECT model_data FROM bayesian_models WHERE learner_id = ? ORDER BY created_at DESC LIMIT 1"
+        )
+        .bind(&learner_id_bytes[..])
+        .fetch_optional(&mut *conn)
+        .await?;
+        
+        if let Some(row) = result {
+            let model_data: String = row.try_get("model_data")?;
+            let model: BayesianLearnerModel = serde_json::from_str(&model_data)
+                .map_err(|e| anyhow::anyhow!("Failed to deserialize Bayesian model: {}", e))?;
+            Ok(model)
+        } else {
+            Err(anyhow::anyhow!("No Bayesian model found for learner"))
+        }
     }
 
-    /// Save Bayesian model to database (placeholder - model recreation)
-    async fn save_bayesian_model(&self, learner_id: Uuid, _model: &BayesianLearnerModel) -> Result<()> {
-        // For now, we'll regenerate the Bayesian model from topology rather than store it
-        // This avoids serialization issues until we add Serialize/Deserialize to the core BayesianLearnerModel
-        let learner_bytes = learner_id.as_bytes().to_vec();
-        let now = Utc::now();
-
+    /// Save Bayesian model to database
+    async fn save_bayesian_model(&self, learner_id: Uuid, model: &BayesianLearnerModel) -> Result<()> {
+        let learner_id_bytes = learner_id.as_bytes();
+        let model_data = serde_json::to_string(model)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize Bayesian model: {}", e))?;
+        
         let mut conn = self.db.acquire().await?;
         
-        // Just track that we have an updated model
+        // Insert new model (keeping history for analysis)
+        let model_id = uuid::Uuid::new_v4();
+        let model_id_bytes = model_id.as_bytes();
+        
         sqlx::query(
-            "INSERT OR REPLACE INTO learner_bayesian_models (learner_id, bayesian_model, updated_at) 
-             VALUES (?, ?, ?)"
+            "INSERT INTO bayesian_models (id, learner_id, model_data, created_at, updated_at) 
+             VALUES (?, ?, ?, ?, ?)"
         )
-        .bind(&learner_bytes)
-        .bind("regenerated") // Placeholder - model will be regenerated
-        .bind(now)
+        .bind(&model_id_bytes[..])
+        .bind(&learner_id_bytes[..])
+        .bind(&model_data)
+        .bind(chrono::Utc::now())
+        .bind(chrono::Utc::now())
         .execute(&mut *conn)
-        .await.ok(); // Don't fail if table doesn't exist
-
+        .await?;
+        
+        tracing::info!("Saved Bayesian model for learner {}", learner_id);
         Ok(())
     }
 
-    /// Cache Bayesian model (placeholder - skip caching for now)
-    async fn cache_bayesian_model(&self, _cache_key: &str, _model: &BayesianLearnerModel) -> Result<()> {
-        // Skip caching Bayesian model until we add serialization support
+    /// Cache and persist Bayesian model
+    async fn cache_bayesian_model(&self, cache_key: &str, model: &BayesianLearnerModel) -> Result<()> {
+        // Extract learner ID from cache key
+        let learner_id_str = cache_key.strip_prefix("bayesian_model:")
+            .ok_or_else(|| anyhow::anyhow!("Invalid cache key format"))?;
+        let learner_id = uuid::Uuid::parse_str(learner_id_str)?;
+        
+        // Save to database for persistence
+        self.save_bayesian_model(learner_id, model).await?;
         // The model will be regenerated as needed
         Ok(())
     }
 
-    /// Get cached Bayesian model (placeholder - always return error to force regeneration)
-    async fn get_cached_bayesian_model(&self, _cache_key: &str) -> Result<BayesianLearnerModel> {
-        // Always return error to force regeneration until we have serialization support
-        Err(anyhow::anyhow!("Bayesian model caching not implemented"))
+    /// Get cached Bayesian model from database
+    async fn get_cached_bayesian_model(&self, cache_key: &str) -> Result<BayesianLearnerModel> {
+        // Extract learner ID from cache key
+        let learner_id_str = cache_key.strip_prefix("bayesian_model:")
+            .ok_or_else(|| anyhow::anyhow!("Invalid cache key format"))?;
+        let learner_id = uuid::Uuid::parse_str(learner_id_str)?;
+        
+        // Try to load from database
+        self.load_bayesian_model_from_db(learner_id).await
     }
 
     async fn cache_learner_model(&self, cache_key: &str, model: &CoreLearnerModel) -> Result<()> {
@@ -409,7 +441,7 @@ impl LearnerService {
             "SELECT task_type, task_data, correct_answer, user_answer, correct, response_time_ms, timestamp
              FROM responses WHERE session_id = ? ORDER BY timestamp"
         )
-        .bind(session_id_bytes)
+        .bind(&session_id_bytes[..])
         .fetch_all(&mut *conn)
         .await?;
 

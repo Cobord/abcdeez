@@ -19,6 +19,11 @@ pub struct User {
     pub email: String,
     #[serde(skip)]
     pub password_hash: String,
+    pub apple_user_id: Option<String>,
+    pub github_user_id: Option<String>,
+    pub oauth_provider_id: Option<String>,
+    pub auth_provider: String,
+    pub is_private_email: Option<bool>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -182,11 +187,21 @@ pub struct LoginRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct UserResponse {
+    pub id: String,
+    pub username: String,
+    pub email: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TokenResponse {
     pub access_token: String,
     pub refresh_token: String,
     pub token_type: String,
     pub expires_in: i64,
+    pub user: UserResponse,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -210,6 +225,42 @@ pub struct SubmitResponseRequest {
     pub user_answer: String,
     pub correct: bool,
     pub response_time_ms: i32,
+}
+
+// OAuth-related structures
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppleSignInRequest {
+    pub identity_token: String,
+    pub authorization_code: Option<String>,
+    pub user_info: Option<AppleUserInfo>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppleUserInfo {
+    pub name: Option<AppleUserName>,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppleUserName {
+    #[serde(rename = "firstName")]
+    pub first_name: Option<String>,
+    #[serde(rename = "lastName")]
+    pub last_name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OAuthCallbackRequest {
+    pub provider: String,
+    pub code: String,
+    pub state: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OAuthAuthUrlResponse {
+    pub authorization_url: String,
+    pub state: String,
+    pub provider: String,
 }
 
 // Export data structures

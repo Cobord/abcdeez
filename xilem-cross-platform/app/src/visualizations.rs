@@ -705,4 +705,23 @@ pub fn create_scatter_plot(
         let sum_xx: f64 = data.iter().map(|(x, _)| x * x).sum();
         let sum_xy: f64 = data.iter().map(|(x, y)| x * y).sum();
 
-        let slope = (n * sum_xy - sum
+        let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_xx - sum_x * sum_x);
+        let intercept = (sum_y - slope * sum_x) / n;
+
+        // Draw trend line
+        let trend_points: Vec<(f64, f64)> = vec![
+            (x_min, slope * x_min + intercept),
+            (x_max, slope * x_max + intercept),
+        ];
+        
+        chart.draw_series(LineSeries::new(trend_points, &palette.primary.stroke_width(2)))?;
+
+        // Draw scatter points
+        chart.draw_series(
+            data.iter().map(|&(x, y)| Circle::new((x, y), 3, palette.primary.filled())),
+        )?;
+
+        root.present()?;
+    }
+    Ok(buffer)
+}

@@ -136,7 +136,7 @@ pub async fn update(
     .bind(req.display_name.clone())
     .bind(req.metadata.clone().map(|m| m.to_string()))
     .bind(now)
-    .bind(learner_bytes)
+    .bind(&learner_bytes[..])
     .execute(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
@@ -205,7 +205,7 @@ pub async fn stats(
     let session_stats = sqlx::query(
         "SELECT COUNT(*) as total_sessions FROM sessions WHERE learner_id = ?"
     )
-    .bind(learner_bytes)
+    .bind(&learner_bytes[..])
     .fetch_one(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
@@ -219,7 +219,7 @@ pub async fn stats(
          JOIN sessions s ON r.session_id = s.id
          WHERE s.learner_id = ?"
     )
-    .bind(learner_bytes)
+    .bind(&learner_bytes[..])
     .fetch_one(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
@@ -236,7 +236,7 @@ pub async fn stats(
          GROUP BY DATE(r.timestamp)
          ORDER BY date"
     )
-    .bind(learner_bytes)
+    .bind(&learner_bytes[..])
     .bind(chrono::Utc::now() - chrono::Duration::days(30))
     .fetch_all(&mut *conn)
     .await
@@ -398,7 +398,7 @@ pub async fn sessions(
          WHERE learner_id = ? 
          ORDER BY start_time DESC"
     )
-    .bind(learner_bytes)
+    .bind(&learner_bytes[..])
     .fetch_all(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;

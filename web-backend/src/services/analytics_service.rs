@@ -239,7 +239,7 @@ impl AnalyticsService {
         let participants = sqlx::query(
             "SELECT learner_id, condition FROM experiment_participants WHERE experiment_id = ?"
         )
-        .bind(experiment_id_bytes)
+        .bind(&experiment_id_bytes[..])
         .fetch_all(&mut *conn)
         .await
         .map_err(|e| AppError::DatabaseError(e))?;
@@ -261,7 +261,7 @@ impl AnalyticsService {
                  JOIN sessions s ON r.session_id = s.id
                  WHERE s.learner_id = ?"
             )
-            .bind(&learner_id_bytes)
+            .bind(&learner_id_bytes[..])
             .fetch_one(&mut *conn)
             .await
             .map_err(|e| AppError::DatabaseError(e))?;
@@ -291,7 +291,7 @@ impl AnalyticsService {
                 stats.average_accuracy /= count;
                 stats.average_response_time_ms /= count;
                 stats.completion_rate /= count;
-                stats.learning_rate = 0.1; // Simplified learning rate
+                stats.learning_rate = self.calculate_learning_rate(&stats).await.unwrap_or(0.1);
 
                 // Add differential privacy noise
                 stats.average_accuracy =
@@ -432,7 +432,7 @@ impl AnalyticsService {
              WHERE s.learner_id = ?
              ORDER BY timestamp"
         )
-        .bind(&learner_id_bytes)
+        .bind(&learner_id_bytes[..])
         .fetch_all(&mut *conn)
         .await
         .map_err(|e| AppError::DatabaseError(e))?;
@@ -484,5 +484,51 @@ impl AnalyticsService {
             .collect();
 
         Ok(curve)
+    }
+    
+    async fn calculate_learning_rate(&self, stats: &ConditionStats) -> Result<f64> {
+        // Calculate learning rate based on improvement trajectory
+        // Learning rate = rate of accuracy improvement per session
+        
+        // For now, use a heuristic based on current performance
+        // In practice, this would analyze time series of accuracy data
+        
+        let base_rate = 0.05; // Conservative baseline
+        
+        // Higher accuracy suggests faster learning (up to a point)
+        let accuracy_factor = if stats.average_accuracy < 0.5 {
+            // Below chance performance - very slow learning
+            0.5
+        } else if stats.average_accuracy < 0.7 {
+            // Normal learning range
+            stats.average_accuracy
+        } else if stats.average_accuracy < 0.9 {
+            // Good learners
+            1.0 + (stats.average_accuracy - 0.7) * 2.0 // Boost for good performance
+        } else {
+            // Near-ceiling performance - slower improvement expected
+            0.8 + (1.0 - stats.average_accuracy) * 2.0
+        };
+        
+        // Response time factor - faster responses might indicate better learning
+        let rt_factor = if stats.average_response_time_ms > 10000.0 {
+            // Very slow responses suggest difficulty
+            0.6
+        } else if stats.average_response_time_ms > 5000.0 {
+            // Moderate responses
+            0.8
+        } else {
+            // Quick responses suggest confidence
+            1.2
+        };
+        
+        // Completion rate factor - completing sessions indicates engagement
+        let completion_factor = 0.5 + stats.completion_rate * 0.5;
+        
+        // Combine factors
+        let learning_rate = base_rate * accuracy_factor * rt_factor * completion_factor;
+        
+        // Clamp to reasonable range
+        Ok(learning_rate.max(0.01).min(0.3))
     }
 }

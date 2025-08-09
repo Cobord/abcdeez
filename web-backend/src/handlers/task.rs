@@ -342,7 +342,7 @@ async fn get_session_with_permission(
     let session = sqlx::query_as::<_, Session>(
         "SELECT id, learner_id, topology_type, topology_data, start_time, end_time, status, summary FROM sessions WHERE id = ?"
     )
-    .bind(session_bytes)
+    .bind(&session_bytes[..])
     .fetch_optional(&state.db_pool)
     .await
     .map_err(|e| AppError::DatabaseError(e))?
@@ -466,7 +466,7 @@ async fn get_recent_accuracy(state: &AppState, learner_id: Uuid) -> AppResult<f6
          ORDER BY created_at DESC 
          LIMIT 20"
     )
-    .bind(learner_bytes)
+    .bind(&learner_bytes[..])
     .fetch_all(&state.db_pool)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;

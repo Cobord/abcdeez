@@ -90,8 +90,8 @@ impl AuditService {
             "INSERT INTO audit_log (id, user_id, action, resource_type, resource_id, changes, ip_address, user_agent) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
-        .bind(audit_id_bytes)
-        .bind(user_id_bytes)
+        .bind(&audit_id_bytes[..])
+        .bind(user_id_bytes.as_deref())
         .bind(action)
         .bind(resource_type)
         .bind(resource_id)
@@ -202,7 +202,7 @@ impl AuditService {
                  WHERE user_id = ? 
                  ORDER BY timestamp DESC LIMIT ?"
             )
-            .bind(uid_bytes)
+            .bind(&uid_bytes[..])
             .bind(limit)
             .fetch_all(&mut *conn)
             .await?

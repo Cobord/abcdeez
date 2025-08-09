@@ -1,0 +1,40 @@
+[book]
+authors = ["Graph Learning Team"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Admin Manual - Graph Learning System"
+description = "Administrator guide for deploying, configuring, and maintaining the Graph Learning System with OAuth authentication"
+
+[preprocessor.links]
+
+[output.html]
+theme = "theme"
+default-theme = "light"
+preferred-dark-theme = "navy"
+curly-quotes = true
+copy-fonts = true
+additional-css = ["theme/css/custom.css"]
+
+[output.html.search]
+enable = true
+limit-results = 30
+teaser-word-count = 30
+use-boolean-and = true
+boost-title = 2
+boost-hierarchy = 1
+boost-paragraph = 1
+expand = true
+heading-split-level = 3
+
+[output.html.print]
+enable = true
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.playground]
+editable = false
+copy-js = true
+line-numbers = false

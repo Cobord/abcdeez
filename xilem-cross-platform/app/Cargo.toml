@@ -35,7 +35,10 @@ imageproc = "0.23"
 rusttype = "0.9"
 
 # Offline storage dependencies
-rusqlite = { version = "0.30", features = ["bundled", "chrono", "serde_json"] }
+rusqlite = { version = "0.31", features = ["bundled", "chrono", "serde_json"] }
 async-trait = "0.1"
 thiserror = "1.0"
 tempfile = "3.8"
+
+# Cloud sync and gamification
+dirs = "5.0"

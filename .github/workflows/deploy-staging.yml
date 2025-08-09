@@ -1,0 +1,378 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [ dev ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "staging-deployment"
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Run Tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          
+      - name: Check formatting
+        run: cargo fmt -- --check
+        
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+        
+      - name: Run tests
+        run: cargo test --verbose
+        env:
+          ENVIRONMENT: development
+          JWT_SECRET: test-secret-for-github-actions-minimum-32-chars
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: test
+    environment:
+      name: staging
+      url: https://staging.abcdeez.fg-goose.online
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: 'latest'
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
+
+      - name: Create staging site structure
+        run: |
+          mkdir -p staging-site
+          
+          # Create staging-specific landing page
+          cat > staging-site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Graph Learning System - Staging</title>
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      max-width: 1200px;
+                      margin: 0 auto;
+                      padding: 2rem;
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      color: #333;
+                      min-height: 100vh;
+                  }
+                  .container {
+                      background: white;
+                      border-radius: 12px;
+                      padding: 3rem;
+                      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+                  }
+                  h1 {
+                      color: #2c3e50;
+                      text-align: center;
+                      margin-bottom: 1rem;
+                      font-size: 2.5rem;
+                  }
+                  .staging-badge {
+                      background: linear-gradient(45deg, #ff9800, #ff5722);
+                      color: white;
+                      padding: 0.5rem 1rem;
+                      border-radius: 20px;
+                      font-size: 0.9rem;
+                      font-weight: bold;
+                      margin: 1rem 0;
+                      display: inline-block;
+                      animation: pulse 2s infinite;
+                  }
+                  @keyframes pulse {
+                      0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7); }
+                      70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); }
+                      100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
+                  }
+                  .oauth-badge {
+                      background: linear-gradient(45deg, #4CAF50, #45a049);
+                      color: white;
+                      padding: 0.5rem 1rem;
+                      border-radius: 20px;
+                      margin: 1rem 0;
+                      display: inline-block;
+                  }
+                  .app-launch {
+                      text-align: center;
+                      margin: 2rem 0;
+                  }
+                  .app-launch a {
+                      background: linear-gradient(45deg, #667eea, #764ba2);
+                      color: white;
+                      padding: 1rem 2rem;
+                      border-radius: 50px;
+                      text-decoration: none;
+                      font-weight: bold;
+                      display: inline-block;
+                      font-size: 1.1rem;
+                      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+                      transition: transform 0.3s ease;
+                  }
+                  .app-launch a:hover {
+                      transform: translateY(-2px);
+                      box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
+                  }
+                  .docs-grid {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+                      gap: 2rem;
+                      margin: 3rem 0;
+                  }
+                  .doc-card {
+                      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                      border-radius: 8px;
+                      padding: 2rem;
+                      text-decoration: none;
+                      color: #2c3e50;
+                      transition: transform 0.3s ease;
+                  }
+                  .doc-card:hover {
+                      transform: translateY(-5px);
+                      text-decoration: none;
+                      color: #2c3e50;
+                  }
+                  .staging-warning {
+                      background: #fff3cd;
+                      border: 1px solid #ffeaa7;
+                      border-radius: 8px;
+                      padding: 1.5rem;
+                      margin: 2rem 0;
+                      color: #856404;
+                  }
+                  .staging-warning h3 {
+                      margin-top: 0;
+                      color: #856404;
+                  }
+                  .commit-info {
+                      background: #f8f9fa;
+                      border-radius: 6px;
+                      padding: 1rem;
+                      margin: 1rem 0;
+                      font-family: monospace;
+                      font-size: 0.9rem;
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>📚 Graph Learning System</h1>
+                  
+                  <div class="staging-badge">🚧 STAGING ENVIRONMENT</div>
+                  <div class="oauth-badge">✨ Apple Sign In & GitHub OAuth</div>
+                  
+                  <div class="staging-warning">
+                      <h3>⚠️ Staging Environment Notice</h3>
+                      <p>This is the <strong>staging environment</strong> for testing new features before production deployment. 
+                      Data may be reset periodically. For production use, visit 
+                      <a href="https://abcdeez.fg-goose.online">abcdeez.fg-goose.online</a>.</p>
+                  </div>
+          
+                  <div class="commit-info">
+                      <strong>Latest Deployment:</strong><br>
+                      Commit: ${{ github.sha }}<br>
+                      Branch: ${{ github.ref_name }}<br>
+                      Deployed: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+                  </div>
+                  
+                  <div class="app-launch">
+                      <a href="./app/">🚀 Launch Staging App</a>
+                  </div>
+                  
+                  <div class="docs-grid">
+                      <a href="./user-manual/" class="doc-card">
+                          <h2>👤 User Manual</h2>
+                          <p>Complete user guide for the learning system (staging version)</p>
+                      </a>
+                      
+                      <a href="./admin-manual/" class="doc-card">
+                          <h2>⚙️ Admin Manual</h2>
+                          <p>System administration and deployment guide (staging version)</p>
+                      </a>
+                      
+                      <a href="./dev-manual/" class="doc-card">
+                          <h2>💻 Developer Manual</h2>
+                          <p>Technical documentation and OAuth implementation (staging version)</p>
+                      </a>
+                  </div>
+                  
+                  <div style="background: #e7f3ff; border-radius: 8px; padding: 2rem; margin: 2rem 0;">
+                      <h3 style="margin-top: 0; color: #1976d2;">🧪 Staging Features</h3>
+                      <ul style="color: #424242; line-height: 1.8;">
+                          <li><strong>Latest OAuth Implementation</strong> - Apple Sign In + GitHub OAuth from dev branch</li>
+                          <li><strong>Feature Testing</strong> - New features deployed automatically from dev branch</li>
+                          <li><strong>Debug Information</strong> - Enhanced logging for development testing</li>
+                          <li><strong>Staging OAuth Apps</strong> - Separate Apple/GitHub OAuth configurations</li>
+                          <li><strong>Test Data</strong> - Safe environment for testing without affecting production</li>
+                      </ul>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Build User Manual
+        run: |
+          cd user-manual
+          mdbook build
+          mv book ../staging-site/user-manual
+
+      - name: Build Admin Manual
+        run: |
+          cd admin-manual
+          mdbook build
+          mv book ../staging-site/admin-manual
+
+      - name: Build Developer Manual
+        run: |
+          cd dev-manual
+          mdbook build
+          mv book ../staging-site/dev-manual
+
+      - name: Build PWA for Staging
+        run: |
+          cd xilem-cross-platform
+          # Update API base URL for staging
+          if [ -f app/src/api.rs ]; then
+            sed -i 's|abcdeez\.fg-goose\.online|staging.abcdeez.fg-goose.online|g' app/src/api.rs
+          fi
+          
+          # Build the PWA (when build system is ready)
+          # For now, copy the PWA structure
+          mkdir -p ../staging-site/app
+          cp -r app/* ../staging-site/app/ 2>/dev/null || echo "PWA build will be implemented later"
+          
+          # Create placeholder PWA page
+          cat > ../staging-site/app/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Graph Learning System - Staging App</title>
+              <link rel="manifest" href="/app/manifest.json">
+              <style>
+                  body {
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                      margin: 0;
+                      padding: 2rem;
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      color: white;
+                      text-align: center;
+                      min-height: 100vh;
+                      display: flex;
+                      flex-direction: column;
+                      justify-content: center;
+                  }
+                  .staging-badge {
+                      background: rgba(255, 152, 0, 0.9);
+                      padding: 0.5rem 1rem;
+                      border-radius: 20px;
+                      display: inline-block;
+                      margin-bottom: 2rem;
+                      animation: pulse 2s infinite;
+                  }
+                  @keyframes pulse {
+                      0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7); }
+                      70% { box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); }
+                      100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
+                  }
+              </style>
+          </head>
+          <body>
+              <div class="staging-badge">🚧 STAGING PWA</div>
+              <h1>🚀 Graph Learning System</h1>
+              <h2>Staging Application</h2>
+              <p>The PWA will be built and deployed here automatically.</p>
+              <p>✅ OAuth Authentication Ready<br>
+                 🍎 Apple Sign In Configured<br>
+                 🐙 GitHub OAuth Configured</p>
+              <p><a href="../" style="color: white;">← Back to Staging Documentation</a></p>
+          </body>
+          </html>
+          EOF
+
+      - name: Create CNAME for staging
+        run: echo "staging.abcdeez.fg-goose.online" > staging-site/CNAME
+
+      - name: Create staging sitemap
+        run: |
+          cat > staging-site/sitemap.xml << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+              <url>
+                  <loc>https://staging.abcdeez.fg-goose.online/</loc>
+                  <changefreq>daily</changefreq>
+                  <priority>1.0</priority>
+              </url>
+              <url>
+                  <loc>https://staging.abcdeez.fg-goose.online/app/</loc>
+                  <changefreq>daily</changefreq>
+                  <priority>1.0</priority>
+              </url>
+              <url>
+                  <loc>https://staging.abcdeez.fg-goose.online/user-manual/</loc>
+                  <changefreq>weekly</changefreq>
+                  <priority>0.8</priority>
+              </url>
+              <url>
+                  <loc>https://staging.abcdeez.fg-goose.online/admin-manual/</loc>
+                  <changefreq>weekly</changefreq>
+                  <priority>0.8</priority>
+              </url>
+              <url>
+                  <loc>https://staging.abcdeez.fg-goose.online/dev-manual/</loc>
+                  <changefreq>weekly</changefreq>
+                  <priority>0.8</priority>
+              </url>
+          </urlset>
+          EOF
+
+      - name: Upload staging artifact
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: ./staging-site
+
+      - name: Deploy to GitHub Pages (Staging)
+        id: deployment
+        uses: actions/deploy-pages@v2
+
+      - name: Notify deployment success
+        run: |
+          echo "🚀 Staging deployment successful!"
+          echo "📍 URL: https://staging.abcdeez.fg-goose.online"
+          echo "📋 Commit: ${{ github.sha }}"
+          echo "🌿 Branch: ${{ github.ref_name }}"

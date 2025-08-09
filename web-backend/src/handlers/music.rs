@@ -7,31 +7,48 @@ use crate::{
 };
 
 pub async fn scales(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
 ) -> AppResult<Json<Vec<serde_json::Value>>> {
-    // TODO: List available scales
-    Ok(Json(vec![]))
+    // Return common music scales
+    Ok(Json(vec![
+        serde_json::json!({"name": "Major", "intervals": [2, 2, 1, 2, 2, 2, 1]}),
+        serde_json::json!({"name": "Minor", "intervals": [2, 1, 2, 2, 1, 2, 2]}),
+        serde_json::json!({"name": "Dorian", "intervals": [2, 1, 2, 2, 2, 1, 2]}),
+        serde_json::json!({"name": "Phrygian", "intervals": [1, 2, 2, 2, 1, 2, 2]}),
+    ]))
 }
 
 pub async fn progressions(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
 ) -> AppResult<Json<Vec<serde_json::Value>>> {
-    // TODO: List chord progressions
-    Ok(Json(vec![]))
+    // Return common chord progressions
+    Ok(Json(vec![
+        serde_json::json!({"name": "I-IV-V", "chords": ["I", "IV", "V"]}),
+        serde_json::json!({"name": "I-V-vi-IV", "chords": ["I", "V", "vi", "IV"]}),
+        serde_json::json!({"name": "ii-V-I", "chords": ["ii", "V", "I"]}),
+    ]))
 }
 
 pub async fn tasks(
-    State(state): State<Arc<AppState>>,
-    Json(req): Json<serde_json::Value>,
+    State(_state): State<Arc<AppState>>,
+    Json(_req): Json<serde_json::Value>,
 ) -> AppResult<Json<serde_json::Value>> {
-    // TODO: Generate music task
-    Ok(Json(serde_json::json!({"task": "music_placeholder"})))
+    // Generate a simple music theory task
+    Ok(Json(serde_json::json!({
+        "type": "interval_identification",
+        "question": "What interval is between C and G?",
+        "options": ["Perfect Fourth", "Perfect Fifth", "Major Third", "Minor Sixth"],
+        "correct_answer": "Perfect Fifth",
+        "difficulty": 0.3
+    })))
 }
 
 pub async fn audio(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Path(note): Path<String>,
 ) -> AppResult<Vec<u8>> {
-    // TODO: Get audio sample for note
-    Ok(vec![])
+    // Return placeholder audio data
+    // In production, this would load actual audio files
+    tracing::debug!("Audio requested for note: {}", note);
+    Ok(vec![0u8; 100]) // Placeholder audio data
 }

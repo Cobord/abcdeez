@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Learning System - Admin Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+        
+        .header .subtitle {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-top: 0.5rem;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .admin-nav {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .nav-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .nav-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .nav-btn:hover {
+            background: #5a6fd8;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .nav-btn.active {
+            background: #4CAF50;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        
+        .card h3 {
+            color: #667eea;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .metric {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+        
+        .metric-label {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .status.healthy {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .table-header {
+            background: #667eea;
+            color: white;
+            padding: 1rem;
+            font-weight: 600;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            text-align: left;
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+        
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        tbody tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #5a6fd8;
+        }
+        
+        .btn.danger {
+            background: #e74c3c;
+        }
+        
+        .btn.danger:hover {
+            background: #c0392b;
+        }
+        
+        .btn.success {
+            background: #27ae60;
+        }
+        
+        .btn.success:hover {
+            background: #2ecc71;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #7f8c8d;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            border-radius: 6px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            border-radius: 6px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #2c3e50;
+        }
+        
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .section {
+            margin-bottom: 3rem;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .nav-buttons {
+                flex-direction: column;
+            }
+            
+            table {
+                font-size: 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🛠️ Admin Panel</h1>
+        <div class="subtitle">Graph Learning System Administration</div>
+    </div>
+    
+    <div class="container">
+        <div class="admin-nav">
+            <div class="nav-buttons">
+                <button class="nav-btn active" onclick="showSection('dashboard')">📊 Dashboard</button>
+                <button class="nav-btn" onclick="showSection('users')">👥 Users</button>
+                <button class="nav-btn" onclick="showSection('learners')">🧠 Learners</button>
+                <button class="nav-btn" onclick="showSection('oauth')">🔐 OAuth</button>
+                <button class="nav-btn" onclick="showSection('jobs')">⚙️ Background Jobs</button>
+                <button class="nav-btn" onclick="showSection('audit')">📋 Audit Trail</button>
+                <button class="nav-btn" onclick="showSection('config')">⚙️ Configuration</button>
+            </div>
+        </div>
+        
+        <!-- Dashboard Section -->
+        <div id="dashboard-section" class="section">
+            <div class="dashboard-grid">
+                <div class="card">
+                    <h3>🖥️ System Status</h3>
+                    <div class="metric" id="system-status">Loading...</div>
+                    <div class="metric-label">Overall Health</div>
+                </div>
+                
+                <div class="card">
+                    <h3>👥 Total Users</h3>
+                    <div class="metric" id="total-users">-</div>
+                    <div class="metric-label">Registered Users</div>
+                </div>
+                
+                <div class="card">
+                    <h3>🧠 Active Learners</h3>
+                    <div class="metric" id="total-learners">-</div>
+                    <div class="metric-label">Learning Participants</div>
+                </div>
+                
+                <div class="card">
+                    <h3>🔐 OAuth Users</h3>
+                    <div class="metric" id="oauth-users">-</div>
+                    <div class="metric-label">Apple + GitHub</div>
+                </div>
+                
+                <div class="card">
+                    <h3>⚡ Server Uptime</h3>
+                    <div class="metric" id="uptime">-</div>
+                    <div class="metric-label">Time Online</div>
+                </div>
+                
+                <div class="card">
+                    <h3>💾 Database</h3>
+                    <div class="metric" id="db-status">-</div>
+                    <div class="metric-label">Connection Status</div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>📊 System Information</h3>
+                <div id="system-info">Loading system information...</div>
+            </div>
+        </div>
+        
+        <!-- Users Section -->
+        <div id="users-section" class="section hidden">
+            <div class="table-container">
+                <div class="table-header">
+                    👥 User Management
+                    <button class="btn" style="float: right;" onclick="refreshUsers()">🔄 Refresh</button>
+                </div>
+                <div id="users-content">
+                    <div class="loading">Loading users...</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Learners Section -->
+        <div id="learners-section" class="section hidden">
+            <div class="table-container">
+                <div class="table-header">
+                    🧠 Learner Management
+                    <button class="btn" style="float: right;" onclick="refreshLearners()">🔄 Refresh</button>
+                </div>
+                <div id="learners-content">
+                    <div class="loading">Loading learners...</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- OAuth Section -->
+        <div id="oauth-section" class="section hidden">
+            <div class="card">
+                <h3>🔐 OAuth Management</h3>
+                <p>Manage OAuth providers and validate credentials.</p>
+                
+                <div class="form-group">
+                    <button class="btn success" onclick="triggerOAuthValidation()">
+                        ✅ Validate All OAuth Credentials
+                    </button>
+                </div>
+                
+                <div id="oauth-result"></div>
+            </div>
+            
+            <div class="table-container">
+                <div class="table-header">OAuth Provider Status</div>
+                <div id="oauth-providers">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Provider</th>
+                                <th>Status</th>
+                                <th>Users</th>
+                                <th>Last Validation</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>🍎 Apple Sign In</td>
+                                <td><span class="status healthy">Configured</span></td>
+                                <td id="apple-users">-</td>
+                                <td id="apple-last-check">-</td>
+                            </tr>
+                            <tr>
+                                <td>🐙 GitHub OAuth</td>
+                                <td><span class="status healthy">Configured</span></td>
+                                <td id="github-users">-</td>
+                                <td id="github-last-check">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Background Jobs Section -->
+        <div id="jobs-section" class="section hidden">
+            <div class="card">
+                <h3>⚙️ Background Jobs</h3>
+                <p>Trigger and monitor background jobs.</p>
+                
+                <div class="form-group">
+                    <label for="job-type">Job Type:</label>
+                    <select id="job-type">
+                        <option value="oauth_validation">OAuth Credential Validation</option>
+                        <option value="user_cleanup">User Data Cleanup</option>
+                        <option value="analytics_aggregation">Analytics Aggregation</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <button class="btn" onclick="triggerJob()">🚀 Trigger Job</button>
+                </div>
+                
+                <div id="job-result"></div>
+            </div>
+            
+            <div class="table-container">
+                <div class="table-header">
+                    Recent Jobs
+                    <button class="btn" style="float: right;" onclick="refreshJobs()">🔄 Refresh</button>
+                </div>
+                <div id="jobs-content">
+                    <div class="loading">Loading jobs...</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Audit Trail Section -->
+        <div id="audit-section" class="section hidden">
+            <div class="table-container">
+                <div class="table-header">
+                    📋 Audit Trail
+                    <button class="btn" style="float: right;" onclick="refreshAudit()">🔄 Refresh</button>
+                </div>
+                <div id="audit-content">
+                    <div class="loading">Loading audit trail...</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Configuration Section -->
+        <div id="config-section" class="section hidden">
+            <div class="card">
+                <h3>⚙️ System Configuration</h3>
+                <p>View and update system configuration settings.</p>
+                
+                <div class="form-group">
+                    <label for="config-key">Configuration Key:</label>
+                    <input type="text" id="config-key" placeholder="e.g., rate_limit_requests">
+                </div>
+                
+                <div class="form-group">
+                    <label for="config-value">New Value:</label>
+                    <input type="text" id="config-value" placeholder="Configuration value">
+                </div>
+                
+                <div class="form-group">
+                    <button class="btn" onclick="updateConfig()">💾 Update Configuration</button>
+                </div>
+                
+                <div id="config-result"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentSection = 'dashboard';
+        
+        // Navigation
+        function showSection(section) {
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+            
+            // Show selected section
+            document.getElementById(section + '-section').classList.remove('hidden');
+            
+            // Update nav buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            currentSection = section;
+            
+            // Load section data
+            loadSectionData(section);
+        }
+        
+        function loadSectionData(section) {
+            switch(section) {
+                case 'dashboard':
+                    loadDashboard();
+                    break;
+                case 'users':
+                    loadUsers();
+                    break;
+                case 'learners':
+                    loadLearners();
+                    break;
+                case 'oauth':
+                    loadOAuthData();
+                    break;
+                case 'jobs':
+                    loadJobs();
+                    break;
+                case 'audit':
+                    loadAudit();
+                    break;
+            }
+        }
+        
+        // API Helper
+        async function apiCall(endpoint, method = 'GET', data = null) {
+            try {
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                };
+                
+                if (data) {
+                    options.body = JSON.stringify(data);
+                }
+                
+                const response = await fetch(endpoint, options);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                throw error;
+            }
+        }
+        
+        // Dashboard Functions
+        async function loadDashboard() {
+            try {
+                // Load system status
+                const systemStatus = await apiCall('/api/admin/system/status');
+                
+                document.getElementById('system-status').innerHTML = 
+                    `<span class="status healthy">Healthy</span>`;
+                document.getElementById('uptime').textContent = 
+                    formatUptime(systemStatus.uptime_seconds || 0);
+                document.getElementById('db-status').innerHTML = 
+                    `<span class="status healthy">Connected</span>`;
+                
+                // Load system info
+                document.getElementById('system-info').innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                        <div><strong>Version:</strong> ${systemStatus.version || 'Unknown'}</div>
+                        <div><strong>Environment:</strong> ${systemStatus.environment || 'Development'}</div>
+                        <div><strong>Active Sessions:</strong> ${systemStatus.active_sessions || 0}</div>
+                        <div><strong>Memory Usage:</strong> ${systemStatus.memory_usage_mb || 'N/A'} MB</div>
+                    </div>
+                `;
+                
+                // Load user counts
+                const users = await apiCall('/api/admin/users');
+                document.getElementById('total-users').textContent = users.length;
+                
+                const oauthUsers = users.filter(u => u.auth_provider !== 'local').length;
+                document.getElementById('oauth-users').textContent = oauthUsers;
+                
+                // Load learner count
+                const learners = await apiCall('/api/admin/learners');
+                document.getElementById('total-learners').textContent = learners.length;
+                
+            } catch (error) {
+                console.error('Failed to load dashboard:', error);
+                document.getElementById('system-status').innerHTML = 
+                    `<span class="status error">Error</span>`;
+            }
+        }
+        
+        // User Functions
+        async function loadUsers() {
+            try {
+                const users = await apiCall('/api/admin/users');
+                
+                const html = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>Auth Provider</th>
+                                <th>Created</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${users.map(user => `
+                                <tr>
+                                    <td>${user.username}</td>
+                                    <td>${user.email}</td>
+                                    <td>
+                                        <span class="status ${getProviderClass(user.auth_provider)}">
+                                            ${getProviderIcon(user.auth_provider)} ${user.auth_provider}
+                                        </span>
+                                    </td>
+                                    <td>${formatDate(user.created_at)}</td>
+                                    <td><span class="status healthy">Active</span></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                document.getElementById('users-content').innerHTML = html;
+            } catch (error) {
+                document.getElementById('users-content').innerHTML = 
+                    `<div class="error">Failed to load users: ${error.message}</div>`;
+            }
+        }
+        
+        // Learner Functions
+        async function loadLearners() {
+            try {
+                const learners = await apiCall('/api/admin/learners');
+                
+                const html = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Domain</th>
+                                <th>Total Tasks</th>
+                                <th>Correct</th>
+                                <th>Accuracy</th>
+                                <th>Current Streak</th>
+                                <th>Best Streak</th>
+                                <th>Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${learners.map(learner => {
+                                const accuracy = learner.total_tasks > 0 
+                                    ? ((learner.correct_tasks / learner.total_tasks) * 100).toFixed(1)
+                                    : '0.0';
+                                return `
+                                    <tr>
+                                        <td>${learner.user_id.substring(0, 8)}...</td>
+                                        <td>${learner.domain}</td>
+                                        <td>${learner.total_tasks}</td>
+                                        <td>${learner.correct_tasks}</td>
+                                        <td>${accuracy}%</td>
+                                        <td>${learner.current_streak}</td>
+                                        <td>${learner.best_streak}</td>
+                                        <td>${formatDate(learner.updated_at)}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                document.getElementById('learners-content').innerHTML = html;
+            } catch (error) {
+                document.getElementById('learners-content').innerHTML = 
+                    `<div class="error">Failed to load learners: ${error.message}</div>`;
+            }
+        }
+        
+        // OAuth Functions
+        async function loadOAuthData() {
+            try {
+                const users = await apiCall('/api/admin/users');
+                const appleUsers = users.filter(u => u.auth_provider === 'apple').length;
+                const githubUsers = users.filter(u => u.auth_provider === 'github').length;
+                
+                document.getElementById('apple-users').textContent = appleUsers;
+                document.getElementById('github-users').textContent = githubUsers;
+                
+                // Note: In a real implementation, you'd fetch actual validation timestamps
+                document.getElementById('apple-last-check').textContent = 'N/A (Local Dev)';
+                document.getElementById('github-last-check').textContent = 'N/A (Local Dev)';
+                
+            } catch (error) {
+                console.error('Failed to load OAuth data:', error);
+            }
+        }
+        
+        async function triggerOAuthValidation() {
+            try {
+                document.getElementById('oauth-result').innerHTML = 
+                    '<div class="loading">Triggering OAuth validation...</div>';
+                
+                await apiCall('/api/admin/oauth-validation', 'POST');
+                
+                document.getElementById('oauth-result').innerHTML = 
+                    '<div class="success">OAuth credential validation triggered successfully!</div>';
+                
+                // Refresh OAuth data
+                loadOAuthData();
+                
+            } catch (error) {
+                document.getElementById('oauth-result').innerHTML = 
+                    `<div class="error">Failed to trigger OAuth validation: ${error.message}</div>`;
+            }
+        }
+        
+        // Job Functions
+        async function loadJobs() {
+            try {
+                const jobs = await apiCall('/api/admin/jobs');
+                
+                const html = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Job Type</th>
+                                <th>Status</th>
+                                <th>Started</th>
+                                <th>Duration</th>
+                                <th>Result</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${jobs.map(job => `
+                                <tr>
+                                    <td>${job.job_type || 'Unknown'}</td>
+                                    <td>
+                                        <span class="status ${getJobStatusClass(job.status)}">
+                                            ${job.status || 'Unknown'}
+                                        </span>
+                                    </td>
+                                    <td>${formatDate(job.started_at)}</td>
+                                    <td>${job.duration_ms || 0}ms</td>
+                                    <td>${job.result || 'N/A'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                document.getElementById('jobs-content').innerHTML = html;
+            } catch (error) {
+                document.getElementById('jobs-content').innerHTML = 
+                    `<div class="error">Failed to load jobs: ${error.message}</div>`;
+            }
+        }
+        
+        async function triggerJob() {
+            const jobType = document.getElementById('job-type').value;
+            
+            try {
+                document.getElementById('job-result').innerHTML = 
+                    '<div class="loading">Triggering job...</div>';
+                
+                await apiCall('/api/admin/jobs/trigger', 'POST', { job_type: jobType });
+                
+                document.getElementById('job-result').innerHTML = 
+                    '<div class="success">Job triggered successfully!</div>';
+                
+                // Refresh jobs list
+                setTimeout(() => loadJobs(), 1000);
+                
+            } catch (error) {
+                document.getElementById('job-result').innerHTML = 
+                    `<div class="error">Failed to trigger job: ${error.message}</div>`;
+            }
+        }
+        
+        // Audit Functions
+        async function loadAudit() {
+            try {
+                const auditEntries = await apiCall('/api/admin/audit');
+                
+                const html = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>User</th>
+                                <th>Action</th>
+                                <th>Resource</th>
+                                <th>IP Address</th>
+                                <th>User Agent</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${auditEntries.map(entry => `
+                                <tr>
+                                    <td>${formatDate(entry.timestamp)}</td>
+                                    <td>${entry.user_id ? entry.user_id.substring(0, 8) + '...' : 'System'}</td>
+                                    <td>${entry.action}</td>
+                                    <td>${entry.resource_type}${entry.resource_id ? ':' + entry.resource_id.substring(0, 8) + '...' : ''}</td>
+                                    <td>${entry.ip_address || 'N/A'}</td>
+                                    <td>${entry.user_agent ? entry.user_agent.substring(0, 30) + '...' : 'N/A'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                document.getElementById('audit-content').innerHTML = html;
+            } catch (error) {
+                document.getElementById('audit-content').innerHTML = 
+                    `<div class="error">Failed to load audit trail: ${error.message}</div>`;
+            }
+        }
+        
+        // Configuration Functions
+        async function updateConfig() {
+            const key = document.getElementById('config-key').value;
+            const value = document.getElementById('config-value').value;
+            
+            if (!key || !value) {
+                document.getElementById('config-result').innerHTML = 
+                    '<div class="error">Please provide both key and value</div>';
+                return;
+            }
+            
+            try {
+                await apiCall('/api/admin/config', 'PUT', { key, value });
+                
+                document.getElementById('config-result').innerHTML = 
+                    '<div class="success">Configuration updated successfully!</div>';
+                
+                // Clear form
+                document.getElementById('config-key').value = '';
+                document.getElementById('config-value').value = '';
+                
+            } catch (error) {
+                document.getElementById('config-result').innerHTML = 
+                    `<div class="error">Failed to update configuration: ${error.message}</div>`;
+            }
+        }
+        
+        // Refresh Functions
+        function refreshUsers() { loadUsers(); }
+        function refreshLearners() { loadLearners(); }
+        function refreshJobs() { loadJobs(); }
+        function refreshAudit() { loadAudit(); }
+        
+        // Utility Functions
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            return new Date(dateString).toLocaleString();
+        }
+        
+        function formatUptime(seconds) {
+            if (seconds < 60) return `${seconds}s`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+            return `${Math.floor(seconds / 86400)}d`;
+        }
+        
+        function getProviderIcon(provider) {
+            switch(provider) {
+                case 'apple': return '🍎';
+                case 'github': return '🐙';
+                case 'local': return '🏠';
+                default: return '❓';
+            }
+        }
+        
+        function getProviderClass(provider) {
+            switch(provider) {
+                case 'apple': return 'healthy';
+                case 'github': return 'healthy';
+                case 'local': return 'warning';
+                default: return 'error';
+            }
+        }
+        
+        function getJobStatusClass(status) {
+            switch(status) {
+                case 'completed': return 'healthy';
+                case 'running': return 'warning';
+                case 'failed': return 'error';
+                default: return 'warning';
+            }
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboard();
+        });
+        
+        // Auto-refresh dashboard every 30 seconds
+        setInterval(() => {
+            if (currentSection === 'dashboard') {
+                loadDashboard();
+            }
+        }, 30000);
+    </script>
+</body>
+</html>

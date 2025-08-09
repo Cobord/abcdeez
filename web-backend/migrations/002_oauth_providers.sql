@@ -2,12 +2,15 @@
 -- Add columns to support Apple Sign In, GitHub, and other OAuth authentication
 
 -- Add OAuth provider specific columns
-ALTER TABLE users 
-ADD COLUMN apple_user_id TEXT UNIQUE,
-ADD COLUMN github_user_id TEXT UNIQUE,
-ADD COLUMN oauth_provider_id TEXT, -- Generic OAuth ID for the primary provider
-ADD COLUMN auth_provider TEXT DEFAULT 'local' NOT NULL CHECK (auth_provider IN ('local', 'apple', 'github')),
-ADD COLUMN is_private_email BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN apple_user_id TEXT;
+ALTER TABLE users ADD COLUMN github_user_id TEXT;
+ALTER TABLE users ADD COLUMN oauth_provider_id TEXT;
+ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'local' CHECK (auth_provider IN ('local', 'apple', 'github'));
+ALTER TABLE users ADD COLUMN is_private_email BOOLEAN DEFAULT FALSE;
+
+-- Create unique indexes for OAuth IDs
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_apple_user_id_unique ON users(apple_user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_github_user_id_unique ON users(github_user_id);
 
 -- Make password_hash optional for OAuth users
 -- Note: SQLite doesn't support ALTER COLUMN, so we'll handle this in the application logic

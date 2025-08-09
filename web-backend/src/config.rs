@@ -34,6 +34,13 @@ pub struct Config {
     pub github_client_id: String,
     pub github_client_secret: String,
     pub github_redirect_uri: String,
+    
+    // TLS/SSL configuration
+    pub tls_domain: Option<String>,
+    pub tls_use_letsencrypt: bool,
+    pub tls_port: u16,
+    pub admin_email: Option<String>,
+    pub server_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -112,25 +119,39 @@ impl Config {
                 .parse()
                 .expect("PERFORMANCE_MONITORING_ENABLED must be a boolean"),
             
-            // OAuth Providers configuration
+            // OAuth Providers configuration (optional)
             apple_client_id: env::var("APPLE_CLIENT_ID")
-                .expect("APPLE_CLIENT_ID environment variable is required"),
+                .unwrap_or_else(|_| "placeholder_apple_client_id".to_string()),
             apple_team_id: env::var("APPLE_TEAM_ID")
-                .expect("APPLE_TEAM_ID environment variable is required"),
+                .unwrap_or_else(|_| "placeholder_apple_team_id".to_string()),
             apple_key_id: env::var("APPLE_KEY_ID")
-                .expect("APPLE_KEY_ID environment variable is required"),
+                .unwrap_or_else(|_| "placeholder_apple_key_id".to_string()),
             apple_private_key_path: env::var("APPLE_PRIVATE_KEY_PATH")
-                .expect("APPLE_PRIVATE_KEY_PATH environment variable is required"),
+                .unwrap_or_else(|_| "/tmp/placeholder_apple_key.p8".to_string()),
             apple_redirect_uri: env::var("APPLE_REDIRECT_URI")
                 .unwrap_or_else(|_| "https://api.yourapp.com/api/auth/apple/callback".to_string()),
             
-            // GitHub OAuth configuration
+            // GitHub OAuth configuration (optional)
             github_client_id: env::var("GITHUB_CLIENT_ID")
-                .expect("GITHUB_CLIENT_ID environment variable is required"),
+                .unwrap_or_else(|_| "placeholder_github_client_id".to_string()),
             github_client_secret: env::var("GITHUB_CLIENT_SECRET")
-                .expect("GITHUB_CLIENT_SECRET environment variable is required"),
+                .unwrap_or_else(|_| "placeholder_github_client_secret".to_string()),
             github_redirect_uri: env::var("GITHUB_REDIRECT_URI")
                 .unwrap_or_else(|_| "https://api.yourapp.com/api/auth/github/callback".to_string()),
+            
+            // TLS/SSL configuration
+            tls_domain: env::var("TLS_DOMAIN").ok(),
+            tls_use_letsencrypt: env::var("TLS_USE_LETSENCRYPT")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .expect("TLS_USE_LETSENCRYPT must be a boolean"),
+            tls_port: env::var("TLS_PORT")
+                .unwrap_or_else(|_| "443".to_string())
+                .parse()
+                .expect("TLS_PORT must be a number"),
+            admin_email: env::var("ADMIN_EMAIL").ok(),
+            server_name: env::var("SERVER_NAME")
+                .unwrap_or_else(|_| "localhost".to_string()),
         })
     }
 

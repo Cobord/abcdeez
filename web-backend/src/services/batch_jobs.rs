@@ -331,8 +331,8 @@ impl BatchJobService {
                     "INSERT INTO model_snapshots (id, learner_id, timestamp, parameters, metrics)
                      VALUES (?, ?, ?, ?, ?)"
                 )
-                .bind(snapshot_id_bytes)
-                .bind(learner_id_bytes)
+                .bind(&snapshot_id_bytes[..])
+                .bind(&learner_id_bytes[..])
                 .bind(chrono::Utc::now())
                 .bind(parameters)
                 .bind(metrics)
@@ -575,7 +575,7 @@ impl BatchJobService {
             )
             .bind(status)
             .bind(now)
-            .bind(job_id_bytes)
+            .bind(&job_id_bytes[..])
             .execute(&mut *conn)
             .await?;
         } else {
@@ -585,7 +585,7 @@ impl BatchJobService {
             .bind(status)
             .bind(now)
             .bind(error_message)
-            .bind(job_id_bytes)
+            .bind(&job_id_bytes[..])
             .execute(&mut *conn)
             .await?;
         }
@@ -606,7 +606,7 @@ impl BatchJobService {
         sqlx::query(
             "INSERT INTO job_queue (id, job_type, payload, status) VALUES (?, ?, ?, 'pending')"
         )
-        .bind(job_id_bytes)
+        .bind(&job_id_bytes[..])
         .bind(job_type.as_str())
         .bind(payload.to_string())
         .execute(&mut *conn)

@@ -365,7 +365,7 @@ pub async fn live(
 
 // Helper function for group statistics
 async fn get_group_statistics(
-    db: &sqlx::PgPool,
+    db: &crate::db::DbPool,
     learner_ids: &[Uuid],
 ) -> AppResult<crate::services::analytics_service::ConditionStats> {
     if learner_ids.is_empty() {
@@ -400,7 +400,7 @@ async fn get_group_statistics(
     
     let mut query = sqlx::query(&query_str);
     for learner_id_bytes in &learner_id_bytes {
-        query = query.bind(learner_id_bytes);
+        query = query.bind(&learner_id_bytes[..]);
     }
     
     let mut conn = db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
@@ -846,7 +846,7 @@ pub async fn adaptive_difficulty_analysis(
 
 // Helper functions
 
-async fn get_recent_learner_ids(db: &sqlx::PgPool, limit: usize) -> AppResult<Vec<Uuid>> {
+async fn get_recent_learner_ids(db: &crate::db::DbPool, limit: usize) -> AppResult<Vec<Uuid>> {
     let mut conn = db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
     
     let rows = sqlx::query(

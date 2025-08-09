@@ -97,6 +97,50 @@ impl InMemoryCache {
     fn del(&mut self, key: &str) -> bool {
         self.map.remove(key).is_some()
     }
+    
+    fn exists(&mut self, key: &str) -> bool {
+        // Check existence and remove if expired
+        if let Some(entry) = self.map.get(key) {
+            if entry.is_expired() {
+                self.map.remove(key);
+                return false;
+            }
+            true
+        } else {
+            false
+        }
+    }
+    
+    fn incr(&mut self, key: &str) -> Result<i64, CacheError> {
+        // Get current value or default to 0
+        let current = if let Some(entry) = self.map.get(key) {
+            if entry.is_expired() {
+                self.map.remove(key);
+                0
+            } else {
+                entry.value.parse::<i64>().unwrap_or(0)
+            }
+        } else {
+            0
+        };
+        
+        let new_value = current + 1;
+        // Store with no expiry (will be set by EXPIRE if needed)
+        self.map.insert(key.to_string(), Entry {
+            value: new_value.to_string(),
+            expires_at: None,
+        });
+        Ok(new_value)
+    }
+    
+    fn expire(&mut self, key: &str, ttl_secs: u64) -> bool {
+        if let Some(entry) = self.map.get_mut(key) {
+            entry.expires_at = Instant::now().checked_add(Duration::from_secs(ttl_secs));
+            true
+        } else {
+            false
+        }
+    }
 }
 
 struct Entry {
@@ -245,6 +289,35 @@ impl Command {
                 let deleted = guard.del(key);
                 T::from_del(deleted)
             }
+            "EXISTS" => {
+                if self.args.len() != 1 {
+                    return Err(CacheError::InvalidArgs("EXISTS requires 1 argument: key"));
+                }
+                let key = &self.args[0];
+                let mut guard = conn.inner.lock().await;
+                let exists = guard.exists(key);
+                T::from_exists(exists)
+            }
+            "INCR" => {
+                if self.args.len() != 1 {
+                    return Err(CacheError::InvalidArgs("INCR requires 1 argument: key"));
+                }
+                let key = &self.args[0];
+                let mut guard = conn.inner.lock().await;
+                let value = guard.incr(key)?;
+                T::from_incr(value)
+            }
+            "EXPIRE" => {
+                if self.args.len() != 2 {
+                    return Err(CacheError::InvalidArgs("EXPIRE requires 2 arguments: key ttl_seconds"));
+                }
+                let key = &self.args[0];
+                let ttl_secs = u64::from_str(&self.args[1])
+                    .map_err(|_| CacheError::ParseError("ttl_seconds must be an integer"))?;
+                let mut guard = conn.inner.lock().await;
+                let success = guard.expire(key, ttl_secs);
+                T::from_expire(success)
+            }
             other => Err(CacheError::InvalidCommand(other.to_string())),
         }
     }
@@ -256,6 +329,15 @@ pub trait FromCacheResponse: Sized {
     fn from_get(v: Option<String>) -> Result<Self, CacheError>;
     fn from_set() -> Result<Self, CacheError>;
     fn from_del(_deleted: bool) -> Result<Self, CacheError>;
+    fn from_exists(_exists: bool) -> Result<Self, CacheError> {
+        Err(CacheError::InvalidCommand("EXISTS not supported for this type".to_string()))
+    }
+    fn from_incr(_value: i64) -> Result<Self, CacheError> {
+        Err(CacheError::InvalidCommand("INCR not supported for this type".to_string()))
+    }
+    fn from_expire(_success: bool) -> Result<Self, CacheError> {
+        Err(CacheError::InvalidCommand("EXPIRE not supported for this type".to_string()))
+    }
 }
 
 impl FromCacheResponse for String {
@@ -270,6 +352,18 @@ impl FromCacheResponse for String {
     fn from_del(_deleted: bool) -> Result<Self, CacheError> {
         Ok("OK".to_string())
     }
+    
+    fn from_exists(exists: bool) -> Result<Self, CacheError> {
+        Ok(if exists { "1".to_string() } else { "0".to_string() })
+    }
+    
+    fn from_incr(value: i64) -> Result<Self, CacheError> {
+        Ok(value.to_string())
+    }
+    
+    fn from_expire(success: bool) -> Result<Self, CacheError> {
+        Ok(if success { "1".to_string() } else { "0".to_string() })
+    }
 }
 
 impl FromCacheResponse for () {
@@ -283,6 +377,10 @@ impl FromCacheResponse for () {
     }
 
     fn from_del(_deleted: bool) -> Result<Self, CacheError> {
+        Ok(())
+    }
+    
+    fn from_expire(_success: bool) -> Result<Self, CacheError> {
         Ok(())
     }
 }

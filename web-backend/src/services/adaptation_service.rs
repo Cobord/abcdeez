@@ -9,6 +9,7 @@ use graph_learning_core::{
 };
 use crate::services::LearnerService;
 use crate::error::AppError;
+use crate::utils::math;
 
 #[derive(Clone)]
 pub struct AdaptationService {
@@ -123,17 +124,19 @@ impl AdaptationService {
             return Ok(0.5); // Default difficulty
         }
 
-        let success_rate = recent_responses.iter()
-            .filter(|&&correct| correct)
-            .count() as f64 / recent_responses.len() as f64;
+        let correct_count = recent_responses.iter().filter(|&&correct| correct).count();
+        let success_rate = math::safe_accuracy(correct_count, recent_responses.len());
 
         let target_success_rate = 0.75; // Target 75% success rate
         let current_difficulty = 0.5; // This would be stored/retrieved from learner state
 
-        let new_difficulty = if success_rate > target_success_rate + 0.1 {
-            (current_difficulty + 0.05_f64).min(1.0) // Increase difficulty
-        } else if success_rate < target_success_rate - 0.1 {
-            (current_difficulty - 0.05_f64).max(0.1) // Decrease difficulty
+        const TOLERANCE: f64 = 0.1;
+        const ADJUSTMENT_STEP: f64 = 0.05;
+        
+        let new_difficulty = if success_rate > target_success_rate + TOLERANCE {
+            math::clamp(current_difficulty + ADJUSTMENT_STEP, 0.1, 1.0)
+        } else if success_rate < target_success_rate - TOLERANCE {
+            math::clamp(current_difficulty - ADJUSTMENT_STEP, 0.1, 1.0)
         } else {
             current_difficulty // Keep same difficulty
         };
@@ -175,16 +178,96 @@ impl AdaptationService {
         model.get_probability_correct(operation_type, difficulty)
     }
 
-    fn calculate_uncertainty_reduction_if_correct(&self, _model: &graph_learning_core::LearnerModel, _task: &Task) -> f64 {
+    fn calculate_uncertainty_reduction_if_correct(&self, model: &graph_learning_core::LearnerModel, task: &Task) -> f64 {
         // Calculate how much we'd learn if the response is correct
-        // This is simplified - in practice would be more sophisticated
-        0.1
+        // Use Monte Carlo simulation to estimate information gain
+        self.monte_carlo_information_gain(model, task, true)
     }
 
-    fn calculate_uncertainty_reduction_if_incorrect(&self, _model: &graph_learning_core::LearnerModel, _task: &Task) -> f64 {
+    fn calculate_uncertainty_reduction_if_incorrect(&self, model: &graph_learning_core::LearnerModel, task: &Task) -> f64 {
         // Calculate how much we'd learn if the response is incorrect
         // Incorrect responses often provide more information
-        0.15
+        self.monte_carlo_information_gain(model, task, false)
+    }
+
+    fn monte_carlo_information_gain(&self, model: &graph_learning_core::LearnerModel, task: &Task, response_correct: bool) -> f64 {
+        const MC_SAMPLES: usize = 100; // Number of Monte Carlo samples
+        
+        // Current model uncertainty (entropy)
+        let current_entropy = self.calculate_model_entropy(model);
+        
+        let mut expected_entropy_after = 0.0;
+        
+        // Monte Carlo simulation
+        for _ in 0..MC_SAMPLES {
+            // Simulate the model update with this response
+            let mut simulated_model = model.clone();
+            
+            // Update model with simulated response
+            self.simulate_model_update(&mut simulated_model, task, response_correct);
+            
+            // Calculate entropy after update
+            let entropy_after = self.calculate_model_entropy(&simulated_model);
+            expected_entropy_after += entropy_after;
+        }
+        
+        expected_entropy_after /= MC_SAMPLES as f64;
+        
+        // Information gain = reduction in entropy
+        let information_gain = current_entropy - expected_entropy_after;
+        
+        // Ensure non-negative (mathematical guarantee, but floating point can be tricky)
+        information_gain.max(0.0)
+    }
+    
+    fn calculate_model_entropy(&self, model: &graph_learning_core::LearnerModel) -> f64 {
+        // Calculate Shannon entropy of the model's beliefs
+        let mut total_entropy = 0.0;
+        let mut node_count = 0;
+        
+        for (_, embedding) in &model.node_embeddings {
+            // For each node, calculate uncertainty as entropy
+            // Using uncertainty as a proxy for probability distribution entropy
+            let uncertainty = embedding.uncertainty;
+            
+            // Convert uncertainty to probability-like values for entropy calculation
+            let p = math::clamp(uncertainty, 1e-10, 1.0 - 1e-10);
+            let q = 1.0 - p;
+            
+            // Binary entropy: -p*log2(p) - q*log2(q)
+            let entropy = -p * math::safe_log2(p) - q * math::safe_log2(q);
+            total_entropy += entropy;
+            node_count += 1;
+        }
+        
+        math::safe_divide_or(total_entropy, node_count as f64, 0.0)
+    }
+    
+    fn simulate_model_update(&self, model: &mut graph_learning_core::LearnerModel, task: &Task, response_correct: bool) {
+        // Simulate how the model would update given this task and response
+        let operation_type = &task.operation;
+        let difficulty = task.difficulty;
+        
+        // Simple Bayesian update simulation
+        // In practice, this would use the actual Bayesian update mechanism
+        if let Some(embedding) = model.node_embeddings.get_mut(operation_type) {
+            // Update proficiency based on response
+            let learning_rate = 0.1; // Could be adaptive
+            
+            if response_correct {
+                // Correct response increases proficiency, decreases uncertainty
+                embedding.proficiency += learning_rate * (1.0 - embedding.proficiency);
+                embedding.uncertainty *= (1.0 - learning_rate * 0.5);
+            } else {
+                // Incorrect response decreases proficiency, may increase uncertainty
+                embedding.proficiency *= (1.0 - learning_rate * 0.5);
+                embedding.uncertainty = (embedding.uncertainty + learning_rate * 0.1).min(1.0);
+            }
+            
+            // Apply difficulty-based adjustments
+            let difficulty_factor = (difficulty - 0.5) * 0.1;
+            embedding.proficiency = (embedding.proficiency + difficulty_factor).max(0.0).min(1.0);
+        }
     }
 
     fn generate_subtle_hint(&self, task: &Task, _model: &graph_learning_core::LearnerModel) -> String {
@@ -267,8 +350,8 @@ impl AdaptationService {
             "INSERT INTO interventions (id, session_id, intervention_type, details) 
              VALUES (?, ?, ?, ?)"
         )
-        .bind(intervention_id_bytes)
-        .bind(session_id_bytes)
+        .bind(&intervention_id_bytes[..])
+        .bind(&session_id_bytes[..])
         .bind(intervention_type)
         .bind(details.to_string())
         .execute(self.learner_service.db.as_ref())

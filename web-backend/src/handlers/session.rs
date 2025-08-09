@@ -68,8 +68,8 @@ pub async fn create(
         "INSERT INTO sessions (id, learner_id, topology_type, topology_data, start_time, status)
          VALUES (?, ?, ?, ?, ?, ?)"
     )
-    .bind(session_id_bytes)
-    .bind(learner_id_bytes)
+    .bind(&session_id_bytes[..])
+    .bind(&learner_id_bytes[..])
     .bind(&req.topology_type)
     .bind(topology_data.to_string())
     .bind(now)
@@ -127,7 +127,7 @@ pub async fn get(
          JOIN learners l ON s.learner_id = l.id
          WHERE s.id = ?"
     )
-    .bind(session_id_bytes)
+    .bind(&session_id_bytes[..])
     .fetch_optional(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
@@ -184,7 +184,7 @@ pub async fn submit_response(
     let next_sequence: i64 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM responses WHERE session_id = ?"
     )
-    .bind(session_id_bytes)
+    .bind(&session_id_bytes[..])
     .fetch_one(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
@@ -200,8 +200,8 @@ pub async fn submit_response(
         "INSERT INTO responses (id, session_id, sequence_number, task_type, task_data, user_answer, correct, response_time_ms, hint_level)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(response_id_bytes)
-    .bind(session_id_bytes)
+    .bind(&response_id_bytes[..])
+    .bind(&session_id_bytes[..])
     .bind(next_sequence)
     .bind(&response.task_type)
     .bind(response.task_data.to_string())
@@ -255,7 +255,7 @@ pub async fn submit_response(
            AND sequence_number > ?
            AND NOT correct"
     )
-    .bind(session_id_bytes)
+    .bind(&session_id_bytes[..])
     .bind(next_sequence - 5)
     .fetch_one(&mut *conn)
     .await
@@ -315,7 +315,7 @@ pub async fn complete(
          FROM responses
          WHERE session_id = ?"
     )
-    .bind(session_id_bytes)
+    .bind(&session_id_bytes[..])
     .fetch_one(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
@@ -347,7 +347,7 @@ pub async fn complete(
     .bind(SessionStatus::Completed.to_string())
     .bind(now)
     .bind(serde_json::to_string(&summary).unwrap_or_default())
-    .bind(session_id_bytes)
+    .bind(&session_id_bytes[..])
     .execute(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
@@ -390,7 +390,7 @@ pub async fn replay(
          WHERE session_id = ?
          ORDER BY sequence_number"
     )
-    .bind(session_id_bytes)
+    .bind(&session_id_bytes[..])
     .fetch_all(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
@@ -448,7 +448,7 @@ async fn get_session_with_permission(
          JOIN learners l ON s.learner_id = l.id
          WHERE s.id = ?"
     )
-    .bind(session_id_bytes)
+    .bind(&session_id_bytes[..])
     .fetch_optional(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
@@ -491,7 +491,7 @@ async fn validate_task_response(response: &TaskResponse) -> AppResult<bool> {
         "successor" | "predecessor" => {
             // For alphabet tasks, check if the answer is reasonable
             Ok(response.user_answer.len() == 1 && 
-               response.user_answer.chars().next().unwrap().is_alphabetic())
+               response.user_answer.chars().next().map_or(false, |c| c.is_alphabetic()))
         }
         "pairwise_order" => {
             // For ordering tasks, accept any non-empty answer
