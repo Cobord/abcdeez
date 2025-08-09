@@ -1,5 +1,4 @@
 use chrono::{DateTime, Utc};
-use graph_learning_core::TopologyType;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;

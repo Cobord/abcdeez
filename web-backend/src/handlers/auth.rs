@@ -422,7 +422,7 @@ pub async fn login(
 
     // Update last active timestamp
     let user_id_bytes = user_id.as_bytes();
-    let mut conn_update = state.db_pool.acquire().await.ok();
+    let conn_update = state.db_pool.acquire().await.ok();
     if let Some(mut conn) = conn_update {
         sqlx::query("UPDATE users SET updated_at = ? WHERE id = ?")
             .bind(now)

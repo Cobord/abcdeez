@@ -1,9 +1,8 @@
 // visualizations.rs - Honest, accessible data visualizations using Plotters
 // No chartjunk, no lies, just truth
 
-use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
+use chrono::{Datelike, Timelike};
 use plotters::prelude::*;
-use std::collections::HashMap;
 use std::error::Error;
 
 use crate::models::PerformanceMetrics;
@@ -66,7 +65,6 @@ pub fn create_learning_curve(
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut buffer = vec![0; (width * height * 3) as usize];
     {
-        let mut tmp_buf = vec![0u8; 0];
         let root = BitMapBackend::with_buffer(&mut buffer, (width, height)).into_drawing_area();
 
         let palette = AccessiblePalette::default();

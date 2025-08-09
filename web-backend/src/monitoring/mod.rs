@@ -5,14 +5,13 @@ use std::sync::{
     atomic::{AtomicI64, AtomicU64, Ordering},
     Arc,
 };
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
 
 pub mod health;
 pub mod metrics;
 pub mod performance;
 
-use crate::state::AppState;
 
 /// Global metrics collector for the application
 #[derive(Debug, Clone)]

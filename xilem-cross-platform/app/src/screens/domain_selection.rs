@@ -3,7 +3,7 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{components::*, models::*, AppData, Screen};
+use crate::{components::*, models::*, AppData};
 
 // Domain Selection Screen
 pub fn domain_selection_screen(data: &mut AppData) -> impl WidgetView<AppData> {

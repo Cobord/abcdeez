@@ -1,19 +1,17 @@
 use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
+    extract::{Query, State},
     Extension, Json,
 };
-use chrono::{Datelike, IsoWeek, Utc};
+use chrono::{Datelike, Utc};
 use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
-    error::{AppError, AppResult},
+    error::AppResult,
     middleware::Claims,
     models::gamification::*,
     state::AppState,
-    utils::{calculate_xp_reward, check_achievement_unlock, UserStats},
 };
 
 // ============= Profile Endpoints =============
@@ -135,7 +133,7 @@ pub async fn add_xp(
     Json(req): Json<AddXpRequest>,
 ) -> AppResult<Json<XpResponse>> {
     let user_id = claims.sub;
-    let mut conn = state.db_pool.acquire().await?;
+    let conn = state.db_pool.acquire().await?;
 
     // Start transaction
     let mut tx = state.db_pool.begin().await?;

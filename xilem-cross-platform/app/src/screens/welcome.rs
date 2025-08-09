@@ -1,11 +1,9 @@
 use xilem::{
-    core::AnyView,
-    view::{button, flex, label, prose, Axis, FlexExt},
-    Color, TextAlignment, WidgetView,
+    view::{button, flex, label, prose, Axis, FlexExt}, TextAlignment, WidgetView,
 };
 
 use crate::{
-    apple_signin_button::standard_apple_signin_button, components::*, models::*, AppData, Screen,
+    apple_signin_button::standard_apple_signin_button, components::*, AppData, Screen,
 };
 
 // Welcome/Login Screen

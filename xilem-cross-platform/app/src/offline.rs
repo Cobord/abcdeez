@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::models::{Learner, PerformanceMetrics, Session, UITask, User};
+use crate::models::{Learner, PerformanceMetrics, Session, User};
 use graph_learning_core::tasks::TaskResponse as CoreTaskResponse;
 
 /// Offline storage provider using SQLite for local persistence

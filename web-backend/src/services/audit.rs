@@ -3,7 +3,6 @@ use anyhow::Result;
 use axum::{extract::Request, http::HeaderMap};
 use chrono::Utc;
 use sqlx::Row;
-use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct AuditService;

@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use graph_learning_core::LearnerModel;
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

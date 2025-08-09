@@ -32,7 +32,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::Config;
 use crate::handlers::{
-    admin, analytics, auth, experiment, gamification, learner, music, session, sync, task,
+    admin, analytics, auth, experiment, gamification, learner, music, session, sync,
     task_simple,
 };
 use crate::middleware::{

@@ -3,7 +3,7 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{components::*, models::*, AppData, Screen};
+use crate::{components::*, AppData, Screen};
 
 // Training Session Screen with enhanced task rendering and modals
 pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {

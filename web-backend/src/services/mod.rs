@@ -11,11 +11,7 @@ pub mod oauth_service;
 
 pub use adaptation_service::AdaptationService;
 pub use analytics_service::AnalyticsService;
-pub use audit::AuditService;
 pub use batch_jobs::BatchJobService;
 pub use learner_service::LearnerService;
 
 // OAuth service exports
-pub use oauth_service::{
-    OAuthAuthRequest, OAuthAuthResponse, OAuthProvider, OAuthService, OAuthUserProfile,
-};

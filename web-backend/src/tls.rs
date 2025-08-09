@@ -1,9 +1,8 @@
 use anyhow::Result;
-use rustls::ServerConfig;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio_rustls::TlsAcceptor;
-use tracing::{error, info};
+use tracing::info;
 
 use crate::config::Config;
 

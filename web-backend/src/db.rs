@@ -1,7 +1,7 @@
 #[cfg(feature = "postgres")]
 use sqlx::{postgres::PgPool, Pool, Postgres};
 #[cfg(feature = "sqlite")]
-use sqlx::{sqlite::SqlitePool, Pool, Sqlite};
+use sqlx::sqlite::SqlitePool;
 
 use anyhow::Result;
 use std::time::Duration;

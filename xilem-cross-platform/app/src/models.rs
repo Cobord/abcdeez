@@ -1,11 +1,8 @@
 use chrono::{DateTime, Utc};
 use graph_learning_core::{
-    export::{ErrorAnalysis, LearnerDataExport, ModelSnapshot, PerformancePoint, SessionData},
-    hints::{HintLevel, InterventionAction, InterventionSystem, StruggleLevel},
-    statistics::{DetailedStatistics, ExGaussianParameters, StrategyType},
     tasks::TaskResponse as CoreTaskResponse,
-    LearnerMetrics as CoreLearnerMetrics, LearnerModel as CoreLearnerModel, OperationType,
-    Task as CoreTask, TaskType as CoreTaskType, Topology, TopologyType,
+    LearnerMetrics as CoreLearnerMetrics, LearnerModel as CoreLearnerModel,
+    Task as CoreTask, Topology, TopologyType,
 };
 use serde::{Deserialize, Serialize};
 

@@ -4,7 +4,7 @@ use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
 use rand::{distributions::Distribution, thread_rng};
 use sqlx::Row;
-use statrs::distribution::{Continuous, Laplace};
+use statrs::distribution::Laplace;
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -13,9 +13,8 @@ use crate::error::AppError;
 use crate::utils::math;
 use crate::utils::statistics::{
     self, analyze_response_times, bootstrap_confidence_interval, comprehensive_outlier_detection,
-    one_way_anova, t_test_two_sample, AnovaResult, ExGaussianParams, OutlierAnalysis, TTestResult,
+    one_way_anova, t_test_two_sample, ExGaussianParams, OutlierAnalysis,
 };
-use graph_learning_core::statistics::{DetailedStatistics, ExGaussianParameters, StrategyType};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PopulationStats {

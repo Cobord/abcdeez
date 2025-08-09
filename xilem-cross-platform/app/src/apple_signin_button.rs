@@ -2,8 +2,8 @@
 // Following Apple's Human Interface Guidelines and App Store Review Guidelines
 
 use xilem::{
-    view::{button, flex, label, Axis},
-    Color, TextAlignment, WidgetView,
+    view::{button, label},
+    Color, WidgetView,
 };
 
 use crate::AppData;
@@ -78,7 +78,7 @@ pub fn apple_signin_button(
     };
 
     // Apple requires specific sizing and styling
-    let mut apple_button = button(
+    let apple_button = button(
         label(button_text).brush(text_color),
         |data: &mut AppData| {
             if !data.oauth_login_in_flight {

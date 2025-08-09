@@ -1,6 +1,5 @@
 // visualization_components.rs - Xilem wrapper components for Plotters visualizations
 
-use std::sync::Arc;
 use xilem::{
     view::{flex, label, Axis},
     Color, WidgetView,

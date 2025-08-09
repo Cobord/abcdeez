@@ -5,7 +5,6 @@ use xilem::{
 
 use crate::models::*;
 use crate::AppData;
-use graph_learning_core::tasks::TaskResponse;
 use std::sync::Arc;
 
 // Reusable card component

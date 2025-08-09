@@ -1,6 +1,5 @@
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
@@ -10,13 +9,11 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
-    models::{learner::Learner, session::Session},
-    services::{adaptation_service::AdaptationService, learner_service::LearnerService},
     state::AppState,
 };
 
 use graph_learning_core::{
-    bayesian::BayesianLearnerModel, learner::LearnerModel, Task, TaskGenerator, TaskType, Topology,
+    TaskGenerator, Topology,
 };
 
 /// Simple task generation endpoint that works with current Axum version

@@ -7,7 +7,7 @@ use crate::services::LearnerService;
 use crate::utils::math;
 use graph_learning_core::{
     hints::{HintLevel, InterventionAction, InterventionSystem, StruggleLevel},
-    AdaptiveScheduler, BayesianLearnerModel, Task, Topology, TopologyType,
+    AdaptiveScheduler, Task, Topology,
 };
 
 #[derive(Clone)]
@@ -304,10 +304,10 @@ impl AdaptationService {
             if response_correct {
                 // Correct response increases position (mastery), decreases uncertainty
                 embedding.position += learning_rate * (1.0 - embedding.position);
-                embedding.uncertainty *= (1.0 - learning_rate * 0.5);
+                embedding.uncertainty *= 1.0 - learning_rate * 0.5;
             } else {
                 // Incorrect response decreases position, may increase uncertainty
-                embedding.position *= (1.0 - learning_rate * 0.5);
+                embedding.position *= 1.0 - learning_rate * 0.5;
                 embedding.uncertainty = (embedding.uncertainty + learning_rate * 0.1).min(1.0);
             }
 

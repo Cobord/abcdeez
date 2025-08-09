@@ -2,7 +2,7 @@ use axum::{
     extract::{Query, State},
     Extension, Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sqlx::Row;
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
@@ -15,7 +15,7 @@ use crate::{
 };
 use graph_learning_core::{
     statistics::{
-        DetailedStatistics, ExGaussianModel, ExGaussianParameters, SessionAnalyzer, StrategyType,
+        DetailedStatistics, ExGaussianModel, StrategyType,
     },
     Topology,
 };

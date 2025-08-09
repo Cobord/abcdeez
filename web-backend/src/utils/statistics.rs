@@ -1,8 +1,6 @@
 /// Statistical utilities for data analysis
 use super::math;
 use rand::Rng;
-use rand_distr::Normal;
-use std::collections::HashMap;
 
 /// Calculate mean of a dataset
 pub fn mean(data: &[f64]) -> f64 {

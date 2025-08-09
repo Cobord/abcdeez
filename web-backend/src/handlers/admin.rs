@@ -1,6 +1,5 @@
 use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
+    extract::{Query, State},
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
@@ -11,10 +10,7 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
-    services::{
-        audit::{AuditContext, AuditService},
-        AnalyticsService, LearnerService,
-    },
+    services::audit::AuditService,
     state::AppState,
 };
 

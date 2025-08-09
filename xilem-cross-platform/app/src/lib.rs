@@ -17,7 +17,7 @@ mod screens;
 mod visualization_components;
 mod visualizations;
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::sync::Arc;
@@ -25,19 +25,17 @@ use std::time::Instant;
 use uuid::Uuid;
 use xilem::{
     view::{button, flex, label, Axis},
-    Color, EventLoopBuilder, TextAlignment, WidgetView, Xilem,
+    Color, TextAlignment, WidgetView, Xilem,
 };
 
 use graph_learning_core::{
-    export::LearnerDataExport,
     hints::{HintLevel, InterventionAction, InterventionSystem, StruggleLevel},
     prelude::*,
-    statistics::{ExGaussianParameters, SessionAnalyzer, StrategyType},
     tasks::TaskResponse as CoreTaskResponse,
     AdaptiveScheduler, LearnerMetrics, TaskGenerator, TaskSession,
 };
 
-use api::{ApiClient, MockApiClient};
+use api::MockApiClient;
 use components::*;
 use demo::DemoController;
 use easter_egg::LittleCrab;
@@ -46,7 +44,6 @@ use offline::{ConnectivityMonitor, OfflineStorage, SyncStatus};
 use screens::{
     dashboard_screen, domain_selection_screen, settings_screen, training_screen, welcome_screen,
 };
-use visualization_components::visualization_dashboard;
 
 // Application screens
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

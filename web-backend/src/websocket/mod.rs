@@ -15,7 +15,6 @@ use tokio::time::{interval, Duration};
 use uuid::Uuid;
 
 use crate::{
-    error::AppError,
     middleware::Claims,
     services::{AdaptationService, AnalyticsService, LearnerService},
     state::AppState,
