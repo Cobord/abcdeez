@@ -21,6 +21,22 @@ use graph_learning_core::{
     Topology,
 };
 
+// Simple per-endpoint DP cost plan (epsilon fraction per request)
+fn dp_cost_for(endpoint: &str, total_epsilon: f64) -> (f64, f64) {
+    let eps = match endpoint {
+        "/analytics/population" => 0.05,
+        "/analytics/bottlenecks" => 0.05,
+        "/analytics/learning-curves" => 0.05,
+        "/analytics/compare" => 0.1,
+        "/analytics/live" => 0.02,
+        "/analytics/response-time-analysis" => 0.05,
+        "/analytics/learner/performance" => 0.05,
+        "/analytics/population/strategies" => 0.05,
+        _ => 0.05,
+    } * total_epsilon;
+    (eps, 0.0)
+}
+
 #[derive(Debug, Deserialize)]
 pub struct PopulationQuery {
     pub time_range: Option<String>, // "24h", "7d", "30d"
@@ -50,12 +66,34 @@ pub async fn population(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
     Query(params): Query<PopulationQuery>,
-) -> AppResult<Json<serde_json::Value>> {
+) -> AppResult<axum::response::Response> {
     let analytics_service = AnalyticsService::new_with_config(
         Arc::new(state.db_pool.clone()),
         Arc::new(state.redis_conn.clone()),
         state.config.clone(),
     );
+
+    // Pre-spend privacy budget (global window)
+    let accounting = PrivacyAccountingService::new(
+        Arc::new(state.db_pool.clone()),
+        state.config.clone(),
+    );
+    accounting.ensure_budget_row("global", None).await.ok();
+    let (eps_cost, delta_cost) = dp_cost_for("/analytics/population", state.config.privacy_epsilon);
+    let allowed = accounting
+        .spend(
+            "global",
+            None,
+            "/analytics/population",
+            "laplace",
+            eps_cost,
+            delta_cost,
+        )
+        .await
+        .unwrap_or(false);
+    if !allowed {
+        return Err(AppError::RateLimitExceeded);
+    }
 
     let population_stats = analytics_service
         .population_stats()
@@ -105,7 +143,7 @@ pub async fn population(
             0.0,
         )
         .await;
-    Ok(response.into())
+    Ok(response)
 }
 
 pub async fn bottlenecks(
@@ -120,6 +158,30 @@ pub async fn bottlenecks(
     );
 
     let min_samples = params.min_samples.unwrap_or(50);
+
+    // Pre-spend per-user budget
+    {
+        let accounting = PrivacyAccountingService::new(
+            Arc::new(state.db_pool.clone()),
+            state.config.clone(),
+        );
+        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
+        let (eps_cost, delta_cost) = dp_cost_for("/analytics/bottlenecks", state.config.privacy_epsilon);
+        let allowed = accounting
+            .spend(
+                "user",
+                Some(claims.sub),
+                "/analytics/bottlenecks",
+                "laplace",
+                eps_cost,
+                delta_cost,
+            )
+            .await
+            .unwrap_or(false);
+        if !allowed {
+            return Err(AppError::RateLimitExceeded);
+        }
+    }
 
     let bottlenecks = analytics_service
         .find_bottlenecks(min_samples)
@@ -160,21 +222,6 @@ pub async fn bottlenecks(
         HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
     );
 
-    let accounting = PrivacyAccountingService::new(
-        Arc::new(state.db_pool.clone()),
-        state.config.clone(),
-    );
-    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
-    let _ = accounting
-        .spend(
-            "user",
-            Some(claims.sub),
-            "/analytics/bottlenecks",
-            "laplace",
-            analytics_service.privacy_epsilon,
-            0.0,
-        )
-        .await;
     Ok(response)
 }
 
@@ -385,6 +432,30 @@ pub async fn compare(
         state.config.clone(),
     );
 
+    // Pre-spend per-user budget
+    {
+        let accounting = PrivacyAccountingService::new(
+            Arc::new(state.db_pool.clone()),
+            state.config.clone(),
+        );
+        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
+        let (eps_cost, delta_cost) = dp_cost_for("/analytics/compare", state.config.privacy_epsilon);
+        let allowed = accounting
+            .spend(
+                "user",
+                Some(claims.sub),
+                "/analytics/compare",
+                "laplace",
+                eps_cost,
+                delta_cost,
+            )
+            .await
+            .unwrap_or(false);
+        if !allowed {
+            return Err(AppError::RateLimitExceeded);
+        }
+    }
+
     let comparison_result = if let Some(experiment_id) = req.experiment_id {
         // Compare experiment conditions
         analytics_service
@@ -449,21 +520,6 @@ pub async fn compare(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
         HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
     );
-    let accounting = PrivacyAccountingService::new(
-        Arc::new(state.db_pool.clone()),
-        state.config.clone(),
-    );
-    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
-    let _ = accounting
-        .spend(
-            "user",
-            Some(claims.sub),
-            "/analytics/compare",
-            "laplace",
-            analytics_service.privacy_epsilon,
-            0.0,
-        )
-        .await;
     Ok(response)
 }
 
@@ -472,10 +528,35 @@ pub async fn live(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
 ) -> AppResult<axum::response::Response> {
-    let analytics_service = AnalyticsService::new(
+    let analytics_service = AnalyticsService::new_with_config(
         Arc::new(state.db_pool.clone()),
         Arc::new(state.redis_conn.clone()),
+        state.config.clone(),
     );
+
+    // Pre-spend per-user budget
+    {
+        let accounting = PrivacyAccountingService::new(
+            Arc::new(state.db_pool.clone()),
+            state.config.clone(),
+        );
+        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
+        let (eps_cost, delta_cost) = dp_cost_for("/analytics/live", state.config.privacy_epsilon);
+        let allowed = accounting
+            .spend(
+                "user",
+                Some(claims.sub),
+                "/analytics/live",
+                "laplace",
+                eps_cost,
+                delta_cost,
+            )
+            .await
+            .unwrap_or(false);
+        if !allowed {
+            return Err(AppError::RateLimitExceeded);
+        }
+    }
 
     let live_metrics = analytics_service
         .get_real_time_metrics()
@@ -584,6 +665,29 @@ pub async fn response_time_analysis(
     claims: Extension<Claims>,
     Query(query): Query<LearningCurvesQuery>,
 ) -> AppResult<axum::response::Response> {
+    // Pre-spend per-user budget
+    {
+        let accounting = PrivacyAccountingService::new(
+            Arc::new(state.db_pool.clone()),
+            state.config.clone(),
+        );
+        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
+        let (eps_cost, delta_cost) = dp_cost_for("/analytics/response-time-analysis", state.config.privacy_epsilon);
+        let allowed = accounting
+            .spend(
+                "user",
+                Some(claims.sub),
+                "/analytics/response-time-analysis",
+                "laplace",
+                eps_cost,
+                delta_cost,
+            )
+            .await
+            .unwrap_or(false);
+        if !allowed {
+            return Err(AppError::RateLimitExceeded);
+        }
+    }
     let learner_service =
         LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
 
@@ -703,21 +807,6 @@ pub async fn response_time_analysis(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
         HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
     );
-    let accounting = PrivacyAccountingService::new(
-        Arc::new(state.db_pool.clone()),
-        state.config.clone(),
-    );
-    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
-    let _ = accounting
-        .spend(
-            "user",
-            Some(claims.sub),
-            "/analytics/response-time-analysis",
-            "laplace",
-            state.config.privacy_epsilon,
-            0.0,
-        )
-        .await;
     Ok(response)
 }
 
@@ -727,6 +816,29 @@ pub async fn learner_performance_analysis(
     claims: Extension<Claims>,
     axum::extract::Path(learner_id): axum::extract::Path<Uuid>,
 ) -> AppResult<axum::response::Response> {
+    // Pre-spend per-user budget
+    {
+        let accounting = PrivacyAccountingService::new(
+            Arc::new(state.db_pool.clone()),
+            state.config.clone(),
+        );
+        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
+        let (eps_cost, delta_cost) = dp_cost_for("/analytics/learner/performance", state.config.privacy_epsilon);
+        let allowed = accounting
+            .spend(
+                "user",
+                Some(claims.sub),
+                "/analytics/learner/performance",
+                "laplace",
+                eps_cost,
+                delta_cost,
+            )
+            .await
+            .unwrap_or(false);
+        if !allowed {
+            return Err(AppError::RateLimitExceeded);
+        }
+    }
     let learner_service =
         LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
 
@@ -910,21 +1022,6 @@ pub async fn learner_performance_analysis(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
         HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
     );
-    let accounting = PrivacyAccountingService::new(
-        Arc::new(state.db_pool.clone()),
-        state.config.clone(),
-    );
-    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
-    let _ = accounting
-        .spend(
-            "user",
-            Some(claims.sub),
-            "/analytics/learner/performance",
-            "laplace",
-            state.config.privacy_epsilon,
-            0.0,
-        )
-        .await;
     Ok(response)
 }
 
@@ -934,6 +1031,29 @@ pub async fn population_strategy_analysis(
     claims: Extension<Claims>,
     Query(query): Query<PopulationQuery>,
 ) -> AppResult<axum::response::Response> {
+    // Pre-spend per-user budget
+    {
+        let accounting = PrivacyAccountingService::new(
+            Arc::new(state.db_pool.clone()),
+            state.config.clone(),
+        );
+        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
+        let (eps_cost, delta_cost) = dp_cost_for("/analytics/population/strategies", state.config.privacy_epsilon);
+        let allowed = accounting
+            .spend(
+                "user",
+                Some(claims.sub),
+                "/analytics/population/strategies",
+                "laplace",
+                eps_cost,
+                delta_cost,
+            )
+            .await
+            .unwrap_or(false);
+        if !allowed {
+            return Err(AppError::RateLimitExceeded);
+        }
+    }
     let recent_learners = get_recent_learner_ids(&state.db_pool, 100).await?;
 
     let mut strategy_counts = HashMap::new();
@@ -999,21 +1119,6 @@ pub async fn population_strategy_analysis(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
         HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
     );
-    let accounting = PrivacyAccountingService::new(
-        Arc::new(state.db_pool.clone()),
-        state.config.clone(),
-    );
-    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
-    let _ = accounting
-        .spend(
-            "user",
-            Some(claims.sub),
-            "/analytics/population/strategies",
-            "laplace",
-            state.config.privacy_epsilon,
-            0.0,
-        )
-        .await;
     Ok(response)
 }
 

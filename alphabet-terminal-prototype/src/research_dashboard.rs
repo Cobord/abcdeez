@@ -24,6 +24,10 @@ use crate::preregistration::{
     ValidationResult, PreRegistrationBuilder, AnalysisPlan, RobustnessCheck,
 };
 use crate::power_analysis::PowerAnalyzer;
+use crate::audio_recording::{AudioRecorder, AudioSession, ThinkAloudAnalyzer};
+use crate::sensor_integration::{SensorManager, SensorSession, SensorType};
+use crate::irb_compliance::{IRBComplianceGenerator, StudySummary};
+use crate::mixed_effects::{MixedEffectsAnalyzer, MixedEffectsData};
 
 /// Dashboard view states
 #[derive(Debug, Clone, PartialEq)]
@@ -36,6 +40,13 @@ pub enum DashboardView {
     PowerAnalysisCalculator,
     AnalysisValidation,
     TransparencyReport { id: String },
+    // Research data collection views
+    ExperimentManagement,
+    AudioRecording { session_id: Option<String> },
+    SensorIntegration,
+    DataCollection { experiment_id: String },
+    IRBCompliance,
+    StatisticalAnalysis,
 }
 
 /// Sub-views for the pre-registration creation form
@@ -64,6 +75,17 @@ pub struct ResearchDashboard {
     show_finalization_dialog: bool,
     analysis_validator: Option<AnalysisValidator>,
     power_calculator: PowerCalculatorState,
+    // Research data collection components
+    audio_recorder: Option<AudioRecorder>,
+    current_audio_session: Option<AudioSession>,
+    sensor_manager: Option<SensorManager>,
+    current_sensor_session: Option<SensorSession>,
+    irb_generator: Option<IRBComplianceGenerator>,
+    mixed_effects_analyzer: Option<MixedEffectsAnalyzer>,
+    think_aloud_analyzer: Option<ThinkAloudAnalyzer>,
+    // UI state for research components
+    recording_state: AudioRecordingState,
+    sensor_configs: Vec<SensorConfiguration>,
 }
 
 /// Form input state management
@@ -168,6 +190,35 @@ enum MessageType {
     Info,
 }
 
+/// Audio recording UI state
+#[derive(Debug, Clone, PartialEq)]
+pub enum AudioRecordingState {
+    Idle,
+    Recording { start_time: DateTime<Utc>, duration: Duration },
+    Paused { total_duration: Duration },
+    Processing,
+    Completed { file_path: String },
+    Error(String),
+}
+
+/// Sensor configuration for UI display
+#[derive(Debug, Clone)]
+pub struct SensorConfiguration {
+    pub sensor_type: SensorType,
+    pub enabled: bool,
+    pub sample_rate: u32,
+    pub buffer_size: usize,
+    pub status: SensorStatus,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SensorStatus {
+    Disconnected,
+    Connected,
+    Recording,
+    Error(String),
+}
+
 impl FormInputs {
     fn new() -> Self {
         FormInputs {
@@ -257,6 +308,38 @@ impl ResearchDashboard {
                 sample_size: String::new(),
                 calculated_result: None,
             },
+            // Initialize research components
+            audio_recorder: None,
+            current_audio_session: None,
+            sensor_manager: None,
+            current_sensor_session: None,
+            irb_generator: None,
+            mixed_effects_analyzer: None,
+            think_aloud_analyzer: None,
+            recording_state: AudioRecordingState::Idle,
+            sensor_configs: vec![
+                SensorConfiguration {
+                    sensor_type: SensorType::EEG,
+                    enabled: false,
+                    sample_rate: 250,
+                    buffer_size: 1024,
+                    status: SensorStatus::Disconnected,
+                },
+                SensorConfiguration {
+                    sensor_type: SensorType::GSR,
+                    enabled: false,
+                    sample_rate: 100,
+                    buffer_size: 512,
+                    status: SensorStatus::Disconnected,
+                },
+                SensorConfiguration {
+                    sensor_type: SensorType::EyeTracker,
+                    enabled: false,
+                    sample_rate: 60,
+                    buffer_size: 256,
+                    status: SensorStatus::Disconnected,
+                },
+            ],
         }
     }
 
@@ -289,6 +372,17 @@ impl ResearchDashboard {
                 DashboardView::TransparencyReport { id } => {
                     self.render_transparency_report(&mut stdout, id)?
                 }
+                // Research data collection views
+                DashboardView::ExperimentManagement => self.render_experiment_management(&mut stdout)?,
+                DashboardView::AudioRecording { session_id } => {
+                    self.render_audio_recording(&mut stdout, session_id.as_deref())?
+                }
+                DashboardView::SensorIntegration => self.render_sensor_integration(&mut stdout)?,
+                DashboardView::DataCollection { experiment_id } => {
+                    self.render_data_collection(&mut stdout, experiment_id)?
+                }
+                DashboardView::IRBCompliance => self.render_irb_compliance(&mut stdout)?,
+                DashboardView::StatisticalAnalysis => self.render_statistical_analysis(&mut stdout)?,
             }
 
             // Render message if any

@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn, error};
+use tracing::{debug, info, warn, error, instrument, span, Level};
 use uuid::Uuid;
 
 use crate::config::AppConfig;
@@ -159,15 +159,29 @@ impl RealApiClient {
 
 #[async_trait::async_trait]
 impl ApiClientTrait for RealApiClient {
+    #[instrument(level = "info", fields(username = %username), skip(password))]
     async fn login(&self, username: String, password: String) -> Result<User> {
-        let request = LoginRequest { username, password };
-        let response: TokenResponse = self.post_with_retry("/api/auth/login", &request).await?;
+        info!(username = %username, "Attempting user login");
+        
+        let request = LoginRequest { username: username.clone(), password };
+        let response: TokenResponse = self.post_with_retry("/api/auth/login", &request).await
+            .map_err(|e| {
+                warn!(username = %username, error = %e, "Login request failed");
+                e
+            })?;
         
         // Store the token
         self.set_auth_token(response.access_token).await;
+        debug!(username = %username, "Authentication token stored");
         
         // Get user info
-        self.get_user_info().await
+        let user = self.get_user_info().await?;
+        info!(
+            username = %username,
+            user_id = %user.id,
+            "Login completed successfully"
+        );
+        Ok(user)
     }
 
     async fn get_user_info(&self) -> Result<User> {

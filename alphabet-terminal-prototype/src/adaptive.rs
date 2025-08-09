@@ -3,6 +3,7 @@ use crate::learner::LearnerModel;
 use crate::tasks::{Task, TaskGenerator, TaskType};
 use crate::topology::Topology;
 use rand::Rng;
+use tracing::{debug, info, warn, error, instrument, span, Level};
 
 pub struct AdaptiveScheduler {
     learner_model: LearnerModel,
@@ -16,10 +17,17 @@ pub struct AdaptiveScheduler {
 }
 
 impl AdaptiveScheduler {
+    #[instrument(level = "debug", fields(topology_size = topology.nodes.len()))]
     pub fn new(learner_model: LearnerModel, topology: Topology) -> Self {
+        info!(
+            topology_size = topology.nodes.len(),
+            "Creating new adaptive scheduler"
+        );
+        
         let task_generator = TaskGenerator::new(topology.clone());
         let bayesian_model = BayesianLearnerModel::new(&topology);
-        AdaptiveScheduler {
+        
+        let scheduler = AdaptiveScheduler {
             learner_model,
             bayesian_model,
             topology: topology.clone(),
@@ -28,7 +36,15 @@ impl AdaptiveScheduler {
             use_eig: true,
             trials_completed: 0,
             exploration_decay: 0.995, // Decay epsilon over time
-        }
+        };
+        
+        debug!(
+            epsilon = scheduler.epsilon,
+            use_eig = scheduler.use_eig,
+            "Adaptive scheduler initialized"
+        );
+        
+        scheduler
     }
 
     pub fn new_with_eig(learner_model: LearnerModel, topology: Topology, use_eig: bool) -> Self {
@@ -46,7 +62,9 @@ impl AdaptiveScheduler {
         }
     }
 
+    #[instrument(level = "debug", fields(trials_completed = self.trials_completed))]
     pub fn select_next_task(&mut self) -> Task {
+        let _span = span!(Level::DEBUG, "task_selection").entered();
         let mut rng = rand::thread_rng();
 
         // Adaptive epsilon-greedy: decay exploration over time
@@ -54,25 +72,68 @@ impl AdaptiveScheduler {
             self.epsilon * self.exploration_decay.powi(self.trials_completed as i32);
         let effective_epsilon = current_epsilon.max(0.01); // Minimum 1% exploration
 
+        debug!(
+            current_epsilon,
+            effective_epsilon,
+            trials_completed = self.trials_completed,
+            "Computing exploration probability"
+        );
+
         self.trials_completed += 1;
 
-        if rng.gen::<f64>() < effective_epsilon {
+        let exploration_roll = rng.gen::<f64>();
+        let is_exploration = exploration_roll < effective_epsilon;
+
+        debug!(
+            exploration_roll,
+            is_exploration,
+            use_eig = self.use_eig,
+            "Task selection strategy determined"
+        );
+
+        let task = if is_exploration {
             // Exploration: random task
+            debug!("Selecting random exploration task");
             self.task_generator.generate_task(None)
         } else {
             // Exploitation: select best task
+            debug!("Selecting exploitation task using {}", if self.use_eig { "EIG" } else { "standard" });
             let candidates = self.generate_candidate_tasks();
+            debug!(candidate_count = candidates.len(), "Generated task candidates");
+            
             let best_task = if self.use_eig {
                 self.select_best_task_by_eig(candidates)
             } else {
                 self.select_best_task(candidates)
             };
             best_task
-        }
+        };
+
+        info!(
+            task_type = ?task.task_type,
+            task_prompt = %task.prompt,
+            is_exploration,
+            trials_completed = self.trials_completed,
+            "Task selected"
+        );
+
+        task
     }
 
     /// Update the scheduler after receiving a response
+    #[instrument(level = "debug", fields(
+        task_type = ?task.task_type,
+        correct = correct,
+        response_time = response_time
+    ))]
     pub fn update_after_response(&mut self, task: &Task, correct: bool, response_time: f64) {
+        debug!(
+            task_prompt = %task.prompt,
+            correct,
+            response_time,
+            "Updating scheduler with response"
+        );
+
         // Update Bayesian model
         self.bayesian_model.update_with_response(ResponseData {
             task: task.clone(),
@@ -83,6 +144,13 @@ impl AdaptiveScheduler {
         // Update learner model
         self.learner_model
             .update_operation_proficiency(&task.operation, correct);
+
+        info!(
+            operation = %task.operation,
+            correct,
+            trials_completed = self.trials_completed,
+            "Scheduler updated with response data"
+        );
     }
 
     fn select_best_task_by_eig(&self, candidates: Vec<Task>) -> Task {

@@ -16,6 +16,8 @@ use crate::{
     state::AppState,
 };
 
+pub mod tracing;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: Uuid, // User ID

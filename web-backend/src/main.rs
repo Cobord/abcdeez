@@ -32,7 +32,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::Config;
 use crate::handlers::{
-    admin, analytics, auth, experiment, gamification, learner, music, session, sync,
+    admin, analytics, auth, dashboard, experiment, gamification, learner, music, session, sync,
     task_simple,
 };
 use crate::middleware::{
@@ -53,14 +53,26 @@ async fn serve_admin_panel() -> Result<Html<String>, error::AppError> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize tracing
+    // Initialize structured tracing
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "web_backend=debug,tower_http=debug,axum=info".into()),
+                .unwrap_or_else(|_| {
+                    "web_backend=debug,tower_http=debug,axum=info,graph_learning_core=debug,sqlx=warn,hyper=warn".into()
+                }),
         )
-        .with(tracing_subscriber::fmt::layer())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_thread_names(true)
+                .with_file(true)
+                .with_line_number(true)
+                .json() // Use structured JSON logging for better observability
+        )
         .init();
+    
+    info!("Tracing initialized with structured logging");
 
     // Load configuration
     let config = Config::from_env()?;
@@ -251,6 +263,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get(performance::get_endpoint_performance),
         );
 
+    // Dashboard routes for metrics visualization
+    let dashboard_routes = Router::new()
+        .route("/dashboard", get(dashboard::metrics_dashboard_html))
+        .route("/dashboard/data", get(dashboard::dashboard_data))
+        .route("/dashboard/realtime", get(dashboard::realtime_metrics))
+        .route("/dashboard/otel", get(dashboard::otel_metrics))
+        .route("/dashboard/system", get(dashboard::system_info))
+        .route("/dashboard/database", get(dashboard::database_report))
+        .route("/dashboard/health", get(dashboard::detailed_health));
+
     // Static routes
     let static_routes = Router::new().route("/admin", get(serve_admin_panel));
 
@@ -259,6 +281,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nest("/api", api_routes)
         .nest("/api", ws_routes)
         .nest("/health", health_routes)
+        .nest("/api", dashboard_routes)
         .merge(static_routes)
         .layer(axum_middleware::from_fn_with_state(
             app_state.clone(),

@@ -47,3 +47,8 @@ dirs = "5.0"
 # Configuration management
 toml = "0.8"
 url = "2.5"
+
+# Audio recording dependencies
+cpal = "0.15"
+hound = "3.5"  # For WAV file writing
+ringbuf = "0.3"  # For audio buffering

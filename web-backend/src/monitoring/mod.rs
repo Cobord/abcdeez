@@ -8,8 +8,10 @@ use std::sync::{
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
 
+pub mod database;
 pub mod health;
 pub mod metrics;
+pub mod otel;
 pub mod performance;
 
 

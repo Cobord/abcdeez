@@ -7,10 +7,13 @@
 mod api;
 mod api_client;
 mod apple_signin_button;
+mod audio_recorder;
 mod components;
 mod config;
 mod demo;
 mod easter_egg;
+mod federation;
+mod federation_client;
 #[cfg(target_os = "ios")]
 mod ios_auth;
 pub mod models;
@@ -37,6 +40,19 @@ use graph_learning_core::{
     tasks::TaskResponse as CoreTaskResponse,
     AdaptiveScheduler, LearnerMetrics, TaskGenerator, TaskSession,
 };
+
+#[derive(Debug, Clone, Default)]
+pub struct IRBFormData {
+    pub study_title: String,
+    pub principal_investigator: String,
+    pub institution: String,
+    pub study_purpose: String,
+    pub participant_population: String,
+    pub data_collection_methods: String,
+    pub risks: String,
+    pub benefits: String,
+    pub procedures: String,
+}
 
 use api_client::{AdaptiveApiClient, ApiClientTrait};
 use config::{AppConfig, ConfigManager};
@@ -179,6 +195,16 @@ pub struct AppData {
     pub experiment_control_group: bool,
     pub research_data_collection_enabled: bool,
     pub research_privacy_mode: bool,
+    // IRB compliance UI state
+    pub show_irb_form: bool,
+    pub show_irb_documents: bool,
+    pub irb_form_data: IRBFormData,
+    // Federation state
+    pub federation_network: Option<federation::FederationNetwork>,
+    pub show_federation_setup: bool,
+    pub show_protocol_browser: bool,
+    pub show_study_coordination: bool,
+    pub federation_status: federation::ComplianceStatus,
 
     // PWA integration (wasm only)
     #[cfg(target_arch = "wasm32")]
@@ -318,6 +344,16 @@ impl Default for AppData {
             experiment_control_group: false,
             research_data_collection_enabled: true,
             research_privacy_mode: false,
+            // IRB compliance UI state
+            show_irb_form: false,
+            show_irb_documents: false,
+            irb_form_data: IRBFormData::default(),
+            // Federation state
+            federation_network: None,
+            show_federation_setup: false,
+            show_protocol_browser: false,
+            show_study_coordination: false,
+            federation_status: federation::ComplianceStatus::NonCompliant,
 
             #[cfg(target_arch = "wasm32")]
             pwa_initialized: false,
