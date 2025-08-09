@@ -124,7 +124,7 @@ impl CloudSyncManager {
                 // Android: Use app-specific directory that syncs with Google Drive
                 #[cfg(target_os = "android")]
                 {
-                    Ok(PathBuf::from("/storage/emulated/0/Android/data/com.graphlearning.app/files/sync"))
+                    Ok(PathBuf::from("/storage/emulated/0/Android/data/online.fg-goose.abcdeez.app/files/sync"))
                 }
                 #[cfg(not(target_os = "android"))]
                 {

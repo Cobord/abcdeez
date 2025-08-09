@@ -5,8 +5,8 @@ edition = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 description = "Adaptive graph-coded learning system for cognitive modeling"
-repository = "https://github.com/yourusername/alphabet-terminal-prototype"
-homepage = "https://github.com/yourusername/alphabet-terminal-prototype"
+repository = "https://github.com/emberian/abcdeez"
+homepage = "https://abcdeez.fg-goose.online"
 readme = "../README.md"
 
 [lib]

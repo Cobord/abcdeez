@@ -5,8 +5,10 @@
 #![windows_subsystem = "windows"]
 
 mod api;
+mod api_client;
 mod apple_signin_button;
 mod components;
+mod config;
 mod demo;
 mod easter_egg;
 #[cfg(target_os = "ios")]
@@ -36,7 +38,8 @@ use graph_learning_core::{
     AdaptiveScheduler, LearnerMetrics, TaskGenerator, TaskSession,
 };
 
-use api::MockApiClient;
+use api_client::{AdaptiveApiClient, ApiClientTrait};
+use config::{AppConfig, ConfigManager};
 use components::*;
 use demo::DemoController;
 use easter_egg::LittleCrab;
@@ -123,8 +126,11 @@ pub struct AppData {
     pub export_data: Option<ExportData>,
     pub export_format: ExportFormat,
 
-    // API client (using mock for now)
-    pub api_client: Arc<MockApiClient>,
+    // Configuration management
+    pub config_manager: ConfigManager,
+    
+    // API client with fallback capability
+    pub api_client: Arc<AdaptiveApiClient>,
 
     // Enhanced demo controller
     pub demo_controller: DemoController,
@@ -151,6 +157,13 @@ pub struct AppData {
     pub offline_mode: bool,
     pub auto_sync_enabled: bool,
 
+    // API Configuration UI state
+    pub api_url_input: String,
+    pub api_timeout_input: String,
+    pub api_fallback_enabled: bool,
+    pub show_api_settings: bool,
+    pub api_connection_status: String,
+    
     // Runtime for async operations
     pub runtime: Arc<tokio::runtime::Runtime>,
 
@@ -215,7 +228,20 @@ impl Default for AppData {
             difficulty_level: 0.5,
             export_data: None,
             export_format: ExportFormat::Json,
-            api_client: Arc::new(MockApiClient::new()),
+            config_manager: ConfigManager::new().unwrap_or_else(|e| {
+                tracing::warn!("Failed to initialize config manager: {}", e);
+                // Create a fallback with default config
+                ConfigManager::with_config_file("./config.toml").unwrap_or_else(|_| {
+                    panic!("Failed to create fallback config manager")
+                })
+            }),
+            api_client: {
+                let config_manager = ConfigManager::new().unwrap_or_else(|e| {
+                    tracing::warn!("Failed to initialize config for API client: {}", e);
+                    ConfigManager::with_config_file("./config.toml").unwrap()
+                });
+                Arc::new(AdaptiveApiClient::new(config_manager.config()))
+            },
 
             // Async request states
             login_request_in_flight: false,
@@ -255,6 +281,28 @@ impl Default for AppData {
             offline_mode: false,
             auto_sync_enabled: true,
 
+            // API Configuration UI state (initialize from config)
+            api_url_input: {
+                let config_manager_temp = ConfigManager::new().unwrap_or_else(|_| {
+                    ConfigManager::with_config_file("./config.toml").unwrap()
+                });
+                config_manager_temp.config().api_url().to_string()
+            },
+            api_timeout_input: {
+                let config_manager_temp = ConfigManager::new().unwrap_or_else(|_| {
+                    ConfigManager::with_config_file("./config.toml").unwrap()
+                });
+                config_manager_temp.config().api.timeout_seconds.to_string()
+            },
+            api_fallback_enabled: {
+                let config_manager_temp = ConfigManager::new().unwrap_or_else(|_| {
+                    ConfigManager::with_config_file("./config.toml").unwrap()
+                });
+                config_manager_temp.config().should_fallback_to_mock()
+            },
+            show_api_settings: false,
+            api_connection_status: "Not tested".to_string(),
+            
             // Runtime for async operations
             runtime: Arc::new(runtime),
 

@@ -4,7 +4,7 @@
 
 ## Base URL
 ```
-https://api.graphlearning.app/v1
+https://abcdeez.fg-goose.online/api/v1
 ```
 
 ## Authentication

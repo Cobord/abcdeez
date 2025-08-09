@@ -32,7 +32,7 @@ class GraphLearningClient:
     
     def __init__(
         self,
-        base_url: str = "https://api.graphlearning.app/v1",
+        base_url: str = "https://abcdeez.fg-goose.online/api/v1",
         api_key: Optional[str] = None,
         timeout: int = 30,
         retry_count: int = 3,

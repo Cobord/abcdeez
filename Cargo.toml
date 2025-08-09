@@ -13,7 +13,7 @@ authors = ["ember arlynx <ember@lunar.town>"]
 license = "MIT OR Apache-2.0"
 description = "Adaptive graph-coded learning system for cognitive modeling"
 repository = "https://github.com/emberian/abcdeez"
-homepage = "https://github.com/emberian/abcdeez"
+homepage = "https://abcdeez.fg-goose.online"
 readme = "README.md"
 
 [workspace.dependencies]

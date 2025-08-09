@@ -196,5 +196,5 @@ Before analysis, verify:
 ## Contact
 
 For questions about the data format:
-- GitHub: [repository-url]
-- Email: [researcher-email]
+- GitHub: https://github.com/emberian/abcdeez
+- Email: ember@lunar.town

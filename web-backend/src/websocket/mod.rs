@@ -323,9 +323,10 @@ async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>, claims
     let (mut sender, mut receiver) = socket.split();
 
     // Create analytics service
-    let analytics_service = AnalyticsService::new(
+    let analytics_service = AnalyticsService::new_with_config(
         state.db_pool.clone().into(),
         state.redis_conn.clone().into(),
+        state.config.clone(),
     );
 
     // Set up broadcast interval (every 5 seconds)

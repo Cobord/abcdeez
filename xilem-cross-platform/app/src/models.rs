@@ -208,20 +208,19 @@ pub struct RegisterRequest {
     pub password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateSessionRequest {
     pub learner_id: String,
     pub topology_type: String,
     pub topology_data: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitResponseRequest {
     pub task_type: String,
     pub task_data: serde_json::Value,
     pub user_answer: String,
-    pub correct: bool,
-    pub response_time_ms: i32,
+    pub response_time_ms: i64,
 }
 
 // OAuth-related structures
@@ -312,3 +311,54 @@ impl Default for ExportFormat {
         ExportFormat::Json
     }
 }
+
+// Additional API models for integration
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateLearnerRequest {
+    pub display_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmitResponseResponse {
+    pub response_id: String,
+    pub sequence_number: u32,
+    pub correct: bool,
+    pub intervention: Option<serde_json::Value>,
+    pub next_task: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceData {
+    pub overall_accuracy: f64,
+    pub average_response_time: f64,
+    pub total_sessions: u32,
+    pub total_tasks: u32,
+    pub learning_metrics: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SessionStatus {
+    Active,
+    Completed,
+    Paused,
+    Cancelled,
+}
+
+// Update Session struct to use the enum
+impl Session {
+    pub fn new(id: String, learner_id: String) -> Self {
+        Self {
+            id,
+            learner_id,
+            topology_type: "linear".to_string(),
+            topology: None,
+            start_time: chrono::Utc::now(),
+            end_time: None,
+            status: "active".to_string(),
+            summary: None,
+            responses: Vec::new(),
+        }
+    }
+}
+

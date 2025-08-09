@@ -25,7 +25,7 @@ from abcdeez import GraphLearningClient
 from abcdeez.models import SessionConfig
 
 # Initialize client
-client = GraphLearningClient(base_url="https://api.graphlearning.app/v1")
+client = GraphLearningClient(base_url="https://abcdeez.fg-goose.online/api/v1")
 
 # Register and login
 user = client.register("user@example.com", "password", "John Doe")

@@ -917,7 +917,7 @@ impl StatisticalValidator {
         OutlierAnalysis {
             outlier_count: outlier_indices.len(),
             outlier_percentage,
-            outlier_indices,
+            outlier_indices: outlier_indices.clone(),
             max_z_score,
             outliers_detected: !outlier_indices.is_empty(),
             method_used: "Modified Z-Score".to_string(),

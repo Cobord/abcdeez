@@ -55,9 +55,9 @@ gh workflow run deploy-pwa.yml
 
 ## URLs After Deployment
 
-- **Main App**: `https://[username].github.io/[repo]/`
-- **Demo Page**: `https://[username].github.io/[repo]/demo.html`
-- **Offline Page**: `https://[username].github.io/[repo]/offline.html`
+- **Main App**: `https://abcdeez.fg-goose.online/app`
+- **Demo Page**: `https://abcdeez.fg-goose.online/demo.html`
+- **Offline Page**: `https://abcdeez.fg-goose.online/offline.html`
 
 ## Local Development
 

@@ -241,6 +241,107 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             ))
             .direction(Axis::Vertical),
         ),
+        // API Configuration
+        card(
+            "🌐 API Configuration",
+            flex((
+                flex((
+                    button(
+                        if data.show_api_settings { "🔽 Hide API Settings" } else { "🔧 Show API Settings" },
+                        |data: &mut AppData| {
+                            data.show_api_settings = !data.show_api_settings;
+                        }
+                    ),
+                    prose("Configure backend server connection")
+                        .brush(Color::from_rgb8(100, 100, 100))
+                        .alignment(TextAlignment::Start),
+                ))
+                .direction(Axis::Horizontal),
+                if data.show_api_settings {
+                    flex((
+                        labeled_input(
+                            "API Base URL",
+                            &data.api_url_input,
+                            std::sync::Arc::new(|data: &mut AppData, value: String| {
+                                data.api_url_input = value;
+                            })
+                        ),
+                        prose("Example: https://abcdeez.fg-goose.online/api/v1")
+                            .brush(Color::from_rgb8(100, 100, 100))
+                            .alignment(TextAlignment::Start),
+                        labeled_input(
+                            "Timeout (seconds)",
+                            &data.api_timeout_input,
+                            std::sync::Arc::new(|data: &mut AppData, value: String| {
+                                data.api_timeout_input = value;
+                            })
+                        ),
+                        checkbox(
+                            data.api_fallback_enabled,
+                            "Fallback to offline mode when API unavailable",
+                            std::sync::Arc::new(|data: &mut AppData, checked: bool| {
+                                data.api_fallback_enabled = checked;
+                            }),
+                        ),
+                        flex((
+                            button("💾 Save API Settings", |data: &mut AppData| {
+                                // Update configuration
+                                match data.config_manager.update_config(|config| {
+                                    config.api.base_url = data.api_url_input.clone();
+                                    if let Ok(timeout) = data.api_timeout_input.parse::<u64>() {
+                                        config.api.timeout_seconds = timeout;
+                                    }
+                                    config.api.fallback_to_mock = data.api_fallback_enabled;
+                                }) {
+                                    Ok(_) => {
+                                        data.success_message = Some("API settings saved successfully!".to_string());
+                                        // Recreate API client with new settings
+                                        data.api_client = std::sync::Arc::new(
+                                            crate::api_client::AdaptiveApiClient::new(data.config_manager.config())
+                                        );
+                                    }
+                                    Err(_) => {
+                                        data.error_message = Some("Failed to save API settings".to_string());
+                                    }
+                                }
+                            }),
+                            button("🔍 Test Connection", |data: &mut AppData| {
+                                data.api_connection_status = "Testing...".to_string();
+                                // Test API connection asynchronously
+                                let api_client = data.api_client.clone();
+                                let runtime = data.runtime.clone();
+                                
+                                // Spawn async task to test connection
+                                runtime.spawn(async move {
+                                    match api_client.health_check().await {
+                                        Ok(()) => {
+                                            // Connection successful
+                                        }
+                                        Err(_) => {
+                                            // Connection failed
+                                        }
+                                    }
+                                });
+                            }),
+                        ))
+                        .direction(Axis::Horizontal),
+                        label(format!("Connection Status: {}", data.api_connection_status))
+                            .brush(if data.api_connection_status.contains("Success") {
+                                Color::from_rgb8(0, 128, 0)
+                            } else if data.api_connection_status.contains("Failed") {
+                                Color::from_rgb8(200, 0, 0)
+                            } else {
+                                Color::from_rgb8(128, 128, 128)
+                            })
+                            .alignment(TextAlignment::Start),
+                    ))
+                    .direction(Axis::Vertical)
+                } else {
+                    flex(()).direction(Axis::Vertical) // Empty flex when collapsed
+                },
+            ))
+            .direction(Axis::Vertical),
+        ),
         // Data Management
         card(
             "💾 Data Management",

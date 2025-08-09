@@ -22,6 +22,10 @@ pub struct Config {
     pub tracing_endpoint: Option<String>,
     pub health_check_interval_seconds: u32,
     pub performance_monitoring_enabled: bool,
+    // Differential privacy configuration
+    pub privacy_epsilon: f64,
+    pub privacy_delta: f64,
+    pub privacy_window_hours: i64,
 
     // OAuth Providers configuration
     pub apple_client_id: String,
@@ -116,6 +120,18 @@ impl Config {
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
                 .expect("PERFORMANCE_MONITORING_ENABLED must be a boolean"),
+            privacy_epsilon: env::var("PRIVACY_EPSILON")
+                .unwrap_or_else(|_| "1.0".to_string())
+                .parse()
+                .unwrap_or(1.0),
+            privacy_delta: env::var("PRIVACY_DELTA")
+                .unwrap_or_else(|_| "1e-9".to_string())
+                .parse()
+                .unwrap_or(1e-9),
+            privacy_window_hours: env::var("PRIVACY_WINDOW_HOURS")
+                .unwrap_or_else(|_| "24".to_string())
+                .parse()
+                .unwrap_or(24),
 
             // OAuth Providers configuration (optional)
             apple_client_id: env::var("APPLE_CLIENT_ID")

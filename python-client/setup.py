@@ -6,12 +6,12 @@ with open("README.md", "r", encoding="utf-8") as fh:
 setup(
     name="abcdeez",
     version="0.1.0",
-    author="Graph Learning Research",
-    author_email="research@graphlearning.app",
+    author="Ember Arlynx",
+    author_email="ember@lunar.town",
     description="Python client for the Graph Learning System (abcdeez)",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/abcdeez",
+    url="https://github.com/emberian/abcdeez",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     classifiers=[

@@ -6,6 +6,34 @@ use xilem::{
 };
 
 use crate::{models::*, visualizations::*, AppData};
+use std::sync::{Arc, Mutex};
+use once_cell::sync::Lazy;
+
+// Very simple in-memory buffer cache keyed by a short hash of inputs
+static CHART_BUFFER_CACHE: Lazy<Mutex<std::collections::HashMap<String, Vec<u8>>>> = Lazy::new(|| Mutex::new(std::collections::HashMap::new()));
+
+fn cache_get(key: &str) -> Option<Vec<u8>> {
+    CHART_BUFFER_CACHE.lock().ok().and_then(|m| m.get(key).cloned())
+}
+
+fn cache_set(key: String, value: Vec<u8>) {
+    if let Ok(mut m) = CHART_BUFFER_CACHE.lock() {
+        // simple size cap
+        if m.len() > 64 { m.clear(); }
+        m.insert(key, value);
+    }
+}
+
+fn short_hash<T: serde::Serialize>(value: &T) -> String {
+    let json = serde_json::to_string(value).unwrap_or_default();
+    // FNV-like quick hash
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for b in json.as_bytes() {
+        hash ^= *b as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{:016x}", hash)
+}
 use graph_learning_core::tasks::TaskResponse;
 
 /// Create a learning curve chart component
@@ -15,12 +43,24 @@ pub fn learning_curve_chart(
     height: u32,
 ) -> impl WidgetView<AppData> {
     // Generate the chart as RGB buffer  
-    let _chart_data = match create_learning_curve(responses, width, height) {
+    let cache_key = format!(
+        "learning_curve:{}:{}:{}",
+        short_hash(&responses),
+        width,
+        height
+    );
+    let _chart_data = if let Some(buf) = cache_get(&cache_key) {
+        buf
+    } else {
+        let buf = match create_learning_curve(responses, width, height) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create learning curve: {}", e);
             vec![255; (width * height * 3) as usize] // White fallback
         }
+        };
+        cache_set(cache_key, buf.clone());
+        buf
     };
 
     // Convert to image view
@@ -63,12 +103,22 @@ pub fn response_time_histogram_chart(
     height: u32,
 ) -> impl WidgetView<AppData> {
     // Generate the histogram
-    let _chart_data = match create_response_time_histogram(response_times, width, height) {
+    let cache_key = format!(
+        "rt_hist:{}:{}:{}",
+        short_hash(&response_times),
+        width,
+        height
+    );
+    let _chart_data = if let Some(buf) = cache_get(&cache_key) { buf } else {
+        let buf = match create_response_time_histogram(response_times, width, height) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create histogram: {}", e);
             vec![255; (width * height * 3) as usize]
         }
+        };
+        cache_set(cache_key, buf.clone());
+        buf
     };
 
     // Create component
@@ -106,12 +156,22 @@ pub fn performance_heatmap_chart(
     height: u32,
 ) -> impl WidgetView<AppData> {
     // Generate the heatmap
-    let _chart_data = match create_performance_heatmap(responses, width, height) {
+    let cache_key = format!(
+        "heatmap:{}:{}:{}",
+        short_hash(&responses),
+        width,
+        height
+    );
+    let _chart_data = if let Some(buf) = cache_get(&cache_key) { buf } else {
+        let buf = match create_performance_heatmap(responses, width, height) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create heatmap: {}", e);
             vec![255; (width * height * 3) as usize]
         }
+        };
+        cache_set(cache_key, buf.clone());
+        buf
     };
 
     flex((
@@ -137,12 +197,22 @@ pub fn metrics_radar_chart(
     height: u32,
 ) -> impl WidgetView<AppData> {
     // Generate the radar chart
-    let _chart_data = match create_metrics_radar_chart(metrics, width, height) {
+    let cache_key = format!(
+        "radar:{}:{:.0}:{:.0}",
+        short_hash(metrics),
+        width,
+        height
+    );
+    let _chart_data = if let Some(buf) = cache_get(&cache_key) { buf } else {
+        let buf = match create_metrics_radar_chart(metrics, width, height) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create radar chart: {}", e);
             vec![255; (width * height * 3) as usize]
         }
+        };
+        cache_set(cache_key, buf.clone());
+        buf
     };
 
     flex((
@@ -167,12 +237,17 @@ pub fn progress_ring_chart(
     size: u32,
 ) -> impl WidgetView<AppData> {
     // Generate the progress ring
-    let _chart_data = match create_progress_ring(percentage, size, size, label_text) {
+    let cache_key = format!("ring:{:.2}:{:.0}:{:.0}:{}", percentage, size, size, label_text);
+    let _chart_data = if let Some(buf) = cache_get(&cache_key) { buf } else {
+        let buf = match create_progress_ring(percentage, size, size, label_text) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create progress ring: {}", e);
             vec![255; (size * size * 3) as usize]
         }
+        };
+        cache_set(cache_key, buf.clone());
+        buf
     };
 
     flex((

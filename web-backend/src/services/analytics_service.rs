@@ -1,4 +1,5 @@
 use crate::cache::ConnectionManager;
+use crate::config::Config;
 use crate::db::DbPool;
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
@@ -15,6 +16,7 @@ use crate::utils::statistics::{
     self, analyze_response_times, bootstrap_confidence_interval, comprehensive_outlier_detection,
     one_way_anova, t_test_two_sample, ExGaussianParams, OutlierAnalysis,
 };
+use super::privacy::{DifferentialPrivacyEngine, Mechanism};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PopulationStats {
@@ -70,7 +72,20 @@ impl AnalyticsService {
         Self {
             db,
             cache: (*cache).clone(),
-            privacy_epsilon: 1.0, // Conservative privacy budget
+            privacy_epsilon: 1.0, // default; prefer calling new_with_config
+        }
+    }
+
+    pub fn new_with_config(db: Arc<DbPool>, cache: Arc<ConnectionManager>, config: Arc<Config>) -> Self {
+        let epsilon = if config.privacy_epsilon > 0.0 {
+            config.privacy_epsilon
+        } else {
+            1.0
+        };
+        Self {
+            db,
+            cache: (*cache).clone(),
+            privacy_epsilon: epsilon,
         }
     }
 
@@ -405,11 +420,8 @@ impl AnalyticsService {
 
     // Private helper methods
     fn add_differential_privacy_noise(&self, true_value: f64) -> f64 {
-        let sensitivity = 1.0; // Sensitivity of the query
-        let scale = sensitivity / self.privacy_epsilon;
-        let laplace = Laplace::new(0.0, scale).unwrap();
-        let noise = laplace.sample(&mut thread_rng());
-        true_value + noise
+        let mut engine = DifferentialPrivacyEngine::new(self.privacy_epsilon, 1e-9);
+        engine.add_noise(true_value, Mechanism::Laplace { sensitivity: 1.0 }, self.privacy_epsilon)
     }
 
     async fn cache_population_stats(&self, stats: &PopulationStats) -> Result<()> {

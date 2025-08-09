@@ -10,9 +10,10 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
-    services::{audit::AuditService, AnalyticsService, LearnerService},
+    services::{audit::AuditService, privacy_accounting::PrivacyAccountingService, AnalyticsService, LearnerService},
     state::AppState,
 };
+use axum::http::HeaderValue;
 use graph_learning_core::{
     statistics::{
         DetailedStatistics, ExGaussianModel, StrategyType,
@@ -50,9 +51,10 @@ pub async fn population(
     claims: Extension<Claims>,
     Query(params): Query<PopulationQuery>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let analytics_service = AnalyticsService::new(
+    let analytics_service = AnalyticsService::new_with_config(
         Arc::new(state.db_pool.clone()),
         Arc::new(state.redis_conn.clone()),
+        state.config.clone(),
     );
 
     let population_stats = analytics_service
@@ -74,19 +76,47 @@ pub async fn population(
     .await
     .ok();
 
-    Ok(Json(
-        serde_json::to_value(population_stats).unwrap_or_default(),
-    ))
+    let body = serde_json::to_value(&population_stats).unwrap_or_default();
+    let mut response = axum::response::Response::new(axum::body::Body::from(body.to_string()));
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-mechanism"),
+        HeaderValue::from_static("laplace"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
+        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+    );
+
+    // Spend from privacy budget (global window for now)
+    let accounting = PrivacyAccountingService::new(
+        Arc::new(state.db_pool.clone()),
+        state.config.clone(),
+    );
+    let _ = accounting
+        .ensure_budget_row("global", None)
+        .await;
+    let _ = accounting
+        .spend(
+            "global",
+            None,
+            "/analytics/population",
+            "laplace",
+            analytics_service.privacy_epsilon,
+            0.0,
+        )
+        .await;
+    Ok(response.into())
 }
 
 pub async fn bottlenecks(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
     Query(params): Query<BottlenecksQuery>,
-) -> AppResult<Json<Vec<serde_json::Value>>> {
-    let analytics_service = AnalyticsService::new(
+) -> AppResult<axum::response::Response> {
+    let analytics_service = AnalyticsService::new_with_config(
         Arc::new(state.db_pool.clone()),
         Arc::new(state.redis_conn.clone()),
+        state.config.clone(),
     );
 
     let min_samples = params.min_samples.unwrap_or(50);
@@ -119,7 +149,33 @@ pub async fn bottlenecks(
     .await
     .ok();
 
-    Ok(Json(bottleneck_data))
+    let body = serde_json::to_value(&bottleneck_data).unwrap_or_default();
+    let mut response = axum::response::Response::new(axum::body::Body::from(body.to_string()));
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-mechanism"),
+        HeaderValue::from_static("laplace"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
+        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+    );
+
+    let accounting = PrivacyAccountingService::new(
+        Arc::new(state.db_pool.clone()),
+        state.config.clone(),
+    );
+    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
+    let _ = accounting
+        .spend(
+            "user",
+            Some(claims.sub),
+            "/analytics/bottlenecks",
+            "laplace",
+            analytics_service.privacy_epsilon,
+            0.0,
+        )
+        .await;
+    Ok(response)
 }
 
 pub async fn strategies(
@@ -220,10 +276,11 @@ pub async fn learning_curves(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
     Query(params): Query<LearningCurvesQuery>,
-) -> AppResult<Json<serde_json::Value>> {
-    let analytics_service = AnalyticsService::new(
+) -> AppResult<axum::response::Response> {
+    let analytics_service = AnalyticsService::new_with_config(
         Arc::new(state.db_pool.clone()),
         Arc::new(state.redis_conn.clone()),
+        state.config.clone(),
     );
 
     // Parse learner IDs if provided
@@ -282,24 +339,50 @@ pub async fn learning_curves(
         None,
     ).await.ok();
 
-    Ok(Json(serde_json::json!({
+    let body = serde_json::json!({
         "curves": curve_data,
         "metadata": {
             "requested_learners": learner_ids.len(),
             "returned_curves": curve_data.len(),
-            "time_range": params.time_range.unwrap_or("30d".to_string())
+            "time_range": params.time_range.clone().unwrap_or("30d".to_string())
         }
-    })))
+    });
+    let mut response = axum::response::Response::new(axum::body::Body::from(body.to_string()));
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-mechanism"),
+        HeaderValue::from_static("laplace"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
+        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+    );
+    let accounting = PrivacyAccountingService::new(
+        Arc::new(state.db_pool.clone()),
+        state.config.clone(),
+    );
+    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
+    let _ = accounting
+        .spend(
+            "user",
+            Some(claims.sub),
+            "/analytics/learning-curves",
+            "laplace",
+            analytics_service.privacy_epsilon,
+            0.0,
+        )
+        .await;
+    Ok(response)
 }
 
 pub async fn compare(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
     Json(req): Json<CompareRequest>,
-) -> AppResult<Json<serde_json::Value>> {
-    let analytics_service = AnalyticsService::new(
+) -> AppResult<axum::response::Response> {
+    let analytics_service = AnalyticsService::new_with_config(
         Arc::new(state.db_pool.clone()),
         Arc::new(state.redis_conn.clone()),
+        state.config.clone(),
     );
 
     let comparison_result = if let Some(experiment_id) = req.experiment_id {
@@ -356,16 +439,39 @@ pub async fn compare(
     .await
     .ok();
 
-    Ok(Json(
-        serde_json::to_value(comparison_result).unwrap_or_default(),
-    ))
+    let body = serde_json::to_value(&comparison_result).unwrap_or_default();
+    let mut response = axum::response::Response::new(axum::body::Body::from(body.to_string()));
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-mechanism"),
+        HeaderValue::from_static("laplace"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
+        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+    );
+    let accounting = PrivacyAccountingService::new(
+        Arc::new(state.db_pool.clone()),
+        state.config.clone(),
+    );
+    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
+    let _ = accounting
+        .spend(
+            "user",
+            Some(claims.sub),
+            "/analytics/compare",
+            "laplace",
+            analytics_service.privacy_epsilon,
+            0.0,
+        )
+        .await;
+    Ok(response)
 }
 
 // Real-time analytics endpoint for live dashboard
 pub async fn live(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
-) -> AppResult<Json<serde_json::Value>> {
+) -> AppResult<axum::response::Response> {
     let analytics_service = AnalyticsService::new(
         Arc::new(state.db_pool.clone()),
         Arc::new(state.redis_conn.clone()),
@@ -376,7 +482,32 @@ pub async fn live(
         .await
         .map_err(|_| AppError::InternalServerError)?;
 
-    Ok(Json(live_metrics))
+    let body = serde_json::to_value(&live_metrics).unwrap_or_default();
+    let mut response = axum::response::Response::new(axum::body::Body::from(body.to_string()));
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-mechanism"),
+        HeaderValue::from_static("laplace"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
+        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+    );
+    let accounting = PrivacyAccountingService::new(
+        Arc::new(state.db_pool.clone()),
+        state.config.clone(),
+    );
+    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
+    let _ = accounting
+        .spend(
+            "user",
+            Some(claims.sub),
+            "/analytics/live",
+            "laplace",
+            analytics_service.privacy_epsilon,
+            0.0,
+        )
+        .await;
+    Ok(response)
 }
 
 // Helper function for group statistics
@@ -452,7 +583,7 @@ pub async fn response_time_analysis(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
     Query(query): Query<LearningCurvesQuery>,
-) -> AppResult<Json<serde_json::Value>> {
+) -> AppResult<axum::response::Response> {
     let learner_service =
         LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
 
@@ -534,7 +665,7 @@ pub async fn response_time_analysis(
         })
         .collect();
 
-    Ok(Json(serde_json::json!({
+    let body = serde_json::json!({
         "analyzed_learners": learner_ids.len(),
         "total_responses": response_times.len(),
         "descriptive_statistics": {
@@ -562,7 +693,32 @@ pub async fn response_time_analysis(
         },
         "percentiles": percentiles,
         "analysis_timestamp": chrono::Utc::now()
-    })))
+    });
+    let mut response = axum::response::Response::new(axum::body::Body::from(body.to_string()));
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-mechanism"),
+        HeaderValue::from_static("laplace"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
+        HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+    );
+    let accounting = PrivacyAccountingService::new(
+        Arc::new(state.db_pool.clone()),
+        state.config.clone(),
+    );
+    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
+    let _ = accounting
+        .spend(
+            "user",
+            Some(claims.sub),
+            "/analytics/response-time-analysis",
+            "laplace",
+            state.config.privacy_epsilon,
+            0.0,
+        )
+        .await;
+    Ok(response)
 }
 
 /// Detailed learner performance analytics with core statistics
@@ -570,7 +726,7 @@ pub async fn learner_performance_analysis(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
     axum::extract::Path(learner_id): axum::extract::Path<Uuid>,
-) -> AppResult<Json<serde_json::Value>> {
+) -> AppResult<axum::response::Response> {
     let learner_service =
         LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
 
@@ -729,7 +885,7 @@ pub async fn learner_performance_analysis(
         );
     }
 
-    Ok(Json(serde_json::json!({
+    let body = serde_json::json!({
         "learner_id": learner_id,
         "analysis_timestamp": chrono::Utc::now(),
         "total_sessions": session_summaries.len(),
@@ -744,7 +900,32 @@ pub async fn learner_performance_analysis(
         "session_summaries": session_summaries,
         "task_type_analysis": task_analysis,
         "learning_trajectory": accuracy_over_time.into_iter().collect::<Vec<_>>()
-    })))
+    });
+    let mut response = axum::response::Response::new(axum::body::Body::from(body.to_string()));
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-mechanism"),
+        HeaderValue::from_static("laplace"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
+        HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+    );
+    let accounting = PrivacyAccountingService::new(
+        Arc::new(state.db_pool.clone()),
+        state.config.clone(),
+    );
+    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
+    let _ = accounting
+        .spend(
+            "user",
+            Some(claims.sub),
+            "/analytics/learner/performance",
+            "laplace",
+            state.config.privacy_epsilon,
+            0.0,
+        )
+        .await;
+    Ok(response)
 }
 
 /// Population-level strategy analysis
@@ -752,7 +933,7 @@ pub async fn population_strategy_analysis(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
     Query(query): Query<PopulationQuery>,
-) -> AppResult<Json<serde_json::Value>> {
+) -> AppResult<axum::response::Response> {
     let recent_learners = get_recent_learner_ids(&state.db_pool, 100).await?;
 
     let mut strategy_counts = HashMap::new();
@@ -801,14 +982,39 @@ pub async fn population_strategy_analysis(
 
     let overall_correlation = calculate_correlation(&rt_distance_data);
 
-    Ok(Json(serde_json::json!({
+    let body = serde_json::json!({
         "analyzed_learners": recent_learners.len(),
         "total_responses": rt_distance_data.len(),
         "strategy_distribution": strategy_counts,
         "overall_rt_distance_correlation": overall_correlation,
         "population_strategy": detect_strategy(&rt_distance_data),
         "analysis_timestamp": chrono::Utc::now()
-    })))
+    });
+    let mut response = axum::response::Response::new(axum::body::Body::from(body.to_string()));
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-mechanism"),
+        HeaderValue::from_static("laplace"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
+        HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+    );
+    let accounting = PrivacyAccountingService::new(
+        Arc::new(state.db_pool.clone()),
+        state.config.clone(),
+    );
+    let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
+    let _ = accounting
+        .spend(
+            "user",
+            Some(claims.sub),
+            "/analytics/population/strategies",
+            "laplace",
+            state.config.privacy_epsilon,
+            0.0,
+        )
+        .await;
+    Ok(response)
 }
 
 /// Adaptive difficulty analysis

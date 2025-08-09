@@ -12,15 +12,15 @@ info:
     - Authenticated: 1000 requests/minute/user
   version: 1.0.0
   contact:
-    email: api@graphlearning.app
+    email: ember@lunar.town
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: https://api.graphlearning.app/v1
+  - url: https://abcdeez.fg-goose.online/api/v1
     description: Production server
-  - url: https://staging-api.graphlearning.app/v1
+  - url: https://staging.abcdeez.fg-goose.online/api/v1
     description: Staging server
   - url: http://localhost:8080/v1
     description: Local development

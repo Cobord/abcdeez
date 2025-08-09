@@ -313,7 +313,7 @@ Ready to design your first experiment? Continue to:
 
 ## Support for Researchers
 
-- **Technical Support**: research@adaptivelearning.edu
+- **Technical Support**: ember@lunar.town
 - **Statistical Consulting**: Available for study design
 - **Custom Development**: Extensions for specific needs
 - **Training Workshops**: Monthly online sessions

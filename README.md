@@ -149,8 +149,8 @@ For rapid development iteration:
 ### Build from Source
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/alphabet-terminal-prototype.git
-cd alphabet-terminal-prototype
+git clone https://github.com/emberian/abcdeez.git
+cd abcdeez/alphabet-terminal-prototype
 
 # Build in release mode for optimal performance
 cargo build --release
@@ -543,9 +543,9 @@ If you use this system in research, please cite:
 ```bibtex
 @software{adaptive_graph_learning_2024,
   title = {Adaptive Graph-Coded Learning System},
-  author = {[Your Name]},
+  author = {Ember Arlynx},
   year = {2024},
-  url = {https://github.com/yourusername/alphabet-terminal-prototype}
+  url = {https://github.com/emberian/abcdeez}
 }
 ```
 
@@ -553,7 +553,7 @@ Original paper:
 ```
 "Adaptive Training for Flexible Skill Acquisition: 
 Building Navigable Mental Models of Graph-Structured Tasks"
-[Authors, Journal, Year]
+Ember Arlynx, 2024
 ```
 
 ## License

@@ -2,6 +2,8 @@ pub mod adaptation_service;
 pub mod analytics_service;
 pub mod audit;
 pub mod batch_jobs;
+pub mod privacy;
+pub mod privacy_accounting;
 pub mod learner_service;
 
 // OAuth services

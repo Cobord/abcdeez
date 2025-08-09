@@ -2,7 +2,7 @@
 
 A Bayesian cognitive modeling system for adaptive learning, implementing Expected Information Gain (EIG) for optimal task selection.
 
-**[📚 Full Documentation](https://emberian.github.io/abcdeez/)**
+**[📚 Full Documentation](https://abcdeez.fg-goose.online)**
 
 ## Quick Start
 
@@ -72,8 +72,8 @@ monte_carlo_samples = 1000
 
 ## Documentation
 
-- **[Online Documentation](https://emberian.github.io/abcdeez/)** - Full mdBook with mathematical foundations
-- **[API Reference](https://emberian.github.io/abcdeez/api_reference.html)** - Complete API documentation
+- **[Online Documentation](https://abcdeez.fg-goose.online)** - Full mdBook with mathematical foundations
+- **[API Reference](https://abcdeez.fg-goose.online/api_reference.html)** - Complete API documentation
 - **Local Docs**: Run `cd book && ./serve.sh` for local documentation server
 
 ## Testing

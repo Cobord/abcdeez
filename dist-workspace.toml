@@ -20,8 +20,8 @@ install-updater = true
 # Whether to run otherwise-parallelizable tasks on the same machine
 merge-tasks = true
 # Publish to homebrew tap
-#homebrew-tap = "yourusername/homebrew-tap"
+#homebrew-tap = "emberian/homebrew-tap"
 # A namespace to use when publishing this package to the npm registry
-#npm-scope = "@yourusername"
+#npm-scope = "@emberian"
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
