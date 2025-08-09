@@ -57,6 +57,12 @@ pub enum Environment {
     Production,
 }
 
+impl std::fmt::Display for Environment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{self:?}"))
+    }
+}
+
 impl Config {
     pub fn from_env() -> Result<Self, env::VarError> {
         dotenvy::dotenv().ok();
