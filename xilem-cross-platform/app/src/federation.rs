@@ -534,7 +534,7 @@ impl FederationNetwork {
     pub fn join_protocol(&mut self, protocol_id: &str) -> Result<(), String> {
         let protocol = self
             .shared_protocols
-            .get_mut(protocol_id)
+            .get(protocol_id)
             .ok_or("Protocol not found")?;
 
         if protocol
@@ -546,6 +546,11 @@ impl FederationNetwork {
 
         // Check capabilities against requirements
         self.validate_protocol_compatibility(&protocol)?;
+
+        let protocol = self
+            .shared_protocols
+            .get_mut(protocol_id)
+            .ok_or("Protocol not found")?;
 
         protocol
             .participating_nodes
