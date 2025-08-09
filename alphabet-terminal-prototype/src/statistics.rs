@@ -77,7 +77,8 @@ impl DetailedStatistics {
 
         let skewness = if std_dev > 0.0 {
             let n = data.len() as f64;
-            let sum_cubed = data.iter()
+            let sum_cubed = data
+                .iter()
                 .map(|x| ((x - mean) / std_dev).powi(3))
                 .sum::<f64>();
             (n / ((n - 1.0) * (n - 2.0))) * sum_cubed
@@ -87,7 +88,8 @@ impl DetailedStatistics {
 
         let kurtosis = if std_dev > 0.0 {
             let n = data.len() as f64;
-            let sum_fourth = data.iter()
+            let sum_fourth = data
+                .iter()
                 .map(|x| ((x - mean) / std_dev).powi(4))
                 .sum::<f64>();
             ((n * (n + 1.0)) / ((n - 1.0) * (n - 2.0) * (n - 3.0))) * sum_fourth
@@ -119,7 +121,7 @@ impl ExGaussianModel {
     pub fn new(params: ExGaussianParameters) -> Self {
         ExGaussianModel { params }
     }
-    
+
     pub fn from_params(mu: f64, sigma: f64, tau: f64) -> Self {
         ExGaussianModel {
             params: ExGaussianParameters { mu, sigma, tau },
@@ -128,7 +130,7 @@ impl ExGaussianModel {
 
     pub fn fit(response_times: &[f64]) -> Self {
         let stats = DetailedStatistics::from_data(response_times);
-        
+
         let mu = stats.mean - stats.std_dev;
         let sigma = stats.std_dev * 0.8;
         let tau = stats.std_dev * 0.5;
@@ -145,10 +147,11 @@ impl ExGaussianModel {
         // f(x) = (λ/2) * exp(λ/2 * (2μ + λσ² - 2x)) * erfc((μ + λσ² - x)/(√2 * σ))
         let lambda = 1.0 / self.params.tau;
         let normal = Normal::new(0.0, 1.0).unwrap();
-        
+
         // Calculate the argument for the exponential term
-        let exp_arg = (lambda / 2.0) * (2.0 * self.params.mu + lambda * self.params.sigma.powi(2) - 2.0 * x);
-        
+        let exp_arg =
+            (lambda / 2.0) * (2.0 * self.params.mu + lambda * self.params.sigma.powi(2) - 2.0 * x);
+
         // Prevent numerical overflow/underflow with wider bounds
         if exp_arg < -50.0 {
             return 0.0;
@@ -158,10 +161,11 @@ impl ExGaussianModel {
             // Return a capped value instead
             return 1e10;
         }
-        
+
         // Calculate the argument for the complementary error function
-        let erfc_arg = (self.params.mu + lambda * self.params.sigma.powi(2) - x) / (self.params.sigma * std::f64::consts::SQRT_2);
-        
+        let erfc_arg = (self.params.mu + lambda * self.params.sigma.powi(2) - x)
+            / (self.params.sigma * std::f64::consts::SQRT_2);
+
         // Check for extreme erfc arguments to prevent numerical issues
         let erfc_val = if erfc_arg > 5.0 {
             // For large positive values, erfc approaches 0
@@ -173,12 +177,12 @@ impl ExGaussianModel {
             // Use statrs to compute erfc
             statrs::function::erf::erfc(erfc_arg)
         };
-        
+
         // Calculate the result with additional stability checks
         // The formula is: (λ/2) * exp(exp_arg) * erfc_val
         // where exp_arg = (λ/2) * (2μ + λσ² - 2x)
         let result = (lambda / 2.0) * exp_arg.exp() * erfc_val;
-        
+
         // Final sanity check to avoid NaN or Inf
         if result.is_finite() {
             result
@@ -194,36 +198,38 @@ impl ExGaussianModel {
     pub fn variance(&self) -> f64 {
         self.params.sigma.powi(2) + self.params.tau.powi(2)
     }
-    
+
     pub fn cdf(&self, x: f64) -> f64 {
         if self.params.tau <= 0.0 || self.params.sigma <= 0.0 {
             return 0.0;
         }
-        
+
         // Ex-Gaussian CDF has closed form:
         // F(x) = Φ((x-μ)/σ) - exp((λ/2)*(2μ + λσ² - 2x)) * Φ((x - μ - λσ²)/σ)
         let lambda = 1.0 / self.params.tau;
         let normal = Normal::new(0.0, 1.0).unwrap();
-        
+
         // First term: Φ((x-μ)/σ)
         let term1 = normal.cdf((x - self.params.mu) / self.params.sigma);
-        
+
         // Second term exponential part
-        let exp_arg = (lambda / 2.0) * (2.0 * self.params.mu + lambda * self.params.sigma.powi(2) - 2.0 * x);
-        
+        let exp_arg =
+            (lambda / 2.0) * (2.0 * self.params.mu + lambda * self.params.sigma.powi(2) - 2.0 * x);
+
         // Prevent overflow
         if exp_arg > 50.0 {
             return 0.0; // exp would be huge, making second term dominate incorrectly
         }
-        
+
         // Second term normal CDF part
-        let term2_arg = (x - self.params.mu - lambda * self.params.sigma.powi(2)) / self.params.sigma;
+        let term2_arg =
+            (x - self.params.mu - lambda * self.params.sigma.powi(2)) / self.params.sigma;
         let term2 = if exp_arg < -50.0 {
             0.0 // exp is essentially 0
         } else {
             exp_arg.exp() * normal.cdf(term2_arg)
         };
-        
+
         (term1 - term2).max(0.0).min(1.0)
     }
 }
@@ -261,9 +267,9 @@ impl ErrorAnalysis {
         } else {
             (actual.clone(), expected.clone())
         };
-        
+
         *self.confusion_matrix.entry(key).or_insert(0) += 1;
-        
+
         let error_rate = self.error_by_distance.entry(distance).or_insert(0.0);
         *error_rate += 1.0;
     }
@@ -275,7 +281,8 @@ impl ErrorAnalysis {
             return;
         }
 
-        let local_errors: f64 = self.error_by_distance
+        let local_errors: f64 = self
+            .error_by_distance
             .iter()
             .filter(|(d, _)| **d <= 2)
             .map(|(_, count)| count)
@@ -285,12 +292,13 @@ impl ErrorAnalysis {
     }
 
     pub fn identify_systematic_errors(&mut self) {
-        self.systematic_errors = self.confusion_matrix
+        self.systematic_errors = self
+            .confusion_matrix
             .iter()
             .filter(|(_, count)| **count >= 2)
             .map(|((a, b), count)| (a.clone(), b.clone(), *count))
             .collect();
-        
+
         self.systematic_errors.sort_by(|a, b| b.2.cmp(&a.2));
     }
 }
@@ -311,13 +319,13 @@ impl LearningCurves {
         for i in 0..accuracies.len() {
             let start = i.saturating_sub(window_size / 2);
             let end = (i + window_size / 2 + 1).min(accuracies.len());
-            
+
             let window_acc = &accuracies[start..end];
             let window_rt = &response_times[start..end];
-            
+
             let acc = window_acc.iter().filter(|&&x| x).count() as f64 / window_acc.len() as f64;
             let rt = window_rt.iter().sum::<f64>() / window_rt.len() as f64;
-            
+
             accuracy_over_time.push(acc);
             rt_over_time.push(rt);
         }
@@ -325,10 +333,10 @@ impl LearningCurves {
         let improvement_rate = if accuracy_over_time.len() > 1 {
             let first_third = &accuracy_over_time[..accuracy_over_time.len() / 3];
             let last_third = &accuracy_over_time[2 * accuracy_over_time.len() / 3..];
-            
+
             let first_avg: f64 = first_third.iter().sum::<f64>() / first_third.len() as f64;
             let last_avg: f64 = last_third.iter().sum::<f64>() / last_third.len() as f64;
-            
+
             last_avg - first_avg
         } else {
             0.0
@@ -353,15 +361,15 @@ impl LearningCurves {
         for i in window..data.len() - window {
             let before = &data[i - window..i];
             let after = &data[i..i + window];
-            
+
             let before_mean = before.iter().sum::<f64>() / before.len() as f64;
             let after_mean = after.iter().sum::<f64>() / after.len() as f64;
-            
+
             if (after_mean - before_mean).abs() < 0.05 {
                 return Some(i);
             }
         }
-        
+
         None
     }
 }
@@ -371,22 +379,22 @@ pub struct StrategyAnalysis {
     pub rt_distance_correlation: f64,
     pub strategy_classification: StrategyType,
     pub transition_point: Option<usize>,
-    pub correlation: f64,  // Add this field for test compatibility
+    pub correlation: f64, // Add this field for test compatibility
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum StrategyType {
     SerialScan,
     DirectIndex,
-    DirectAccess,  // Add for test compatibility
-    Hybrid,        // Add for test compatibility  
-    Mixed(i32),    // Changed to i32 for Hash trait
+    DirectAccess, // Add for test compatibility
+    Hybrid,       // Add for test compatibility
+    Mixed(i32),   // Changed to i32 for Hash trait
 }
 
 impl StrategyAnalysis {
     pub fn analyze(response_times: &[f64], distances: &[usize]) -> Self {
         let correlation = Self::calculate_correlation(response_times, distances);
-        
+
         // Use Cohen's effect size conventions for correlation thresholds:
         // r > 0.7: Strong correlation (r² > 0.49) - serial scanning
         // r < 0.3: Weak correlation (r² < 0.09) - direct access
@@ -405,7 +413,7 @@ impl StrategyAnalysis {
             rt_distance_correlation: correlation,
             strategy_classification,
             transition_point,
-            correlation,  // Use same value as rt_distance_correlation
+            correlation, // Use same value as rt_distance_correlation
         }
     }
 
@@ -417,19 +425,25 @@ impl StrategyAnalysis {
         let rt_mean = response_times.iter().sum::<f64>() / response_times.len() as f64;
         let dist_mean = distances.iter().sum::<usize>() as f64 / distances.len() as f64;
 
-        let covariance: f64 = response_times.iter()
+        let covariance: f64 = response_times
+            .iter()
             .zip(distances.iter())
             .map(|(rt, d)| (rt - rt_mean) * (*d as f64 - dist_mean))
-            .sum::<f64>() / response_times.len() as f64;
+            .sum::<f64>()
+            / response_times.len() as f64;
 
-        let rt_std = (response_times.iter()
+        let rt_std = (response_times
+            .iter()
             .map(|rt| (rt - rt_mean).powi(2))
-            .sum::<f64>() / response_times.len() as f64)
+            .sum::<f64>()
+            / response_times.len() as f64)
             .sqrt();
 
-        let dist_std = (distances.iter()
+        let dist_std = (distances
+            .iter()
             .map(|d| (*d as f64 - dist_mean).powi(2))
-            .sum::<f64>() / distances.len() as f64)
+            .sum::<f64>()
+            / distances.len() as f64)
             .sqrt();
 
         if rt_std > 0.0 && dist_std > 0.0 {
@@ -481,18 +495,20 @@ impl ResponseTimeDistribution {
         let model = ExGaussianModel::fit(data);
         model.params
     }
-    
+
     pub fn detect_outliers(response_times: &[f64], z_threshold: f64) -> Vec<usize> {
         if response_times.is_empty() {
             return vec![];
         }
-        
+
         let mean = response_times.iter().sum::<f64>() / response_times.len() as f64;
-        let variance = response_times.iter()
+        let variance = response_times
+            .iter()
             .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / response_times.len() as f64;
+            .sum::<f64>()
+            / response_times.len() as f64;
         let std_dev = variance.sqrt();
-        
+
         let mut outliers = Vec::new();
         for (i, &rt) in response_times.iter().enumerate() {
             let z_score = (rt - mean).abs() / std_dev;
@@ -500,7 +516,7 @@ impl ResponseTimeDistribution {
                 outliers.push(i);
             }
         }
-        
+
         outliers
     }
 }
@@ -523,12 +539,14 @@ impl SessionAnalyzer {
             let task_type = format!("{:?}", response.task.operation);
             let rt = response.response_time_ms as f64;
 
-            task_type_stats.entry(task_type.clone())
+            task_type_stats
+                .entry(task_type.clone())
                 .or_insert_with(Vec::new)
                 .push(rt);
 
             if let Some(distance) = self.calculate_task_distance(&response.task) {
-                rt_by_distance.entry(distance)
+                rt_by_distance
+                    .entry(distance)
                     .or_insert_with(Vec::new)
                     .push(rt);
 
@@ -545,15 +563,22 @@ impl SessionAnalyzer {
         error_analysis.calculate_locality();
         error_analysis.identify_systematic_errors();
 
-        let task_type_stats = task_type_stats.into_iter()
+        let task_type_stats = task_type_stats
+            .into_iter()
             .map(|(k, v)| (k, DetailedStatistics::from_data(&v)))
             .collect();
 
         let accuracies: Vec<bool> = self.responses.iter().map(|r| r.correct).collect();
-        let response_times: Vec<f64> = self.responses.iter().map(|r| r.response_time_ms as f64).collect();
+        let response_times: Vec<f64> = self
+            .responses
+            .iter()
+            .map(|r| r.response_time_ms as f64)
+            .collect();
         let learning_curves = LearningCurves::calculate(&accuracies, &response_times, 10);
 
-        let distances: Vec<usize> = self.responses.iter()
+        let distances: Vec<usize> = self
+            .responses
+            .iter()
             .filter_map(|r| self.calculate_task_distance(&r.task))
             .collect();
         let strategy_analysis = StrategyAnalysis::analyze(&response_times, &distances);
@@ -612,9 +637,7 @@ impl MultipleComparisonCorrection {
     /// Bonferroni correction: p_adjusted = min(p * n, 1.0)
     fn bonferroni_correction(&self, p_values: &[f64]) -> Vec<f64> {
         let n = p_values.len() as f64;
-        p_values.iter()
-            .map(|&p| (p * n).min(1.0))
-            .collect()
+        p_values.iter().map(|&p| (p * n).min(1.0)).collect()
     }
 
     /// Benjamini-Hochberg FDR correction
@@ -624,17 +647,15 @@ impl MultipleComparisonCorrection {
         }
 
         let n = p_values.len();
-        let mut indexed_p: Vec<(usize, f64)> = p_values.iter()
-            .enumerate()
-            .map(|(i, &p)| (i, p))
-            .collect();
-        
+        let mut indexed_p: Vec<(usize, f64)> =
+            p_values.iter().enumerate().map(|(i, &p)| (i, p)).collect();
+
         // Sort by p-value
         indexed_p.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         let mut adjusted = vec![0.0; n];
         let mut cummin = 1.0;
-        
+
         // Apply BH correction from largest to smallest p-value
         for i in (0..n).rev() {
             let rank = i + 1;
@@ -642,7 +663,7 @@ impl MultipleComparisonCorrection {
             cummin = cummin.min(p_adj);
             adjusted[indexed_p[i].0] = p_adj;
         }
-        
+
         adjusted
     }
 
@@ -653,23 +674,21 @@ impl MultipleComparisonCorrection {
         }
 
         let n = p_values.len();
-        let mut indexed_p: Vec<(usize, f64)> = p_values.iter()
-            .enumerate()
-            .map(|(i, &p)| (i, p))
-            .collect();
-        
+        let mut indexed_p: Vec<(usize, f64)> =
+            p_values.iter().enumerate().map(|(i, &p)| (i, p)).collect();
+
         // Sort by p-value
         indexed_p.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         let mut adjusted = vec![0.0; n];
         let mut cummax = 0.0;
-        
+
         for i in 0..n {
             let p_adj = ((indexed_p[i].1 * (n - i) as f64).min(1.0)).max(cummax);
             cummax = cummax.max(p_adj);
             adjusted[indexed_p[i].0] = p_adj;
         }
-        
+
         adjusted
     }
 
@@ -695,38 +714,42 @@ pub struct PowerAnalysis {
 
 impl PowerAnalysis {
     pub fn new(alpha: f64, power: f64, effect_size: f64) -> Self {
-        Self { alpha, power, effect_size }
+        Self {
+            alpha,
+            power,
+            effect_size,
+        }
     }
 
     /// Calculate required sample size for t-test
     pub fn calculate_sample_size_t_test(&self, two_tailed: bool) -> usize {
         let normal = Normal::new(0.0, 1.0).unwrap();
-        
+
         // Z-scores for alpha and beta
         let z_alpha = if two_tailed {
             normal.inverse_cdf(1.0 - self.alpha / 2.0)
         } else {
             normal.inverse_cdf(1.0 - self.alpha)
         };
-        
+
         let z_beta = normal.inverse_cdf(self.power);
-        
+
         // Sample size formula: n = [(z_alpha + z_beta)^2 * 2] / d^2
         let n = ((z_alpha + z_beta).powi(2) * 2.0) / self.effect_size.powi(2);
-        
+
         n.ceil() as usize
     }
 
     /// Calculate power given sample size
     pub fn calculate_power(&self, n: usize) -> f64 {
         let normal = Normal::new(0.0, 1.0).unwrap();
-        
+
         // Critical value
         let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
-        
+
         // Non-centrality parameter
         let ncp = self.effect_size * (n as f64 / 2.0).sqrt();
-        
+
         // Power = P(Z > z_alpha - ncp)
         1.0 - normal.cdf(z_alpha - ncp)
     }
@@ -734,10 +757,10 @@ impl PowerAnalysis {
     /// Calculate minimum detectable effect size
     pub fn calculate_min_effect_size(&self, n: usize) -> f64 {
         let normal = Normal::new(0.0, 1.0).unwrap();
-        
+
         let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
         let z_beta = normal.inverse_cdf(self.power);
-        
+
         // d = (z_alpha + z_beta) * sqrt(2/n)
         (z_alpha + z_beta) * (2.0 / n as f64).sqrt()
     }
@@ -747,32 +770,32 @@ impl PowerAnalysis {
         // Using Cohen's f instead of d for ANOVA
         let f = self.effect_size;
         let _df1 = (k_groups - 1) as f64;
-        
+
         let normal = Normal::new(0.0, 1.0).unwrap();
         let z_alpha = normal.inverse_cdf(1.0 - self.alpha);
         let z_beta = normal.inverse_cdf(self.power);
-        
+
         // Approximation for balanced design
         let lambda = f.powi(2) * k_groups as f64;
         let n_per_group = ((z_alpha + z_beta).powi(2) / lambda + 1.0).ceil() as usize;
-        
+
         n_per_group * k_groups
     }
 
     /// Power analysis for correlation
     pub fn calculate_sample_size_correlation(&self) -> usize {
         let normal = Normal::new(0.0, 1.0).unwrap();
-        
+
         let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
         let z_beta = normal.inverse_cdf(self.power);
-        
+
         // Fisher's z transformation
         let r = self.effect_size;
         let z_r = 0.5 * ((1.0 + r) / (1.0 - r)).ln();
-        
+
         // n = [(z_alpha + z_beta) / z_r]^2 + 3
         let n = ((z_alpha + z_beta) / z_r).powi(2) + 3.0;
-        
+
         n.ceil() as usize
     }
 
@@ -780,17 +803,18 @@ impl PowerAnalysis {
     pub fn post_hoc_power(&self, observed_effect: f64, n: usize) -> f64 {
         let normal = Normal::new(0.0, 1.0).unwrap();
         let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
-        
+
         // Non-centrality parameter with observed effect
         let ncp = observed_effect * (n as f64 / 2.0).sqrt();
-        
+
         // Power = P(Z > z_alpha - ncp)
         1.0 - normal.cdf(z_alpha - ncp)
     }
 
     /// Sensitivity analysis: vary effect size
     pub fn sensitivity_analysis(&self, n: usize, effect_sizes: &[f64]) -> Vec<(f64, f64)> {
-        effect_sizes.iter()
+        effect_sizes
+            .iter()
             .map(|&d| {
                 let mut analysis = self.clone();
                 analysis.effect_size = d;

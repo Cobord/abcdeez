@@ -142,10 +142,8 @@ impl Topology {
                 Some(forward.min(backward))
             }
             TopologyType::PartialOrder | TopologyType::GeneralGraph => {
-                let path = self.shortest_path(
-                    &self.nodes[*from_idx].label,
-                    &self.nodes[*to_idx].label
-                )?;
+                let path =
+                    self.shortest_path(&self.nodes[*from_idx].label, &self.nodes[*to_idx].label)?;
                 Some(path.len().saturating_sub(1))
             }
         }
@@ -426,17 +424,17 @@ impl Topology {
 
         let mut path = Vec::new();
         let mut current = to_node.id.clone();
-        
+
         while current != from_node.id {
             if let Some(node) = self.get_node_by_id(&current) {
                 path.push(node.label.clone());
             }
             current = previous.get(&current)?.clone();
         }
-        
+
         path.push(from_node.label.clone());
         path.reverse();
-        
+
         Some(path)
     }
 

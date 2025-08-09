@@ -1,6 +1,10 @@
-use axum::{extract::State, response::Response, http::HeaderMap, Json};
+use crate::{
+    error::AppResult,
+    monitoring::{global_metrics, MetricsSnapshot},
+    state::AppState,
+};
+use axum::{extract::State, http::HeaderMap, response::Response, Json};
 use std::sync::Arc;
-use crate::{error::AppResult, state::AppState, monitoring::{global_metrics, MetricsSnapshot}};
 
 /// Export Prometheus-style metrics
 pub async fn prometheus_metrics(State(state): State<Arc<AppState>>) -> AppResult<Response<String>> {
@@ -15,7 +19,10 @@ pub async fn prometheus_metrics(State(state): State<Arc<AppState>>) -> AppResult
     let prometheus_format = format_prometheus_metrics(&snapshot).await;
 
     let mut headers = HeaderMap::new();
-    headers.insert("Content-Type", "text/plain; version=0.0.4; charset=utf-8".parse().unwrap());
+    headers.insert(
+        "Content-Type",
+        "text/plain; version=0.0.4; charset=utf-8".parse().unwrap(),
+    );
 
     Ok(Response::builder()
         .status(200)
@@ -121,25 +128,37 @@ async fn format_prometheus_metrics(snapshot: &MetricsSnapshot) -> String {
     // Endpoint-specific metrics
     output.push_str("# HELP endpoint_requests_total Total requests per endpoint\n# TYPE endpoint_requests_total counter\n");
     for (endpoint, metrics) in &snapshot.endpoint_metrics {
-        output.push_str(&format!("endpoint_requests_total{{endpoint=\"{}\"}} {}\n", endpoint, metrics.total_requests));
+        output.push_str(&format!(
+            "endpoint_requests_total{{endpoint=\"{}\"}} {}\n",
+            endpoint, metrics.total_requests
+        ));
     }
     output.push('\n');
 
     output.push_str("# HELP endpoint_duration_ms_total Total duration per endpoint in milliseconds\n# TYPE endpoint_duration_ms_total counter\n");
     for (endpoint, metrics) in &snapshot.endpoint_metrics {
-        output.push_str(&format!("endpoint_duration_ms_total{{endpoint=\"{}\"}} {}\n", endpoint, metrics.total_duration_ms));
+        output.push_str(&format!(
+            "endpoint_duration_ms_total{{endpoint=\"{}\"}} {}\n",
+            endpoint, metrics.total_duration_ms
+        ));
     }
     output.push('\n');
 
     output.push_str("# HELP endpoint_errors_total Total errors per endpoint\n# TYPE endpoint_errors_total counter\n");
     for (endpoint, metrics) in &snapshot.endpoint_metrics {
-        output.push_str(&format!("endpoint_errors_total{{endpoint=\"{}\"}} {}\n", endpoint, metrics.error_count));
+        output.push_str(&format!(
+            "endpoint_errors_total{{endpoint=\"{}\"}} {}\n",
+            endpoint, metrics.error_count
+        ));
     }
     output.push('\n');
 
     output.push_str("# HELP endpoint_avg_duration_ms Average response time per endpoint in milliseconds\n# TYPE endpoint_avg_duration_ms gauge\n");
     for (endpoint, metrics) in &snapshot.endpoint_metrics {
-        output.push_str(&format!("endpoint_avg_duration_ms{{endpoint=\"{}\"}} {:.2}\n", endpoint, metrics.avg_duration_ms));
+        output.push_str(&format!(
+            "endpoint_avg_duration_ms{{endpoint=\"{}\"}} {:.2}\n",
+            endpoint, metrics.avg_duration_ms
+        ));
     }
     output.push('\n');
 

@@ -2,7 +2,7 @@ use graph_learning_core::demo::*;
 
 fn main() {
     println!("Testing alphabet-terminal-prototype implementation...\n");
-    
+
     // Run the built-in demonstrations
     run_demo();
     demonstrate_task_types();
@@ -10,7 +10,7 @@ fn main() {
     demonstrate_extended_tasks();
     demonstrate_eig();
     demonstrate_statistical_analysis();
-    
+
     println!("\n✅ All demonstrations completed successfully!");
     println!("\nSummary of improvements made:");
     println!("- Fixed numerical stability in Ex-Gaussian PDF calculation");

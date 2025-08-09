@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
+use graph_learning_core::LearnerModel;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use graph_learning_core::LearnerModel;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Learner {
@@ -19,10 +19,10 @@ pub struct Learner {
 
 impl Learner {
     pub fn new(
-        id: Uuid, 
-        user_id: Option<Uuid>, 
+        id: Uuid,
+        user_id: Option<Uuid>,
         display_name: Option<String>,
-        learning_model: LearnerModel
+        learning_model: LearnerModel,
     ) -> Self {
         Self {
             id,

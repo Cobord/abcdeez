@@ -63,10 +63,14 @@ pub async fn create(
     let learner_id_bytes = req.learner_id.as_bytes();
     let now = Utc::now();
 
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     sqlx::query(
         "INSERT INTO sessions (id, learner_id, topology_type, topology_data, start_time, status)
-         VALUES (?, ?, ?, ?, ?, ?)"
+         VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(&session_id_bytes[..])
     .bind(&learner_id_bytes[..])
@@ -119,7 +123,11 @@ pub async fn get(
 ) -> AppResult<Json<Session>> {
     let session_id_bytes = id.as_bytes();
 
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     let session_row = sqlx::query(
         "SELECT s.id, s.learner_id, s.topology_type, s.topology_data, s.start_time, s.end_time, s.status, s.summary,
                 l.user_id
@@ -180,9 +188,13 @@ pub async fn submit_response(
 
     // Get next sequence number
     let session_id_bytes = session_id.as_bytes();
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     let next_sequence: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM responses WHERE session_id = ?"
+        "SELECT COALESCE(MAX(sequence_number), 0) + 1 FROM responses WHERE session_id = ?",
     )
     .bind(&session_id_bytes[..])
     .fetch_one(&mut *conn)
@@ -219,7 +231,9 @@ pub async fn submit_response(
 
     // Create a placeholder task for the response (correct_answer would be determined from task_data)
     let task = graph_learning_core::Task {
-        task_type: graph_learning_core::TaskType::Successor { item: "A".to_string() },
+        task_type: graph_learning_core::TaskType::Successor {
+            item: "A".to_string(),
+        },
         prompt: "What comes next?".to_string(),
         correct_answer: "B".to_string(), // This would normally be derived from task_data
         options: vec![],
@@ -237,8 +251,9 @@ pub async fn submit_response(
     };
 
     // Extract topology from session data for Bayesian updates
-    let topology: Topology = serde_json::from_value(session.topology_data).unwrap_or_else(|_| Topology::alphabet());
-    
+    let topology: Topology =
+        serde_json::from_value(session.topology_data).unwrap_or_else(|_| Topology::alphabet());
+
     let mut learner_service_mut = learner_service.clone();
     learner_service_mut
         .update_learner_response(session.learner_id, &core_response, &topology)
@@ -253,7 +268,7 @@ pub async fn submit_response(
         "SELECT COUNT(*) FROM responses
          WHERE session_id = ?
            AND sequence_number > ?
-           AND NOT correct"
+           AND NOT correct",
     )
     .bind(&session_id_bytes[..])
     .bind(next_sequence - 5)
@@ -306,14 +321,18 @@ pub async fn complete(
     let now = Utc::now();
 
     // Calculate session summary
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     let summary_stats = sqlx::query(
         "SELECT
             COUNT(*) as total_tasks,
             SUM(CASE WHEN correct THEN 1 ELSE 0 END) as correct_responses,
             AVG(response_time_ms) as avg_response_time
          FROM responses
-         WHERE session_id = ?"
+         WHERE session_id = ?",
     )
     .bind(&session_id_bytes[..])
     .fetch_one(&mut *conn)
@@ -327,7 +346,9 @@ pub async fn complete(
     } else {
         0.0
     };
-    let avg_response_time: f64 = summary_stats.get::<Option<f64>, _>("avg_response_time").unwrap_or(0.0);
+    let avg_response_time: f64 = summary_stats
+        .get::<Option<f64>, _>("avg_response_time")
+        .unwrap_or(0.0);
 
     let duration_seconds = (now - session.start_time).num_seconds();
 
@@ -341,16 +362,14 @@ pub async fn complete(
     };
 
     // Update session as completed
-    sqlx::query(
-        "UPDATE sessions SET status = ?, end_time = ?, summary = ? WHERE id = ?"
-    )
-    .bind(SessionStatus::Completed.to_string())
-    .bind(now)
-    .bind(serde_json::to_string(&summary).unwrap_or_default())
-    .bind(&session_id_bytes[..])
-    .execute(&mut *conn)
-    .await
-    .map_err(|e| AppError::DatabaseError(e))?;
+    sqlx::query("UPDATE sessions SET status = ?, end_time = ?, summary = ? WHERE id = ?")
+        .bind(SessionStatus::Completed.to_string())
+        .bind(now)
+        .bind(serde_json::to_string(&summary).unwrap_or_default())
+        .bind(&session_id_bytes[..])
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
 
     // Log audit event
     AuditService::log_event(
@@ -383,7 +402,11 @@ pub async fn replay(
 
     let session_id_bytes = session_id.as_bytes();
 
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     let response_rows = sqlx::query(
         "SELECT id, session_id, sequence_number, task_type, task_data, user_answer, correct, response_time_ms, hint_level, timestamp
          FROM responses
@@ -401,7 +424,7 @@ pub async fn replay(
         .map(|row| {
             let id_bytes: Vec<u8> = row.get::<Vec<u8>, _>("id");
             let response_id = Uuid::from_bytes(id_bytes.try_into().unwrap_or_default());
-            
+
             ResponseRecord {
                 id: response_id,
                 session_id,
@@ -440,7 +463,11 @@ async fn get_session_with_permission(
 ) -> AppResult<Session> {
     let session_id_bytes = session_id.as_bytes();
 
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     let session_row = sqlx::query(
         "SELECT s.id, s.learner_id, s.topology_type, s.topology_data, s.start_time, s.end_time, s.status, s.summary,
                 l.user_id
@@ -490,8 +517,12 @@ async fn validate_task_response(response: &TaskResponse) -> AppResult<bool> {
     match response.task_type.as_str() {
         "successor" | "predecessor" => {
             // For alphabet tasks, check if the answer is reasonable
-            Ok(response.user_answer.len() == 1 && 
-               response.user_answer.chars().next().map_or(false, |c| c.is_alphabetic()))
+            Ok(response.user_answer.len() == 1
+                && response
+                    .user_answer
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_alphabetic()))
         }
         "pairwise_order" => {
             // For ordering tasks, accept any non-empty answer

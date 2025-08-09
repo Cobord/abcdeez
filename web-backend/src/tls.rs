@@ -1,9 +1,9 @@
-use std::sync::Arc;
-use std::net::SocketAddr;
 use anyhow::Result;
-use tracing::{error, info};
-use tokio_rustls::TlsAcceptor;
 use rustls::ServerConfig;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio_rustls::TlsAcceptor;
+use tracing::{error, info};
 
 use crate::config::Config;
 
@@ -34,7 +34,10 @@ impl TlsManager {
 pub async fn handle_acme_challenge(
     axum::extract::Path(token): axum::extract::Path<String>,
 ) -> Result<String, crate::error::AppError> {
-    Err(crate::error::AppError::NotFound(format!("Challenge not found: {}", token)))
+    Err(crate::error::AppError::NotFound(format!(
+        "Challenge not found: {}",
+        token
+    )))
 }
 
 /// Serve the application  

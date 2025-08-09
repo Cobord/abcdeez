@@ -63,12 +63,10 @@ pub fn safe_variance(values: &[f64]) -> f64 {
     if values.len() < 2 {
         return 0.0;
     }
-    
+
     let mean = safe_mean(values);
-    let sum_sq_diff = values.iter()
-        .map(|x| (x - mean).powi(2))
-        .sum::<f64>();
-    
+    let sum_sq_diff = values.iter().map(|x| (x - mean).powi(2)).sum::<f64>();
+
     sum_sq_diff / (values.len() - 1) as f64
 }
 
@@ -83,12 +81,12 @@ pub fn confidence_interval(values: &[f64], confidence: f64) -> (f64, f64) {
         let mean = safe_mean(values);
         return (mean, mean);
     }
-    
+
     let mean = safe_mean(values);
     let std_dev = safe_std_dev(values);
     let n = values.len() as f64;
     let std_error = std_dev / n.sqrt();
-    
+
     // Use t-distribution critical values (simplified approximation)
     let t_critical = match confidence {
         0.90 => 1.645,
@@ -96,7 +94,7 @@ pub fn confidence_interval(values: &[f64], confidence: f64) -> (f64, f64) {
         0.99 => 2.576,
         _ => 1.96, // Default to 95%
     };
-    
+
     let margin = t_critical * std_error;
     (mean - margin, mean + margin)
 }
@@ -139,13 +137,13 @@ pub fn error_function(x: f64) -> f64 {
     let a4 = -1.453152027;
     let a5 = 1.061405429;
     let p = 0.3275911;
-    
+
     let sign = if x >= 0.0 { 1.0 } else { -1.0 };
     let x = x.abs();
-    
+
     let t = 1.0 / (1.0 + p * x);
     let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
-    
+
     sign * y
 }
 
@@ -157,19 +155,23 @@ pub fn erfc(x: f64) -> f64 {
 /// Inverse error function (approximation)
 pub fn inv_error_function(x: f64) -> f64 {
     let x = clamp(x, -0.99999, 0.99999);
-    
+
     // Rational approximation
     let a = (8.0 * (f64::consts::PI - 3.0)) / (3.0 * f64::consts::PI * (4.0 - f64::consts::PI));
     let ln_term = safe_log(1.0 - x * x);
-    
+
     let sqrt_term = (2.0 / (f64::consts::PI * a) + ln_term / 2.0).powi(2) - ln_term / a;
     let result = if sqrt_term >= 0.0 {
         -2.0 / (f64::consts::PI * a) - ln_term / 2.0 + sqrt_term.sqrt()
     } else {
         0.0
     };
-    
-    if x >= 0.0 { result.sqrt() } else { -result.sqrt() }
+
+    if x >= 0.0 {
+        result.sqrt()
+    } else {
+        -result.sqrt()
+    }
 }
 
 /// Gamma function approximation (Stirling's approximation for large values)
@@ -193,13 +195,13 @@ pub fn gamma_function(x: f64) -> f64 {
             9.9843695780195716e-6,
             1.5056327351493116e-7,
         ];
-        
+
         let z = x - 1.0;
         let mut x = coeff[0];
         for i in 1..coeff.len() {
             x += coeff[i] / (z + i as f64);
         }
-        
+
         let t = z + g + 0.5;
         (2.0 * f64::consts::PI).sqrt() * t.powf(z + 0.5) * (-t).exp() * x
     } else {
@@ -234,14 +236,14 @@ pub fn regularized_beta(x: f64, a: f64, b: f64) -> f64 {
     if x >= 1.0 {
         return 1.0;
     }
-    
+
     // Use continued fraction approximation
     let bt = if x == 0.0 || x == 1.0 {
         0.0
     } else {
         (ln_gamma(a + b) - ln_gamma(a) - ln_gamma(b) + a * x.ln() + b * (1.0 - x).ln()).exp()
     };
-    
+
     if x < (a + 1.0) / (a + b + 2.0) {
         bt * beta_continued_fraction(x, a, b) / a
     } else {
@@ -252,24 +254,24 @@ pub fn regularized_beta(x: f64, a: f64, b: f64) -> f64 {
 fn beta_continued_fraction(x: f64, a: f64, b: f64) -> f64 {
     const MAX_ITER: usize = 100;
     const EPS: f64 = 3.0e-7;
-    
+
     let qab = a + b;
     let qap = a + 1.0;
     let qam = a - 1.0;
     let mut c = 1.0;
     let mut d = 1.0 - qab * x / qap;
-    
+
     if d.abs() < f64::MIN_POSITIVE {
         d = f64::MIN_POSITIVE;
     }
     d = 1.0 / d;
     let mut h = d;
-    
+
     for m in 1..=MAX_ITER {
         let m_f = m as f64;
         let m2 = 2.0 * m_f;
         let aa = m_f * (b - m_f) * x / ((qam + m2) * (a + m2));
-        
+
         d = 1.0 + aa * d;
         if d.abs() < f64::MIN_POSITIVE {
             d = f64::MIN_POSITIVE;
@@ -280,7 +282,7 @@ fn beta_continued_fraction(x: f64, a: f64, b: f64) -> f64 {
         }
         d = 1.0 / d;
         h *= d * c;
-        
+
         let aa = -(a + m_f) * (qab + m_f) * x / ((a + m2) * (qap + m2));
         d = 1.0 + aa * d;
         if d.abs() < f64::MIN_POSITIVE {
@@ -293,12 +295,12 @@ fn beta_continued_fraction(x: f64, a: f64, b: f64) -> f64 {
         d = 1.0 / d;
         let del = d * c;
         h *= del;
-        
+
         if (del - 1.0).abs() < EPS {
             break;
         }
     }
-    
+
     h
 }
 
@@ -331,7 +333,7 @@ mod tests {
         let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
         assert_eq!(safe_mean(&values), 3.0);
         assert!(safe_std_dev(&values) > 0.0);
-        
+
         let empty: Vec<f64> = vec![];
         assert_eq!(safe_mean(&empty), 0.0);
         assert_eq!(safe_std_dev(&empty), 0.0);

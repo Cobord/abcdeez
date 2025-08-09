@@ -1,10 +1,10 @@
-use axum::{extract::{Path, State}, Json};
+use axum::{
+    extract::{Path, State},
+    Json,
+};
 use std::sync::Arc;
 
-use crate::{
-    error::AppResult,
-    state::AppState,
-};
+use crate::{error::AppResult, state::AppState};
 
 pub async fn scales(
     State(_state): State<Arc<AppState>>,

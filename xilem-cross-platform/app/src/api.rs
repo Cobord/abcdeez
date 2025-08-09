@@ -90,7 +90,7 @@ impl ApiClient {
         &self,
         identity_token: String,
         authorization_code: Option<String>,
-        user_info: Option<serde_json::Value>,
+        user_info: Option<AppleUserInfo>,
     ) -> Result<User> {
         let request = AppleSignInRequest {
             identity_token,
@@ -107,8 +107,8 @@ impl ApiClient {
             id: response.user.id,
             username: response.user.username,
             email: response.user.email,
-            password_hash: String::new(), // OAuth users don't have password hashes
-            apple_user_id: None, // Will be populated server-side
+            password_hash: String::new(),
+            apple_user_id: None,
             github_user_id: None,
             oauth_provider_id: None,
             auth_provider: "apple".to_string(),
@@ -124,7 +124,11 @@ impl ApiClient {
         code: String,
         state: String,
     ) -> Result<User> {
-        let request = OAuthCallbackRequest { provider, code, state };
+        let request = OAuthCallbackRequest {
+            provider,
+            code,
+            state,
+        };
         let response: TokenResponse = self.post("/api/auth/oauth/callback", &request).await?;
 
         // Store the access token
@@ -146,7 +150,10 @@ impl ApiClient {
         })
     }
 
-    pub async fn get_oauth_authorization_url(&self, provider: &str) -> Result<OAuthAuthUrlResponse> {
+    pub async fn get_oauth_authorization_url(
+        &self,
+        provider: &str,
+    ) -> Result<OAuthAuthUrlResponse> {
         self.get(&format!("/api/auth/oauth/{}/authorize", provider))
             .await
     }
@@ -263,6 +270,11 @@ impl MockApiClient {
             username,
             email: "test@example.com".to_string(),
             password_hash: String::new(),
+            apple_user_id: None,
+            github_user_id: None,
+            oauth_provider_id: None,
+            auth_provider: "local".to_string(),
+            is_private_email: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         })

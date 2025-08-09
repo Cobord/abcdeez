@@ -133,7 +133,12 @@ impl LearnerModel {
         }
     }
 
-    pub fn update_node_embedding(&mut self, node_id: &str, new_position: f64, reduce_uncertainty: f64) {
+    pub fn update_node_embedding(
+        &mut self,
+        node_id: &str,
+        new_position: f64,
+        reduce_uncertainty: f64,
+    ) {
         if let Some(embedding) = self.node_embeddings.get_mut(node_id) {
             embedding.position = 0.7 * embedding.position + 0.3 * new_position;
             embedding.uncertainty *= (1.0 - reduce_uncertainty).max(0.1);
@@ -144,7 +149,7 @@ impl LearnerModel {
         let key = format!("{:?}", operation);
         if let Some(prof) = self.operation_proficiencies.get_mut(&key) {
             prof.practice_count += 1;
-            
+
             let learning_rate = 0.1;
             if success {
                 prof.theta += learning_rate * (1.0 - sigmoid(prof.theta));
@@ -163,22 +168,23 @@ impl LearnerModel {
             let idx = (node_id.chars().next().unwrap_or('A') as usize) - ('A' as usize);
             format!("node_{}", idx)
         };
-        
+
         if let Some(mem) = self.memory_strengths.get_mut(&key) {
             let now = chrono::Utc::now();
             let time_since = now.signed_duration_since(mem.last_practice);
             let hours_since = time_since.num_hours() as f64;
-            
+
             let current_strength = mem.strength;
             let decay_rate = Self::calculate_decay_rate_static(current_strength);
-            let decayed_strength = Self::apply_forgetting_curve_static(current_strength, hours_since, decay_rate);
-            
+            let decayed_strength =
+                Self::apply_forgetting_curve_static(current_strength, hours_since, decay_rate);
+
             if correct {
                 mem.strength = (decayed_strength + 0.2).min(1.0);
             } else {
                 mem.strength = (decayed_strength - 0.1).max(0.0);
             }
-            
+
             mem.last_practice = now;
         }
     }
@@ -204,7 +210,7 @@ impl LearnerModel {
             let now = chrono::Utc::now();
             let time_since = now.signed_duration_since(mem.last_practice);
             let hours_since = time_since.num_hours() as f64;
-            
+
             let decay_rate = self.calculate_decay_rate(mem.strength);
             self.apply_forgetting_curve(mem.strength, hours_since, decay_rate)
         } else {
@@ -212,22 +218,26 @@ impl LearnerModel {
         }
     }
 
-    pub fn get_optimal_review_time(&self, node_id: &str, target_retention: f64) -> Option<chrono::DateTime<chrono::Utc>> {
+    pub fn get_optimal_review_time(
+        &self,
+        node_id: &str,
+        target_retention: f64,
+    ) -> Option<chrono::DateTime<chrono::Utc>> {
         let mem = self.memory_strengths.get(node_id)?;
-        
+
         if mem.strength <= target_retention {
             return Some(chrono::Utc::now());
         }
-        
+
         let decay_rate = self.calculate_decay_rate(mem.strength);
         let hours_until_review = -(target_retention / mem.strength).ln() / decay_rate;
-        
+
         Some(mem.last_practice + chrono::Duration::hours(hours_until_review as i64))
     }
 
     pub fn get_items_needing_review(&self, threshold: f64) -> Vec<String> {
         let mut items = Vec::new();
-        
+
         for (node_id, _) in &self.memory_strengths {
             if self.get_retention_probability(node_id) < threshold {
                 if let Some(node) = self.node_embeddings.get(node_id) {
@@ -235,7 +245,7 @@ impl LearnerModel {
                 }
             }
         }
-        
+
         items
     }
 
@@ -259,22 +269,24 @@ impl LearnerModel {
     pub fn get_probability_correct(&self, operation: &OperationType, difficulty: f64) -> f64 {
         let key = format!("{:?}", operation);
         let prof = self.operation_proficiencies.get(&key);
-        
+
         let theta = prof.map(|p| p.theta).unwrap_or(-1.0);
-        
+
         sigmoid(theta - difficulty)
     }
 
     pub fn predict_response_time(&self, operation: &OperationType, distance: usize) -> f64 {
         let key = format!("{:?}", operation);
         let prof = self.operation_proficiencies.get(&key);
-        
+
         let base_rt = 1000.0;
         let distance_penalty = 100.0 * distance as f64;
-        
+
         let proficiency_bonus = prof.map(|p| 200.0 * sigmoid(p.theta)).unwrap_or(0.0);
-        
-        let boundary_penalty = self.chunk_boundaries.iter()
+
+        let boundary_penalty = self
+            .chunk_boundaries
+            .iter()
             .filter(|b| b.position < distance)
             .map(|b| 200.0 * b.strength)
             .sum::<f64>();
@@ -283,8 +295,12 @@ impl LearnerModel {
     }
 
     pub fn get_bidirectionality_index(&self) -> f64 {
-        let forward = self.operation_proficiencies.get(&format!("{:?}", OperationType::Successor));
-        let backward = self.operation_proficiencies.get(&format!("{:?}", OperationType::Predecessor));
+        let forward = self
+            .operation_proficiencies
+            .get(&format!("{:?}", OperationType::Successor));
+        let backward = self
+            .operation_proficiencies
+            .get(&format!("{:?}", OperationType::Predecessor));
 
         match (forward, backward) {
             (Some(f), Some(b)) => (f.theta - b.theta).abs(),
@@ -304,7 +320,9 @@ impl LearnerModel {
         let n = distances.len() as f64;
         let sum_x: f64 = distances.iter().sum::<usize>() as f64;
         let sum_y: f64 = rts.iter().sum();
-        let sum_xy: f64 = distances.iter().zip(rts.iter())
+        let sum_xy: f64 = distances
+            .iter()
+            .zip(rts.iter())
             .map(|(x, y)| *x as f64 * y)
             .sum();
         let sum_x2: f64 = distances.iter().map(|x| (*x * *x) as f64).sum();
@@ -313,11 +331,13 @@ impl LearnerModel {
     }
 
     pub fn get_chunk_boundary_penalty(&self) -> f64 {
-        self.chunk_boundaries.iter()
+        self.chunk_boundaries
+            .iter()
             .map(|b| b.strength)
-            .sum::<f64>() / self.chunk_boundaries.len().max(1) as f64
+            .sum::<f64>()
+            / self.chunk_boundaries.len().max(1) as f64
     }
-    
+
     pub fn update_chunk_boundaries(&mut self, crossed_boundary: Option<usize>) {
         if let Some(pos) = crossed_boundary {
             if let Some(boundary) = self.chunk_boundaries.iter_mut().find(|b| b.position == pos) {
@@ -330,20 +350,28 @@ impl LearnerModel {
             }
         }
     }
-    
+
     /// Apply identifiability constraints to prevent gauge freedom in embeddings
     /// This fixes the first and last nodes' positions and centers the embeddings
     pub fn apply_identifiability_constraints(&mut self) {
         // Fix gauge freedom by anchoring first and last nodes
-        if let Some(first_node) = self.node_embeddings.values().min_by_key(|n| n.position as i64) {
+        if let Some(first_node) = self
+            .node_embeddings
+            .values()
+            .min_by_key(|n| n.position as i64)
+        {
             let first_id = first_node.node_id.clone();
             if let Some(first) = self.node_embeddings.get_mut(&first_id) {
                 first.position = 0.0;
                 first.uncertainty = 0.01; // Very certain about anchor
             }
         }
-        
-        if let Some(last_node) = self.node_embeddings.values().max_by_key(|n| n.position as i64) {
+
+        if let Some(last_node) = self
+            .node_embeddings
+            .values()
+            .max_by_key(|n| n.position as i64)
+        {
             let last_id = last_node.node_id.clone();
             let n_nodes = self.node_embeddings.len() as f64;
             if let Some(last) = self.node_embeddings.get_mut(&last_id) {
@@ -351,44 +379,50 @@ impl LearnerModel {
                 last.uncertainty = 0.01; // Very certain about anchor
             }
         }
-        
+
         // Center the embeddings to prevent drift
-        let mean_position: f64 = self.node_embeddings.values().map(|n| n.position).sum::<f64>() 
+        let mean_position: f64 = self
+            .node_embeddings
+            .values()
+            .map(|n| n.position)
+            .sum::<f64>()
             / self.node_embeddings.len() as f64;
         let target_mean = (self.node_embeddings.len() as f64 - 1.0) / 2.0;
         let shift = target_mean - mean_position;
-        
+
         for embedding in self.node_embeddings.values_mut() {
             // Don't shift the anchored nodes
             if embedding.uncertainty > 0.01 {
                 embedding.position += shift;
             }
         }
-        
+
         // Normalize uncertainties to prevent explosion
-        let max_uncertainty = self.node_embeddings.values()
+        let max_uncertainty = self
+            .node_embeddings
+            .values()
             .map(|n| n.uncertainty)
             .fold(0.0, f64::max);
-        
+
         if max_uncertainty > 10.0 {
             for embedding in self.node_embeddings.values_mut() {
                 embedding.uncertainty = embedding.uncertainty / max_uncertainty * 10.0;
             }
         }
     }
-    
+
     /// Regularize embeddings to maintain proper ordering and spacing
     pub fn regularize_embeddings(&mut self, lambda: f64) {
         // Sort nodes by position
         let mut sorted_nodes: Vec<_> = self.node_embeddings.values().cloned().collect();
         sorted_nodes.sort_by(|a, b| a.position.partial_cmp(&b.position).unwrap());
-        
+
         // Apply regularization to maintain minimum spacing
         let min_spacing = 0.1;
         for i in 1..sorted_nodes.len() {
             let prev_pos = sorted_nodes[i - 1].position;
             let curr_pos = sorted_nodes[i].position;
-            
+
             if curr_pos - prev_pos < min_spacing {
                 // Push current node forward
                 if let Some(node) = self.node_embeddings.get_mut(&sorted_nodes[i].node_id) {
@@ -396,17 +430,22 @@ impl LearnerModel {
                 }
             }
         }
-        
+
         // Apply L2 regularization to prevent extreme positions
         for embedding in self.node_embeddings.values_mut() {
-            let expected_pos = embedding.node_id.chars().next()
-                .and_then(|c| if c.is_ascii_uppercase() { 
-                    Some((c as u8 - b'A') as f64) 
-                } else { 
-                    None 
+            let expected_pos = embedding
+                .node_id
+                .chars()
+                .next()
+                .and_then(|c| {
+                    if c.is_ascii_uppercase() {
+                        Some((c as u8 - b'A') as f64)
+                    } else {
+                        None
+                    }
                 })
                 .unwrap_or(embedding.position);
-            
+
             // Pull towards expected position with strength lambda
             embedding.position = (1.0 - lambda) * embedding.position + lambda * expected_pos;
         }
@@ -428,9 +467,12 @@ pub struct LearnerMetrics {
 
 impl LearnerMetrics {
     pub fn from_model(model: &LearnerModel) -> Self {
-        let avg_memory_strength = model.memory_strengths.values()
+        let avg_memory_strength = model
+            .memory_strengths
+            .values()
             .map(|m| m.strength)
-            .sum::<f64>() / model.memory_strengths.len().max(1) as f64;
+            .sum::<f64>()
+            / model.memory_strengths.len().max(1) as f64;
 
         let mut operation_proficiencies = HashMap::new();
         for (key, prof) in &model.operation_proficiencies {

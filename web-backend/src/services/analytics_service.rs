@@ -1,21 +1,20 @@
 use crate::cache::ConnectionManager;
 use crate::db::DbPool;
 use anyhow::Result;
-use sqlx::Row;
 use chrono::{DateTime, Duration, Utc};
 use rand::{distributions::Distribution, thread_rng};
+use sqlx::Row;
 use statrs::distribution::{Continuous, Laplace};
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::utils::statistics::{
-    self, ExGaussianParams, TTestResult, AnovaResult, OutlierAnalysis,
-    analyze_response_times, t_test_two_sample, one_way_anova,
-    comprehensive_outlier_detection, bootstrap_confidence_interval
-};
 use crate::utils::math;
+use crate::utils::statistics::{
+    self, analyze_response_times, bootstrap_confidence_interval, comprehensive_outlier_detection,
+    one_way_anova, t_test_two_sample, AnovaResult, ExGaussianParams, OutlierAnalysis, TTestResult,
+};
 use graph_learning_core::statistics::{DetailedStatistics, ExGaussianParameters, StrategyType};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -87,11 +86,15 @@ impl AnalyticsService {
         let last_24h = now - Duration::hours(24);
 
         // Active learners in last 24 hours
-        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+        let mut conn = self
+            .db
+            .acquire()
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
         let active_learners: i64 = sqlx::query_scalar(
             "SELECT COUNT(DISTINCT l.id) FROM learners l
              JOIN sessions s ON l.id = s.learner_id
-             WHERE s.start_time > ?"
+             WHERE s.start_time > ?",
         )
         .bind(last_24h)
         .fetch_one(&mut *conn)
@@ -120,7 +123,7 @@ impl AnalyticsService {
                 AVG(CASE WHEN correct THEN 1.0 ELSE 0.0 END) as avg_accuracy,
                 AVG(response_time_ms) as avg_response_time
              FROM responses
-             WHERE timestamp > ?"
+             WHERE timestamp > ?",
         )
         .bind(last_24h)
         .fetch_one(&mut *conn)
@@ -129,20 +132,23 @@ impl AnalyticsService {
 
         let total_responses: i64 = response_stats.get::<i64, _>("total_responses");
         let total_responses = total_responses as usize;
-        let avg_accuracy: f64 = response_stats.get::<Option<f64>, _>("avg_accuracy").unwrap_or(0.0);
-        let avg_response_time: f64 = response_stats.get::<Option<f64>, _>("avg_response_time").unwrap_or(0.0);
+        let avg_accuracy: f64 = response_stats
+            .get::<Option<f64>, _>("avg_accuracy")
+            .unwrap_or(0.0);
+        let avg_response_time: f64 = response_stats
+            .get::<Option<f64>, _>("avg_response_time")
+            .unwrap_or(0.0);
         let average_accuracy = self.add_differential_privacy_noise(avg_accuracy);
         let average_response_time_ms = self.add_differential_privacy_noise(avg_response_time);
 
         // Tasks per minute in last hour
         let last_hour = now - Duration::hours(1);
-        let recent_responses: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM responses WHERE timestamp > ?"
-        )
-        .bind(last_hour)
-        .fetch_one(&mut *conn)
-        .await
-        .map_err(|e| AppError::DatabaseError(e))?;
+        let recent_responses: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM responses WHERE timestamp > ?")
+                .bind(last_hour)
+                .fetch_one(&mut *conn)
+                .await
+                .map_err(|e| AppError::DatabaseError(e))?;
         let recent_responses = recent_responses as f64;
 
         let tasks_per_minute = recent_responses / 60.0;
@@ -194,7 +200,11 @@ impl AnalyticsService {
 
     pub async fn find_bottlenecks(&self, min_samples: usize) -> Result<Vec<Bottleneck>> {
         // Find task types with high error rates or response times
-        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+        let mut conn = self
+            .db
+            .acquire()
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
         let rows = sqlx::query(
             "SELECT
                 task_type,
@@ -205,7 +215,7 @@ impl AnalyticsService {
              WHERE timestamp > ?
              GROUP BY task_type
              HAVING COUNT(*) >= ?
-             ORDER BY error_rate DESC, avg_response_time DESC"
+             ORDER BY error_rate DESC, avg_response_time DESC",
         )
         .bind(Utc::now() - Duration::days(7))
         .bind(min_samples as i64)
@@ -217,17 +227,20 @@ impl AnalyticsService {
             .into_iter()
             .filter(|row| {
                 let error_rate = row.get::<Option<f64>, _>("error_rate").unwrap_or(0.0);
-                let avg_rt = row.get::<Option<f64>, _>("avg_response_time").unwrap_or(0.0);
+                let avg_rt = row
+                    .get::<Option<f64>, _>("avg_response_time")
+                    .unwrap_or(0.0);
                 error_rate > 0.3 || avg_rt > 5000.0 // 30% error rate or >5s response time
             })
             .map(|row| Bottleneck {
                 task_type: row.get::<String, _>("task_type"),
                 difficulty_range: "medium".to_string(), // Simplified
                 error_rate: self.add_differential_privacy_noise(
-                    row.get::<Option<f64>, _>("error_rate").unwrap_or(0.0)
+                    row.get::<Option<f64>, _>("error_rate").unwrap_or(0.0),
                 ),
                 average_response_time_ms: self.add_differential_privacy_noise(
-                    row.get::<Option<f64>, _>("avg_response_time").unwrap_or(0.0)
+                    row.get::<Option<f64>, _>("avg_response_time")
+                        .unwrap_or(0.0),
                 ),
                 sample_size: row.get::<Option<i64>, _>("sample_size").unwrap_or(0) as usize,
                 identified_at: Utc::now(),
@@ -241,9 +254,13 @@ impl AnalyticsService {
         let experiment_id_bytes = experiment_id.as_bytes();
 
         // Get all participants in the experiment
-        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+        let mut conn = self
+            .db
+            .acquire()
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
         let participants = sqlx::query(
-            "SELECT learner_id, condition FROM experiment_participants WHERE experiment_id = ?"
+            "SELECT learner_id, condition FROM experiment_participants WHERE experiment_id = ?",
         )
         .bind(&experiment_id_bytes[..])
         .fetch_all(&mut *conn)
@@ -253,7 +270,9 @@ impl AnalyticsService {
         let mut conditions: HashMap<String, ConditionStats> = HashMap::new();
 
         for participant in participants {
-            let condition = participant.get::<Option<String>, _>("condition").unwrap_or("control".to_string());
+            let condition = participant
+                .get::<Option<String>, _>("condition")
+                .unwrap_or("control".to_string());
             let learner_id_bytes: Vec<u8> = participant.get::<Vec<u8>, _>("learner_id");
 
             // Get performance stats for this learner
@@ -265,7 +284,7 @@ impl AnalyticsService {
                     COUNT(DISTINCT s.id) as session_count
                  FROM responses r
                  JOIN sessions s ON r.session_id = s.id
-                 WHERE s.learner_id = ?"
+                 WHERE s.learner_id = ?",
             )
             .bind(&learner_id_bytes[..])
             .fetch_one(&mut *conn)
@@ -281,8 +300,10 @@ impl AnalyticsService {
             });
 
             condition_stats.participant_count += 1;
-            condition_stats.average_accuracy += stats.get::<Option<f64>, _>("accuracy").unwrap_or(0.0);
-            condition_stats.average_response_time_ms += stats.get::<Option<f64>, _>("avg_rt").unwrap_or(0.0);
+            condition_stats.average_accuracy +=
+                stats.get::<Option<f64>, _>("accuracy").unwrap_or(0.0);
+            condition_stats.average_response_time_ms +=
+                stats.get::<Option<f64>, _>("avg_rt").unwrap_or(0.0);
 
             // Simplified completion rate (sessions > 0)
             if stats.get::<Option<i64>, _>("session_count").unwrap_or(0) > 0 {
@@ -355,21 +376,24 @@ impl AnalyticsService {
         let now = Utc::now();
         let last_minute = now - Duration::minutes(1);
 
-        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+        let mut conn = self
+            .db
+            .acquire()
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
         let recent_activity = sqlx::query(
-            "SELECT COUNT(*) as responses_last_minute FROM responses WHERE timestamp > ?"
+            "SELECT COUNT(*) as responses_last_minute FROM responses WHERE timestamp > ?",
         )
         .bind(last_minute)
         .fetch_one(&mut *conn)
         .await
         .map_err(|e| AppError::DatabaseError(e))?;
 
-        let active_sessions = sqlx::query(
-            "SELECT COUNT(*) as active_sessions FROM sessions WHERE status = 'active'"
-        )
-        .fetch_one(&mut *conn)
-        .await
-        .map_err(|e| AppError::DatabaseError(e))?;
+        let active_sessions =
+            sqlx::query("SELECT COUNT(*) as active_sessions FROM sessions WHERE status = 'active'")
+                .fetch_one(&mut *conn)
+                .await
+                .map_err(|e| AppError::DatabaseError(e))?;
 
         Ok(serde_json::json!({
             "timestamp": now,
@@ -427,7 +451,11 @@ impl AnalyticsService {
         let learner_id_bytes = learner_id.as_bytes();
 
         // Get responses over time with running accuracy
-        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+        let mut conn = self
+            .db
+            .acquire()
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
         let rows = sqlx::query(
             "SELECT
                 timestamp,
@@ -436,7 +464,7 @@ impl AnalyticsService {
              FROM responses r
              JOIN sessions s ON r.session_id = s.id
              WHERE s.learner_id = ?
-             ORDER BY timestamp"
+             ORDER BY timestamp",
         )
         .bind(&learner_id_bytes[..])
         .fetch_all(&mut *conn)
@@ -460,7 +488,11 @@ impl AnalyticsService {
 
     async fn get_population_learning_curve(&self) -> Result<Vec<(DateTime<Utc>, f64)>> {
         // Get population accuracy over time (daily averages)
-        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+        let mut conn = self
+            .db
+            .acquire()
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
         let rows = sqlx::query(
             "SELECT
                 DATE(timestamp) as date,
@@ -468,7 +500,7 @@ impl AnalyticsService {
              FROM responses
              WHERE timestamp > ?
              GROUP BY DATE(timestamp)
-             ORDER BY date"
+             ORDER BY date",
         )
         .bind(Utc::now() - Duration::days(30))
         .fetch_all(&mut *conn)
@@ -481,9 +513,11 @@ impl AnalyticsService {
                 let date_str: String = row.get::<String, _>("date");
                 let date = chrono::NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")
                     .unwrap_or_else(|_| Utc::now().date_naive())
-                    .and_hms_opt(12, 0, 0).unwrap().and_utc();
+                    .and_hms_opt(12, 0, 0)
+                    .unwrap()
+                    .and_utc();
                 let accuracy = self.add_differential_privacy_noise(
-                    row.get::<Option<f64>, _>("daily_accuracy").unwrap_or(0.0)
+                    row.get::<Option<f64>, _>("daily_accuracy").unwrap_or(0.0),
                 );
                 (date, accuracy)
             })
@@ -491,16 +525,16 @@ impl AnalyticsService {
 
         Ok(curve)
     }
-    
+
     async fn calculate_learning_rate(&self, stats: &ConditionStats) -> Result<f64> {
         // Calculate learning rate based on improvement trajectory
         // Learning rate = rate of accuracy improvement per session
-        
+
         // For now, use a heuristic based on current performance
         // In practice, this would analyze time series of accuracy data
-        
+
         let base_rate = 0.05; // Conservative baseline
-        
+
         // Higher accuracy suggests faster learning (up to a point)
         let accuracy_factor = if stats.average_accuracy < 0.5 {
             // Below chance performance - very slow learning
@@ -515,7 +549,7 @@ impl AnalyticsService {
             // Near-ceiling performance - slower improvement expected
             0.8 + (1.0 - stats.average_accuracy) * 2.0
         };
-        
+
         // Response time factor - faster responses might indicate better learning
         let rt_factor = if stats.average_response_time_ms > 10000.0 {
             // Very slow responses suggest difficulty
@@ -527,20 +561,25 @@ impl AnalyticsService {
             // Quick responses suggest confidence
             1.2
         };
-        
+
         // Completion rate factor - completing sessions indicates engagement
         let completion_factor = 0.5 + stats.completion_rate * 0.5;
-        
+
         // Combine factors
         let learning_rate = base_rate * accuracy_factor * rt_factor * completion_factor;
-        
+
         // Clamp to reasonable range
         Ok(math::clamp(learning_rate, 0.01, 0.3))
     }
 
     /// Enhanced response time analysis using Ex-Gaussian modeling
-    pub async fn analyze_response_time_distribution(&self, learner_id: Option<Uuid>, task_type: Option<String>) -> Result<ResponseTimeAnalysisResult> {
-        let mut query = "SELECT response_time_ms FROM responses WHERE response_time_ms > 0".to_string();
+    pub async fn analyze_response_time_distribution(
+        &self,
+        learner_id: Option<Uuid>,
+        task_type: Option<String>,
+    ) -> Result<ResponseTimeAnalysisResult> {
+        let mut query =
+            "SELECT response_time_ms FROM responses WHERE response_time_ms > 0".to_string();
         let mut bindings = Vec::new();
 
         if let Some(id) = learner_id {
@@ -553,13 +592,17 @@ impl AnalyticsService {
             bindings.push(task.into_bytes());
         }
 
-        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+        let mut conn = self
+            .db
+            .acquire()
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
         let mut query_builder = sqlx::query(&query);
-        
+
         for binding in &bindings {
             query_builder = query_builder.bind(&binding[..]);
         }
-        
+
         let rows = query_builder
             .fetch_all(&mut *conn)
             .await
@@ -591,8 +634,14 @@ impl AnalyticsService {
         statistical_summary.insert("mean".to_string(), statistics::mean(&response_times));
         statistical_summary.insert("median".to_string(), statistics::median(&response_times));
         statistical_summary.insert("std_dev".to_string(), statistics::std_dev(&response_times));
-        statistical_summary.insert("skewness".to_string(), statistics::skewness(&response_times));
-        statistical_summary.insert("kurtosis".to_string(), statistics::kurtosis(&response_times));
+        statistical_summary.insert(
+            "skewness".to_string(),
+            statistics::skewness(&response_times),
+        );
+        statistical_summary.insert(
+            "kurtosis".to_string(),
+            statistics::kurtosis(&response_times),
+        );
 
         Ok(ResponseTimeAnalysisResult {
             n_samples: analysis.n_samples,
@@ -604,7 +653,11 @@ impl AnalyticsService {
     }
 
     /// Compare response times between different conditions using t-tests
-    pub async fn compare_response_times(&self, condition1_id: Uuid, condition2_id: Uuid) -> Result<ComparisonResult> {
+    pub async fn compare_response_times(
+        &self,
+        condition1_id: Uuid,
+        condition2_id: Uuid,
+    ) -> Result<ComparisonResult> {
         let times1 = self.get_condition_response_times(condition1_id).await?;
         let times2 = self.get_condition_response_times(condition2_id).await?;
 
@@ -627,8 +680,13 @@ impl AnalyticsService {
         // Calculate Cohen's d effect size
         let mean1 = statistics::mean(&times1);
         let mean2 = statistics::mean(&times2);
-        let pooled_sd = ((statistics::variance(&times1) + statistics::variance(&times2)) / 2.0).sqrt();
-        let cohens_d = if pooled_sd > 0.0 { (mean1 - mean2) / pooled_sd } else { 0.0 };
+        let pooled_sd =
+            ((statistics::variance(&times1) + statistics::variance(&times2)) / 2.0).sqrt();
+        let cohens_d = if pooled_sd > 0.0 {
+            (mean1 - mean2) / pooled_sd
+        } else {
+            0.0
+        };
 
         Ok(ComparisonResult {
             test_type: "t-test".to_string(),
@@ -638,12 +696,20 @@ impl AnalyticsService {
             p_value: t_test.p_value,
             significant: t_test.significant,
             effect_size: cohens_d,
-            confidence_interval: Some(bootstrap_confidence_interval(&times1, statistics::mean, 0.95, 1000)),
+            confidence_interval: Some(bootstrap_confidence_interval(
+                &times1,
+                statistics::mean,
+                0.95,
+                1000,
+            )),
         })
     }
 
     /// Perform one-way ANOVA across multiple conditions
-    pub async fn compare_multiple_conditions(&self, condition_ids: &[Uuid]) -> Result<AnovaComparisonResult> {
+    pub async fn compare_multiple_conditions(
+        &self,
+        condition_ids: &[Uuid],
+    ) -> Result<AnovaComparisonResult> {
         let mut groups = Vec::new();
         let mut condition_names = Vec::new();
 
@@ -667,8 +733,8 @@ impl AnalyticsService {
             });
         }
 
-        let anova = one_way_anova(&groups, 0.05)
-            .map_err(|e| AppError::ValidationError(e.to_string()))?;
+        let anova =
+            one_way_anova(&groups, 0.05).map_err(|e| AppError::ValidationError(e.to_string()))?;
 
         // Perform post-hoc pairwise comparisons if significant
         let mut post_hoc_comparisons = HashMap::new();
@@ -676,13 +742,20 @@ impl AnalyticsService {
             for i in 0..groups.len() {
                 for j in (i + 1)..groups.len() {
                     let comparison_key = format!("{}_{}", condition_names[i], condition_names[j]);
-                    if let Ok(t_test) = t_test_two_sample(&groups[i], &groups[j], 0.05 / (groups.len() * (groups.len() - 1) / 2) as f64) {
-                        post_hoc_comparisons.insert(comparison_key, PostHocComparison {
-                            group1: condition_names[i].clone(),
-                            group2: condition_names[j].clone(),
-                            p_value: t_test.p_value,
-                            significant: t_test.significant,
-                        });
+                    if let Ok(t_test) = t_test_two_sample(
+                        &groups[i],
+                        &groups[j],
+                        0.05 / (groups.len() * (groups.len() - 1) / 2) as f64,
+                    ) {
+                        post_hoc_comparisons.insert(
+                            comparison_key,
+                            PostHocComparison {
+                                group1: condition_names[i].clone(),
+                                group2: condition_names[j].clone(),
+                                p_value: t_test.p_value,
+                                significant: t_test.significant,
+                            },
+                        );
                     }
                 }
             }
@@ -700,9 +773,16 @@ impl AnalyticsService {
     }
 
     /// Detect learning performance outliers across population
-    pub async fn detect_performance_outliers(&self, threshold_multiplier: f64) -> Result<OutlierDetectionResult> {
-        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
-        
+    pub async fn detect_performance_outliers(
+        &self,
+        threshold_multiplier: f64,
+    ) -> Result<OutlierDetectionResult> {
+        let mut conn = self
+            .db
+            .acquire()
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
+
         // Get accuracy data for all learners
         let accuracy_rows = sqlx::query(
             "SELECT l.id, AVG(CASE WHEN r.correct THEN 1.0 ELSE 0.0 END) as accuracy
@@ -710,7 +790,7 @@ impl AnalyticsService {
              JOIN sessions s ON l.id = s.learner_id  
              JOIN responses r ON s.id = r.session_id
              GROUP BY l.id
-             HAVING COUNT(r.id) >= 10" // Minimum responses for reliable estimate
+             HAVING COUNT(r.id) >= 10", // Minimum responses for reliable estimate
         )
         .fetch_all(&mut *conn)
         .await
@@ -731,12 +811,12 @@ impl AnalyticsService {
         }
 
         let outlier_analysis = comprehensive_outlier_detection(&accuracies);
-        
+
         let mut outlier_learners = Vec::new();
         for (i, row) in accuracy_rows.iter().enumerate() {
             let accuracy = accuracies[i];
-            let is_outlier = outlier_analysis.z_score_outliers.contains(&accuracy) || 
-                           outlier_analysis.modified_z_outliers.contains(&accuracy);
+            let is_outlier = outlier_analysis.z_score_outliers.contains(&accuracy)
+                || outlier_analysis.modified_z_outliers.contains(&accuracy);
             if is_outlier {
                 let learner_id_bytes: Vec<u8> = row.get("id");
                 if let Ok(learner_id_array) = learner_id_bytes.try_into() {
@@ -765,22 +845,27 @@ impl AnalyticsService {
     // Helper method to get response times for a condition
     async fn get_condition_response_times(&self, condition_id: Uuid) -> Result<Vec<f64>> {
         let condition_id_bytes = condition_id.as_bytes();
-        let mut conn = self.db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
-        
+        let mut conn = self
+            .db
+            .acquire()
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
+
         let rows = sqlx::query(
             "SELECT r.response_time_ms 
              FROM responses r
              JOIN sessions s ON r.session_id = s.id
-             WHERE s.learner_id = ? AND r.response_time_ms > 0"
+             WHERE s.learner_id = ? AND r.response_time_ms > 0",
         )
         .bind(&condition_id_bytes[..])
         .fetch_all(&mut *conn)
         .await
         .map_err(|e| AppError::DatabaseError(e))?;
 
-        Ok(rows.iter()
-           .map(|row| row.get::<i32, _>("response_time_ms") as f64)
-           .collect())
+        Ok(rows
+            .iter()
+            .map(|row| row.get::<i32, _>("response_time_ms") as f64)
+            .collect())
     }
 }
 

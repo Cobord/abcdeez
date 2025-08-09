@@ -1,13 +1,14 @@
 // 🦀 The Little Crab Easter Egg - A delightful surprise for curious users
-use std::time::{Duration, Instant};
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
+use std::time::{Duration, Instant};
 use xilem::{
     view::{button, flex, label, Axis},
     Color, TextAlignment, WidgetView,
 };
 
 use crate::AppData;
+use chrono::Datelike;
 
 /// The little crab that lives in the corner of your screen
 #[derive(Debug, Clone)]
@@ -26,24 +27,24 @@ pub struct LittleCrab {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CrabPhase {
-    Hidden,           // Crab is dormant in corner
-    Peeking,         // Crab cautiously looks out
-    Crawling,        // Crab is moving across screen
-    Dancing,         // Crab is celebrating something
-    Helping,         // Crab shows up to offer encouragement
-    Sleeping,        // Crab is taking a nap
-    Excited,         // Crab is bouncing with joy
-    Curious,         // Crab is investigating something
-    Waving,          // Crab greets the user
+    Hidden,   // Crab is dormant in corner
+    Peeking,  // Crab cautiously looks out
+    Crawling, // Crab is moving across screen
+    Dancing,  // Crab is celebrating something
+    Helping,  // Crab shows up to offer encouragement
+    Sleeping, // Crab is taking a nap
+    Excited,  // Crab is bouncing with joy
+    Curious,  // Crab is investigating something
+    Waving,   // Crab greets the user
 }
 
 #[derive(Debug, Clone)]
 pub enum CrabPersonality {
-    Shy,        // Hides quickly, peeks occasionally  
-    Playful,    // Dances around, shows messages
-    Helpful,    // Appears during struggles, cheers successes
+    Shy,         // Hides quickly, peeks occasionally
+    Playful,     // Dances around, shows messages
+    Helpful,     // Appears during struggles, cheers successes
     Mischievous, // Randomly appears, steals focus
-    Wise,       // Shows deep learning insights
+    Wise,        // Shows deep learning insights
 }
 
 impl Default for LittleCrab {
@@ -168,7 +169,7 @@ impl LittleCrab {
 
     fn react_to_learning_context(&mut self, app_data: &AppData) {
         // React to user's learning progress and emotional state
-        
+
         // Celebrate perfect answers
         if app_data.show_feedback && app_data.last_response_correct {
             if self.animation_phase == CrabPhase::Hidden && self.energy > 0.5 {
@@ -177,16 +178,20 @@ impl LittleCrab {
         }
 
         // Offer encouragement during struggles
-        if app_data.current_metrics.streak_count == 0 && 
-           app_data.session_responses.len() > 3 &&
-           app_data.current_metrics.accuracy_rate < 0.5 {
+        if app_data.current_metrics.streak_count == 0
+            && app_data.session_responses.len() > 3
+            && app_data.current_metrics.accuracy_rate < 0.5
+        {
             if self.animation_phase == CrabPhase::Hidden {
                 self.offer_encouragement();
             }
         }
 
         // Get excited about new achievements
-        if matches!(self.personality, CrabPersonality::Playful | CrabPersonality::Helpful) {
+        if matches!(
+            self.personality,
+            CrabPersonality::Playful | CrabPersonality::Helpful
+        ) {
             if app_data.current_metrics.best_streak > 5 {
                 self.energy = (self.energy + 0.1).min(1.0);
             }
@@ -231,15 +236,15 @@ impl LittleCrab {
     fn celebrate_success(&mut self) {
         self.animation_phase = CrabPhase::Excited;
         self.energy = (self.energy + 0.2).min(1.0);
-        
+
         let celebrations = [
             "🦀 Excellent! 🦀",
-            "🎉 Crab-tastic! 🎉", 
+            "🎉 Crab-tastic! 🎉",
             "✨ You're crushing it! ✨",
             "🌟 Keep going! 🌟",
             "🦀 *celebratory claw snapping* 🦀",
         ];
-        
+
         let mut rng = StdRng::from_entropy();
         let msg = celebrations[rng.gen_range(0..celebrations.len())];
         self.show_message(msg);
@@ -247,16 +252,16 @@ impl LittleCrab {
 
     fn offer_encouragement(&mut self) {
         self.animation_phase = CrabPhase::Helping;
-        
+
         let encouragements = [
             "🦀 Don't give up! Learning takes time 💪",
-            "🌊 Every expert was once a beginner 🌊", 
+            "🌊 Every expert was once a beginner 🌊",
             "🦀 You've got this! Keep trying! 🦀",
             "✨ Mistakes help you learn faster ✨",
             "🦀 *supportive crab gestures* 🦀",
             "🌟 Progress, not perfection! 🌟",
         ];
-        
+
         let mut rng = StdRng::from_entropy();
         let msg = encouragements[rng.gen_range(0..encouragements.len())];
         self.show_message(msg);
@@ -266,11 +271,11 @@ impl LittleCrab {
         let discovery_messages = [
             "🦀 Oh! You found me! 🦀",
             "👋 Hello there, curious human! 👋",
-            "🎉 Welcome to the secret crab club! 🎉", 
+            "🎉 Welcome to the secret crab club! 🎉",
             "🦀 I've been waiting for someone to notice me! 🦀",
             "✨ You have discovered: The Learning Crab! ✨",
         ];
-        
+
         let mut rng = StdRng::from_entropy();
         let msg = discovery_messages[rng.gen_range(0..discovery_messages.len())];
         self.show_message(msg);
@@ -287,7 +292,7 @@ impl LittleCrab {
             let speed = 0.02;
             let dx = self.target_position.0 - self.position.0;
             let dy = self.target_position.1 - self.position.1;
-            
+
             if dx.abs() < 0.01 && dy.abs() < 0.01 {
                 // Reached target, pick new behavior
                 if self.energy > 0.7 {
@@ -354,20 +359,20 @@ impl LittleCrab {
                 self.show_message(msg);
             }
         }
-        
+
         self.energy = (self.energy + 0.1).min(1.0);
     }
 
     /// Special seasonal or contextual behaviors
     pub fn seasonal_behavior(&mut self) {
         let now = chrono::Utc::now();
-        
+
         // Holiday behaviors
         if now.month() == 12 && now.day() >= 24 && now.day() <= 26 {
             // Christmas behavior
             self.show_message("🎄🦀 Merry Crabmas! 🦀🎄");
         } else if now.month() == 10 && now.day() == 31 {
-            // Halloween behavior  
+            // Halloween behavior
             self.show_message("🎃🦀 Boo! Spooky learning crab! 🦀🎃");
         } else if now.month() == 7 && now.day() == 4 {
             // July 4th (or any celebration of independence/freedom to learn!)
@@ -397,8 +402,12 @@ fn should_peek(personality: &CrabPersonality, energy: f32, time_since_last_move:
     };
 
     let energy_modifier = energy * 2.0;
-    let time_modifier = if time_since_last_move > Duration::from_secs(60) { 2.0 } else { 1.0 };
-    
+    let time_modifier = if time_since_last_move > Duration::from_secs(60) {
+        2.0
+    } else {
+        1.0
+    };
+
     let mut rng = StdRng::from_entropy();
     rng.gen_bool((base_chance * energy_modifier * time_modifier) as f64)
 }
@@ -410,19 +419,16 @@ pub fn render_crab_overlay(crab: &LittleCrab) -> Option<impl WidgetView<AppData>
     }
 
     let crab_display = flex((
-        button(
-            crab.get_crab_emoji(),
-            |data: &mut AppData| {
-                if let Some(crab) = &mut data.little_crab {
-                    crab.handle_interaction();
-                }
-            },
-        ),
+        button(crab.get_crab_emoji(), |data: &mut AppData| {
+            if let Some(crab) = &mut data.little_crab {
+                crab.handle_interaction();
+            }
+        }),
         if let Some(message) = &crab.message {
             Some(
-                label(message)
+                label(message.as_str())
                     .brush(Color::from_rgb8(255, 255, 255))
-                    .alignment(TextAlignment::Start)
+                    .alignment(TextAlignment::Start),
             )
         } else {
             None
@@ -443,9 +449,9 @@ pub fn init_random_crab() -> LittleCrab {
         CrabPersonality::Mischievous,
         CrabPersonality::Wise,
     ];
-    
+
     let personality = personalities[rng.gen_range(0..personalities.len())].clone();
-    
+
     LittleCrab {
         personality,
         energy: rng.gen_range(0.3..0.9),

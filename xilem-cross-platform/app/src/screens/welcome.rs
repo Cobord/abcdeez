@@ -1,9 +1,12 @@
 use xilem::{
-    view::{button, flex, label, prose, Axis},
+    core::AnyView,
+    view::{button, flex, label, prose, Axis, FlexExt},
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{components::*, models::*, apple_signin_button::standard_apple_signin_button, AppData, Screen};
+use crate::{
+    apple_signin_button::standard_apple_signin_button, components::*, models::*, AppData, Screen,
+};
 
 // Welcome/Login Screen
 pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
@@ -29,25 +32,21 @@ pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     data.password_input = value;
                 }),
             ),
+            // Render a visually different label when in-flight, otherwise an active button
             if data.login_request_in_flight {
-                // Proper loading state with disabled button
-                button("Login", |_: &mut AppData| {})
-                    .disabled(true)
+                label("Logging in...").alignment(TextAlignment::Middle).into_any_flex()
             } else {
                 button("Login",
                 |data: &mut AppData| {
                     if !data.login_request_in_flight {
                         data.login();
                     }
-                }),
+                }).into_any_flex()
             },
-            
             // OAuth Section - App Store Compliant
             label("── Or ──").alignment(TextAlignment::Middle),
-            
             // App Store compliant Apple Sign In button
             standard_apple_signin_button(data),
-            
         )).direction(Axis::Vertical)),
 
         card("Quick Start", flex((

@@ -45,14 +45,8 @@ jobs:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run tests - Core Library
-        run: cargo test --package graph-learning-core --verbose
-
-      - name: Run tests - UI App
-        run: cargo test --package graph_learning_app --verbose
-
-      - name: Run tests - Web Backend
-        run: cargo test --package web-backend --verbose
+      - name: Run tests (workspace)
+        run: cargo test --workspace --all-targets --no-run && cargo test --workspace --all-features
 
   fmt:
     name: Rustfmt
@@ -118,14 +112,8 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build Core Library
-        run: cargo build --package graph-learning-core --target ${{ matrix.target }} --verbose
-
-      - name: Build UI App
-        run: cargo build --package graph_learning_app --target ${{ matrix.target }} --verbose
-
-      - name: Build Web Backend
-        run: cargo build --package web-backend --target ${{ matrix.target }} --verbose
+      - name: Build (workspace)
+        run: cargo build --workspace --target ${{ matrix.target }} --verbose
 
   demo-test:
     name: Demo Integration Test

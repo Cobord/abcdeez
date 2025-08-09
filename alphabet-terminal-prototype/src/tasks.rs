@@ -1,23 +1,53 @@
 use crate::learner::OperationType;
 use crate::topology::Topology;
-use rand::seq::{SliceRandom, IteratorRandom};
+use rand::seq::{IteratorRandom, SliceRandom};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TaskType {
-    PairwiseOrder { a: String, b: String },
-    Successor { item: String },
-    Predecessor { item: String },
-    KJump { start: String, k: i32 },
-    Segment { start: String, count: usize, reverse: bool },
-    Index { item: String },
-    MissingItem { before: String, after: String },
-    ShortestDistance { from: String, to: String },
-    Comparability { a: String, b: String },
-    TopologicalSort { items: Vec<String> },
-    ShortestPath { from: String, to: String },
+    PairwiseOrder {
+        a: String,
+        b: String,
+    },
+    Successor {
+        item: String,
+    },
+    Predecessor {
+        item: String,
+    },
+    KJump {
+        start: String,
+        k: i32,
+    },
+    Segment {
+        start: String,
+        count: usize,
+        reverse: bool,
+    },
+    Index {
+        item: String,
+    },
+    MissingItem {
+        before: String,
+        after: String,
+    },
+    ShortestDistance {
+        from: String,
+        to: String,
+    },
+    Comparability {
+        a: String,
+        b: String,
+    },
+    TopologicalSort {
+        items: Vec<String>,
+    },
+    ShortestPath {
+        from: String,
+        to: String,
+    },
     MinimalElements,
     MaximalElements,
 }
@@ -56,13 +86,17 @@ impl TaskGenerator {
 
     pub fn generate_task(&mut self, task_type: Option<TaskType>) -> Task {
         let task_type = task_type.unwrap_or_else(|| self.random_task_type());
-        
+
         match task_type {
             TaskType::PairwiseOrder { a, b } => self.generate_pairwise_order(a, b),
             TaskType::Successor { item } => self.generate_successor(item),
             TaskType::Predecessor { item } => self.generate_predecessor(item),
             TaskType::KJump { start, k } => self.generate_k_jump(start, k),
-            TaskType::Segment { start, count, reverse } => self.generate_segment(start, count, reverse),
+            TaskType::Segment {
+                start,
+                count,
+                reverse,
+            } => self.generate_segment(start, count, reverse),
             TaskType::Index { item } => self.generate_index(item),
             TaskType::MissingItem { before, after } => self.generate_missing_item(before, after),
             TaskType::ShortestDistance { from, to } => self.generate_shortest_distance(from, to),
@@ -77,14 +111,14 @@ impl TaskGenerator {
     fn random_task_type(&mut self) -> TaskType {
         let nodes = &self.topology.nodes;
         let n = nodes.len();
-        
+
         let task_types = vec![
             TaskType::PairwiseOrder {
                 a: nodes[self.rng.gen_range(0..n)].label.clone(),
                 b: nodes[self.rng.gen_range(0..n)].label.clone(),
             },
             TaskType::Successor {
-                item: nodes[self.rng.gen_range(0..n-1)].label.clone(),
+                item: nodes[self.rng.gen_range(0..n - 1)].label.clone(),
             },
             TaskType::Predecessor {
                 item: nodes[self.rng.gen_range(1..n)].label.clone(),
@@ -114,9 +148,14 @@ impl TaskGenerator {
             None => "Not applicable for cyclic".to_string(),
         };
 
-        let distance = self.topology.get_node_by_label(&a)
-            .and_then(|na| self.topology.get_node_by_label(&b)
-                .and_then(|nb| self.topology.get_distance(&na.id, &nb.id)))
+        let distance = self
+            .topology
+            .get_node_by_label(&a)
+            .and_then(|na| {
+                self.topology
+                    .get_node_by_label(&b)
+                    .and_then(|nb| self.topology.get_distance(&na.id, &nb.id))
+            })
             .unwrap_or(0);
 
         Task {
@@ -133,7 +172,7 @@ impl TaskGenerator {
         let prompt = format!("What comes after '{}'?", item);
         let node = self.topology.get_node_by_label(&item).unwrap();
         let successor_id = self.topology.get_successor(&node.id);
-        
+
         let correct_answer = successor_id
             .and_then(|id| self.topology.get_node_by_id(&id))
             .map(|n| n.label.clone())
@@ -156,7 +195,7 @@ impl TaskGenerator {
         let prompt = format!("What comes before '{}'?", item);
         let node = self.topology.get_node_by_label(&item).unwrap();
         let predecessor_id = self.topology.get_predecessor(&node.id);
-        
+
         let correct_answer = predecessor_id
             .and_then(|id| self.topology.get_node_by_id(&id))
             .map(|n| n.label.clone())
@@ -178,10 +217,10 @@ impl TaskGenerator {
     fn generate_k_jump(&self, start: String, k: i32) -> Task {
         let direction = if k > 0 { "after" } else { "before" };
         let prompt = format!("What is {} positions {} '{}'?", k.abs(), direction, start);
-        
+
         let node = self.topology.get_node_by_label(&start).unwrap();
         let target_id = self.topology.get_k_jump(&node.id, k);
-        
+
         let correct_answer = target_id
             .and_then(|id| self.topology.get_node_by_id(&id))
             .map(|n| n.label.clone())
@@ -208,19 +247,25 @@ impl TaskGenerator {
         // Can ask for items before, after, or from a starting point
         let mut rng = rand::thread_rng();
         let recital_type = rng.gen_range(0..3);
-        
+
         let (prompt, correct_answer, difficulty_bonus) = match recital_type {
             0 => {
                 // Standard: from a starting point
                 let direction = if reverse { "reverse" } else { "forward" };
-                let prompt = format!("List {} items starting from '{}' in {} order:", count, start, direction);
+                let prompt = format!(
+                    "List {} items starting from '{}' in {} order:",
+                    count, start, direction
+                );
                 let segment = self.topology.get_segment(&start, count, reverse);
                 (prompt, segment.join(", "), 0.0)
-            },
+            }
             1 if count <= 4 => {
                 // Preceding items (like "4 letters preceding P in reverse")
                 let prompt = if reverse {
-                    format!("Recite the {} items preceding '{}' in reverse order:", count, start)
+                    format!(
+                        "Recite the {} items preceding '{}' in reverse order:",
+                        count, start
+                    )
                 } else {
                     format!("List the {} items that come before '{}':", count, start)
                 };
@@ -239,26 +284,39 @@ impl TaskGenerator {
                     }
                     (prompt, items.join(", "), 0.1)
                 } else {
-                    let prompt = format!("List {} items starting from '{}' in forward order:", count, start);
+                    let prompt = format!(
+                        "List {} items starting from '{}' in forward order:",
+                        count, start
+                    );
                     let segment = self.topology.get_segment(&start, count, false);
                     (prompt, segment.join(", "), 0.0)
                 }
-            },
+            }
             _ => {
                 // Standard fallback for larger segments
                 let direction = if reverse { "reverse" } else { "forward" };
-                let prompt = format!("List {} items starting from '{}' in {} order:", count, start, direction);
+                let prompt = format!(
+                    "List {} items starting from '{}' in {} order:",
+                    count, start, direction
+                );
                 let segment = self.topology.get_segment(&start, count, reverse);
                 (prompt, segment.join(", "), 0.0)
             }
         };
 
         Task {
-            task_type: TaskType::Segment { start, count, reverse },
+            task_type: TaskType::Segment {
+                start,
+                count,
+                reverse,
+            },
             prompt,
             correct_answer: correct_answer.clone(),
             options: vec![],
-            difficulty: 0.3 + (count as f64 * 0.1) + if reverse { 0.2 } else { 0.0 } + difficulty_bonus,
+            difficulty: 0.3
+                + (count as f64 * 0.1)
+                + if reverse { 0.2 } else { 0.0 }
+                + difficulty_bonus,
             operation: OperationType::Segment(count, reverse),
         }
     }
@@ -290,14 +348,14 @@ impl TaskGenerator {
 
     fn generate_missing_item(&self, before: String, after: String) -> Task {
         let prompt = format!("What comes between '{}' and '{}'?", before, after);
-        
+
         let before_node = self.topology.get_node_by_label(&before);
         let after_node = self.topology.get_node_by_label(&after);
-        
+
         let correct_answer = if let (Some(bn), Some(an)) = (before_node, after_node) {
             let before_idx = self.topology.node_map[&bn.id];
             let after_idx = self.topology.node_map[&an.id];
-            
+
             if after_idx == before_idx + 2 {
                 self.topology.nodes[before_idx + 1].label.clone()
             } else {
@@ -324,10 +382,10 @@ impl TaskGenerator {
 
     fn generate_shortest_distance(&self, from: String, to: String) -> Task {
         let prompt = format!("What is the shortest distance from '{}' to '{}'?", from, to);
-        
+
         let from_node = self.topology.get_node_by_label(&from);
         let to_node = self.topology.get_node_by_label(&to);
-        
+
         let distance = if let (Some(fn_), Some(tn)) = (from_node, to_node) {
             self.topology.get_distance(&fn_.id, &tn.id).unwrap_or(0)
         } else {
@@ -335,7 +393,7 @@ impl TaskGenerator {
         };
 
         let correct_answer = distance.to_string();
-        
+
         let mut options = vec![
             correct_answer.clone(),
             (distance.saturating_sub(1)).to_string(),
@@ -356,8 +414,11 @@ impl TaskGenerator {
     }
 
     fn generate_comparability(&self, a: String, b: String) -> Task {
-        let prompt = format!("Are '{}' and '{}' comparable (one must come before the other)?", a, b);
-        
+        let prompt = format!(
+            "Are '{}' and '{}' comparable (one must come before the other)?",
+            a, b
+        );
+
         let comparable = self.topology.are_comparable(&a, &b).unwrap_or(true);
         let correct_answer = if comparable { "Yes" } else { "No" }.to_string();
 
@@ -373,11 +434,9 @@ impl TaskGenerator {
 
     fn generate_topological_sort(&self, items: Vec<String>) -> Task {
         let prompt = format!("Arrange these items in a valid order: {:?}", items);
-        
+
         let correct_answer = if let Some(sorted) = self.topology.get_topological_sort() {
-            let filtered: Vec<String> = sorted.into_iter()
-                .filter(|s| items.contains(s))
-                .collect();
+            let filtered: Vec<String> = sorted.into_iter().filter(|s| items.contains(s)).collect();
             filtered.join(", ")
         } else {
             "Not applicable".to_string()
@@ -395,7 +454,7 @@ impl TaskGenerator {
 
     fn generate_shortest_path(&self, from: String, to: String) -> Task {
         let prompt = format!("What is the shortest path from '{}' to '{}'?", from, to);
-        
+
         let path = self.topology.shortest_path(&from, &to);
         let correct_answer = path
             .map(|p| p.join(" -> "))
@@ -413,16 +472,15 @@ impl TaskGenerator {
 
     fn generate_minimal_elements(&self) -> Task {
         let prompt = "Which elements have no prerequisites?".to_string();
-        
+
         let mut minimal = Vec::new();
         for node in &self.topology.nodes {
-            let has_incoming = self.topology.edges.iter()
-                .any(|e| e.to == node.id);
+            let has_incoming = self.topology.edges.iter().any(|e| e.to == node.id);
             if !has_incoming {
                 minimal.push(node.label.clone());
             }
         }
-        
+
         let correct_answer = if minimal.is_empty() {
             "None".to_string()
         } else {
@@ -441,16 +499,15 @@ impl TaskGenerator {
 
     fn generate_maximal_elements(&self) -> Task {
         let prompt = "Which elements have no dependent tasks?".to_string();
-        
+
         let mut maximal = Vec::new();
         for node in &self.topology.nodes {
-            let has_outgoing = self.topology.edges.iter()
-                .any(|e| e.from == node.id);
+            let has_outgoing = self.topology.edges.iter().any(|e| e.from == node.id);
             if !has_outgoing {
                 maximal.push(node.label.clone());
             }
         }
-        
+
         let correct_answer = if maximal.is_empty() {
             "None".to_string()
         } else {
@@ -469,7 +526,10 @@ impl TaskGenerator {
 
     fn generate_options(&self, correct: &str, count: usize) -> Vec<String> {
         let mut options = vec![correct.to_string()];
-        let all_labels: Vec<String> = self.topology.nodes.iter()
+        let all_labels: Vec<String> = self
+            .topology
+            .nodes
+            .iter()
             .map(|n| n.label.clone())
             .filter(|l| l != correct)
             .collect();
@@ -514,7 +574,7 @@ impl TaskSession {
     pub fn submit_answer(&mut self, answer: String) -> TaskResponse {
         let task = self.current_task.take().expect("No active task");
         let start_time = self.task_start_time.take().expect("No start time");
-        
+
         let response_time_ms = start_time.elapsed().as_millis();
         let correct = answer.trim().eq_ignore_ascii_case(&task.correct_answer);
 
@@ -534,7 +594,11 @@ impl TaskSession {
         let total_tasks = self.history.len();
         let correct_tasks = self.history.iter().filter(|r| r.correct).count();
         let avg_response_time = if total_tasks > 0 {
-            self.history.iter().map(|r| r.response_time_ms).sum::<u128>() / total_tasks as u128
+            self.history
+                .iter()
+                .map(|r| r.response_time_ms)
+                .sum::<u128>()
+                / total_tasks as u128
         } else {
             0
         };
@@ -552,10 +616,10 @@ impl TaskSession {
         SessionStatistics {
             total_tasks,
             correct_tasks,
-            accuracy: if total_tasks > 0 { 
-                correct_tasks as f64 / total_tasks as f64 
-            } else { 
-                0.0 
+            accuracy: if total_tasks > 0 {
+                correct_tasks as f64 / total_tasks as f64
+            } else {
+                0.0
             },
             avg_response_time_ms: avg_response_time,
             task_type_performance: task_type_stats,

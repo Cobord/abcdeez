@@ -4,21 +4,22 @@ use axum::{
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::sync::Arc;
 use uuid::Uuid;
-use sqlx::Row;
 
 use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
-    models::{session::Session, learner::Learner},
-    services::{audit::AuditService, adaptation_service::AdaptationService, learner_service::LearnerService},
+    models::{learner::Learner, session::Session},
+    services::{
+        adaptation_service::AdaptationService, audit::AuditService, learner_service::LearnerService,
+    },
     state::AppState,
 };
 
 use graph_learning_core::{
-    Task, TaskGenerator, TaskType, Topology,
-    bayesian::BayesianLearnerModel, learner::LearnerModel,
+    bayesian::BayesianLearnerModel, learner::LearnerModel, Task, TaskGenerator, TaskType, Topology,
 };
 
 /// Generate next task using adaptive scheduling
@@ -29,31 +30,29 @@ pub async fn next(
 ) -> AppResult<(StatusCode, Json<TaskResponse>)> {
     // Get session and verify permissions
     let session = get_session_with_permission(&state, &claims, req.session_id).await?;
-    
+
     // Get learner service
-    let learner_service = LearnerService::new(
-        Arc::new(state.db_pool.clone()),
-        state.redis_conn.clone(),
-    );
-    
+    let learner_service =
+        LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
+
     // Get learner model
     let learner = learner_service
         .get_learner(session.learner_id)
         .await
         .map_err(|_| AppError::NotFound("Learner not found".to_string()))?;
-    
+
     // Parse topology from session
-    let topology: Topology = serde_json::from_value(session.topology_data)
-        .unwrap_or_else(|_| Topology::alphabet());
-    
+    let topology: Topology =
+        serde_json::from_value(session.topology_data).unwrap_or_else(|_| Topology::alphabet());
+
     // Create task generator
     let mut task_generator = TaskGenerator::new(topology.clone());
-    
+
     // Generate task based on request parameters
     let task = if req.use_adaptive.unwrap_or(false) {
         // Use adaptive scheduling with EIG
         let adaptation_service = AdaptationService::new(Arc::new(learner_service));
-        
+
         let next_task = adaptation_service
             .select_next_task(session.learner_id, &topology)
             .await
@@ -61,23 +60,23 @@ pub async fn next(
                 // Fallback to basic task generation
                 task_generator.generate_task(None) // Random task
             });
-        
+
         next_task
     } else {
         // Generate basic task with random type
         task_generator.generate_task(None)
     };
-    
+
     // Calculate expected difficulty based on learner model
     let expected_difficulty = calculate_task_difficulty(&task, &learner);
-    
+
     // Calculate information gain if requested
     let information_gain = if req.use_eig.unwrap_or(false) {
         Some(calculate_information_gain(&task, &learner, &topology))
     } else {
         None
     };
-    
+
     // Create task metadata
     let task_metadata = TaskMetadata {
         task_id: Uuid::new_v4(),
@@ -87,9 +86,10 @@ pub async fn next(
             "adaptive"
         } else {
             "fixed"
-        }.to_string(),
+        }
+        .to_string(),
     };
-    
+
     // Log task generation
     AuditService::log_event(
         &state.db_pool,
@@ -109,13 +109,16 @@ pub async fn next(
     )
     .await
     .ok();
-    
-    Ok((StatusCode::OK, Json(TaskResponse {
-        task,
-        expected_difficulty,
-        information_gain,
-        task_metadata,
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(TaskResponse {
+            task,
+            expected_difficulty,
+            information_gain,
+            task_metadata,
+        }),
+    ))
 }
 
 /// Generate multiple tasks for batch processing
@@ -125,31 +128,29 @@ pub async fn generate(
     Json(req): Json<TaskGenerationRequest>,
 ) -> AppResult<(StatusCode, Json<BulkTaskResponse>)> {
     // Verify learner access
-    let learner_service = LearnerService::new(
-        Arc::new(state.db_pool.clone()),
-        state.redis_conn.clone(),
-    );
-    
+    let learner_service =
+        LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
+
     let learner = learner_service
         .get_learner(req.learner_id)
         .await
         .map_err(|_| AppError::NotFound("Learner not found".to_string()))?;
-    
+
     // Check permissions
     if let Some(learner_user_id) = learner.user_id {
         if learner_user_id != claims.sub {
             return Err(AppError::Forbidden);
         }
     }
-    
+
     // Create topology from type
     let topology = create_topology_from_string(&req.topology_type)?;
     let mut task_generator = TaskGenerator::new(topology.clone());
-    
+
     // Generate tasks
     let count = req.count.unwrap_or(10).min(50); // Limit to 50 tasks
     let target_difficulty = req.difficulty_target.unwrap_or(0.5);
-    
+
     let mut tasks = Vec::new();
     let mut difficulty_counts = DifficultyDistribution {
         easy: 0,
@@ -157,20 +158,20 @@ pub async fn generate(
         hard: 0,
         average: 0.0,
     };
-    
+
     let mut total_difficulty = 0.0;
-    
+
     for _ in 0..count {
         // Add some randomness to difficulty
         let difficulty_variance = 0.2;
-        let actual_difficulty = (target_difficulty + 
-            (rand::random::<f64>() - 0.5) * difficulty_variance)
+        let actual_difficulty = (target_difficulty
+            + (rand::random::<f64>() - 0.5) * difficulty_variance)
             .max(0.1)
             .min(0.9);
-        
+
         let task = task_generator.generate_task(None); // Generate random task, difficulty handled separately
         let expected_difficulty = calculate_task_difficulty(&task, &learner);
-        
+
         // Update difficulty distribution
         total_difficulty += expected_difficulty;
         if expected_difficulty < 0.4 {
@@ -180,14 +181,14 @@ pub async fn generate(
         } else {
             difficulty_counts.hard += 1;
         }
-        
+
         let task_metadata = TaskMetadata {
             task_id: Uuid::new_v4(),
             generated_at: chrono::Utc::now(),
             generator_version: "1.0".to_string(),
             difficulty_source: "batch".to_string(),
         };
-        
+
         tasks.push(TaskResponse {
             task,
             expected_difficulty,
@@ -195,9 +196,9 @@ pub async fn generate(
             task_metadata,
         });
     }
-    
+
     difficulty_counts.average = total_difficulty / count as f64;
-    
+
     // Log batch generation
     AuditService::log_event(
         &state.db_pool,
@@ -217,12 +218,15 @@ pub async fn generate(
     )
     .await
     .ok();
-    
-    Ok((StatusCode::OK, Json(BulkTaskResponse {
-        tasks,
-        total_generated: count,
-        difficulty_distribution: difficulty_counts,
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(BulkTaskResponse {
+            tasks,
+            total_generated: count,
+            difficulty_distribution: difficulty_counts,
+        }),
+    ))
 }
 
 /// Get difficulty analysis for tasks and learner
@@ -232,7 +236,7 @@ pub async fn difficulty(
     Query(params): Query<DifficultyQuery>,
 ) -> AppResult<(StatusCode, Json<DifficultyAnalysis>)> {
     let mut task_type_difficulties = std::collections::HashMap::new();
-    
+
     // Base difficulties for different task types
     task_type_difficulties.insert("PairwiseOrder".to_string(), 0.3);
     task_type_difficulties.insert("Successor".to_string(), 0.4);
@@ -242,18 +246,16 @@ pub async fn difficulty(
     task_type_difficulties.insert("Index".to_string(), 0.7);
     task_type_difficulties.insert("MissingItem".to_string(), 0.6);
     task_type_difficulties.insert("ShortestDistance".to_string(), 0.8);
-    
+
     let mut item_difficulties = None;
     let mut learner_performance = None;
     let mut recommended_difficulty = 0.5;
-    
+
     // If learner is specified, get personalized analysis
     if let Some(learner_id) = params.learner_id {
-        let learner_service = LearnerService::new(
-            Arc::new(state.db_pool.clone()),
-            state.redis_conn.clone(),
-        );
-        
+        let learner_service =
+            LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
+
         if let Ok(learner) = learner_service.get_learner(learner_id).await {
             // Check permissions
             if let Some(learner_user_id) = learner.user_id {
@@ -261,10 +263,10 @@ pub async fn difficulty(
                     return Err(AppError::Forbidden);
                 }
             }
-            
+
             // Get recent performance
             let recent_accuracy = get_recent_accuracy(&state, learner_id).await?;
-            
+
             // Determine trend
             let trend = if recent_accuracy > 0.8 {
                 "improving"
@@ -273,7 +275,7 @@ pub async fn difficulty(
             } else {
                 "declining"
             };
-            
+
             // Calculate recommended difficulty based on performance
             recommended_difficulty = if recent_accuracy > 0.8 {
                 0.7 // Increase difficulty
@@ -282,27 +284,30 @@ pub async fn difficulty(
             } else {
                 0.5 // Maintain current level
             };
-            
+
             learner_performance = Some(LearnerPerformance {
                 current_accuracy: recent_accuracy,
                 trend: trend.to_string(),
                 struggle_areas: vec!["KJump".to_string(), "Index".to_string()],
                 strong_areas: vec!["Successor".to_string(), "PairwiseOrder".to_string()],
             });
-            
+
             // Get item-specific difficulties if requested
             if params.item_difficulty.unwrap_or(false) {
                 item_difficulties = Some(get_item_difficulties(&state, learner_id).await?);
             }
         }
     }
-    
-    Ok((StatusCode::OK, Json(DifficultyAnalysis {
-        task_type_difficulties,
-        item_difficulties,
-        learner_performance,
-        recommended_difficulty,
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(DifficultyAnalysis {
+            task_type_difficulties,
+            item_difficulties,
+            learner_performance,
+            recommended_difficulty,
+        }),
+    ))
 }
 
 /// Request a hint for current task
@@ -313,7 +318,7 @@ pub async fn request_hint(
 ) -> AppResult<(StatusCode, Json<HintResponse>)> {
     // For now, generate basic hints
     // In full implementation, this would use the intervention system
-    
+
     let hint_text = match req.task_type.as_str() {
         "PairwiseOrder" => "Think about the alphabetical order of the letters.",
         "Successor" => "What letter comes immediately after this one in the alphabet?",
@@ -323,13 +328,16 @@ pub async fn request_hint(
         "Index" => "Count the position of this letter in the alphabet (A=1, B=2, etc.).",
         _ => "Break down the problem into smaller steps.",
     };
-    
-    Ok((StatusCode::OK, Json(HintResponse {
-        hint_text: hint_text.to_string(),
-        hint_level: 1,
-        hint_type: "conceptual".to_string(),
-        timestamp: chrono::Utc::now(),
-    })))
+
+    Ok((
+        StatusCode::OK,
+        Json(HintResponse {
+            hint_text: hint_text.to_string(),
+            hint_level: 1,
+            hint_type: "conceptual".to_string(),
+            timestamp: chrono::Utc::now(),
+        }),
+    ))
 }
 
 // Helper functions
@@ -349,11 +357,9 @@ async fn get_session_with_permission(
     .ok_or_else(|| AppError::NotFound("Session not found".to_string()))?;
 
     // Verify session belongs to user by getting learner
-    let learner_service = LearnerService::new(
-        Arc::new(state.db_pool.clone()),
-        state.redis_conn.clone(),
-    );
-    
+    let learner_service =
+        LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
+
     let learner = learner_service
         .get_learner(session.learner_id)
         .await
@@ -373,7 +379,11 @@ fn calculate_task_difficulty(task: &Task, learner: &Learner) -> f64 {
     let mut difficulty = task.difficulty;
 
     // Adjust based on learner's proficiency with this operation type
-    if let Some(proficiency) = learner.learning_model.operation_proficiencies.get(&format!("{:?}", task.operation)) {
+    if let Some(proficiency) = learner
+        .learning_model
+        .operation_proficiencies
+        .get(&format!("{:?}", task.operation))
+    {
         // Higher proficiency = easier (lower effective difficulty)
         let proficiency_adjustment = 1.0 - (1.0 / (1.0 + (-proficiency.theta).exp()));
         difficulty = difficulty * (1.0 + proficiency_adjustment * 0.3);
@@ -382,13 +392,13 @@ fn calculate_task_difficulty(task: &Task, learner: &Learner) -> f64 {
     // Adjust based on node-specific knowledge for position-based tasks
     match &task.task_type {
         TaskType::PairwiseOrder { a, b } => {
-            let avg_uncertainty = get_node_uncertainty(&learner.learning_model, a) 
+            let avg_uncertainty = get_node_uncertainty(&learner.learning_model, a)
                 + get_node_uncertainty(&learner.learning_model, b);
             difficulty += avg_uncertainty * 0.2;
-        },
+        }
         TaskType::Successor { item } | TaskType::Predecessor { item } => {
             difficulty += get_node_uncertainty(&learner.learning_model, item) * 0.3;
-        },
+        }
         _ => {}
     }
 
@@ -408,26 +418,26 @@ fn get_node_uncertainty(model: &LearnerModel, item: &str) -> f64 {
 fn calculate_information_gain(task: &Task, learner: &Learner, topology: &Topology) -> f64 {
     // Create a temporary Bayesian model to calculate EIG
     let bayesian_model = BayesianLearnerModel::new(topology);
-    
+
     // Calculate expected information gain for this task
     // This is a simplified version - full implementation would simulate both outcomes
     let base_entropy = bayesian_model.total_entropy();
-    
+
     // Estimate entropy reduction based on task type and learner uncertainty
     let entropy_reduction = match &task.task_type {
         TaskType::PairwiseOrder { a, b } => {
             let uncertainty_a = get_node_uncertainty(&learner.learning_model, a);
             let uncertainty_b = get_node_uncertainty(&learner.learning_model, b);
             (uncertainty_a + uncertainty_b) * 0.5
-        },
+        }
         TaskType::Successor { item } | TaskType::Predecessor { item } => {
             get_node_uncertainty(&learner.learning_model, item) * 0.7
-        },
+        }
         TaskType::KJump { .. } => 0.8, // High information tasks
         TaskType::Segment { count, .. } => *count as f64 * 0.1,
-        _ => 0.5
+        _ => 0.5,
     };
-    
+
     entropy_reduction.min(base_entropy)
 }
 
@@ -437,23 +447,35 @@ fn create_topology_from_string(topology_type: &str) -> AppResult<Topology> {
         "numbers" => {
             let numbers: Vec<String> = (1..=26).map(|n| n.to_string()).collect();
             Ok(Topology::new_linear(numbers))
-        },
+        }
         "days_of_week" => {
             let days = vec![
-                "Monday".to_string(), "Tuesday".to_string(), "Wednesday".to_string(),
-                "Thursday".to_string(), "Friday".to_string(), "Saturday".to_string(),
-                "Sunday".to_string()
+                "Monday".to_string(),
+                "Tuesday".to_string(),
+                "Wednesday".to_string(),
+                "Thursday".to_string(),
+                "Friday".to_string(),
+                "Saturday".to_string(),
+                "Sunday".to_string(),
             ];
             Ok(Topology::new_cyclic(days))
-        },
+        }
         "music_notes" => {
             let notes = vec![
-                "C".to_string(), "D".to_string(), "E".to_string(), "F".to_string(),
-                "G".to_string(), "A".to_string(), "B".to_string()
+                "C".to_string(),
+                "D".to_string(),
+                "E".to_string(),
+                "F".to_string(),
+                "G".to_string(),
+                "A".to_string(),
+                "B".to_string(),
             ];
             Ok(Topology::new_linear(notes))
-        },
-        _ => Err(AppError::BadRequest(format!("Unknown topology type: {}", topology_type)))
+        }
+        _ => Err(AppError::BadRequest(format!(
+            "Unknown topology type: {}",
+            topology_type
+        ))),
     }
 }
 
@@ -464,7 +486,7 @@ async fn get_recent_accuracy(state: &AppState, learner_id: Uuid) -> AppResult<f6
         "SELECT correct FROM task_responses 
          WHERE learner_id = ? 
          ORDER BY created_at DESC 
-         LIMIT 20"
+         LIMIT 20",
     )
     .bind(&learner_bytes[..])
     .fetch_all(&state.db_pool)
@@ -475,22 +497,26 @@ async fn get_recent_accuracy(state: &AppState, learner_id: Uuid) -> AppResult<f6
         return Ok(0.5); // Default accuracy
     }
 
-    let correct_count = responses.iter().filter(|r| {
-        r.try_get::<bool, _>("correct").unwrap_or(false)
-    }).count();
+    let correct_count = responses
+        .iter()
+        .filter(|r| r.try_get::<bool, _>("correct").unwrap_or(false))
+        .count();
     Ok(correct_count as f64 / responses.len() as f64)
 }
 
-async fn get_item_difficulties(state: &AppState, learner_id: Uuid) -> AppResult<std::collections::HashMap<String, f64>> {
+async fn get_item_difficulties(
+    state: &AppState,
+    learner_id: Uuid,
+) -> AppResult<std::collections::HashMap<String, f64>> {
     // Get item-specific performance data
     let mut item_difficulties = std::collections::HashMap::new();
-    
+
     // This would normally query actual task response data
     // For now, return some sample data
     item_difficulties.insert("A".to_string(), 0.2);
     item_difficulties.insert("B".to_string(), 0.3);
     item_difficulties.insert("Z".to_string(), 0.9);
-    
+
     Ok(item_difficulties)
 }
 
@@ -538,9 +564,9 @@ pub struct BulkTaskResponse {
 
 #[derive(Debug, Serialize)]
 pub struct DifficultyDistribution {
-    pub easy: usize,    // < 0.4
-    pub medium: usize,  // 0.4 - 0.7
-    pub hard: usize,    // > 0.7
+    pub easy: usize,   // < 0.4
+    pub medium: usize, // 0.4 - 0.7
+    pub hard: usize,   // > 0.7
     pub average: f64,
 }
 

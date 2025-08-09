@@ -1,11 +1,10 @@
 use xilem::{
-    view::{button, flex, label, prose, Axis},
+    view::{button, flex, label, prose, textbox, Axis},
     Color, TextAlignment, WidgetView,
 };
 
 use crate::models::*;
 use crate::AppData;
-use crate::{models::*, visualizations::*, AppData};
 use graph_learning_core::tasks::TaskResponse;
 use std::sync::Arc;
 
@@ -185,16 +184,22 @@ where
 pub fn confirm_modal(
     title: &str,
     message: &str,
-    on_confirm: impl Fn(&mut AppData) + 'static,
-    on_cancel: impl Fn(&mut AppData) + 'static,
+    on_confirm: std::sync::Arc<dyn Fn(&mut AppData) + Send + Sync + 'static>,
+    on_cancel: std::sync::Arc<dyn Fn(&mut AppData) + Send + Sync + 'static>,
 ) -> impl WidgetView<AppData> {
     card(
         title,
         flex((
             prose(message).alignment(TextAlignment::Middle),
             flex((
-                button("✓ Confirm", on_confirm),
-                button("✗ Cancel", on_cancel),
+                {
+                    let cb = on_confirm.clone();
+                    button("✓ Confirm", move |data: &mut AppData| (cb)(data))
+                },
+                {
+                    let cb = on_cancel.clone();
+                    button("✗ Cancel", move |data: &mut AppData| (cb)(data))
+                },
             ))
             .direction(Axis::Horizontal),
         ))
@@ -209,7 +214,7 @@ pub fn toast_notification(message: String, is_success: bool) -> impl WidgetView<
 
     card(
         &format!("{} Notification", icon),
-        prose(&message).alignment(TextAlignment::Middle),
+        prose(message).alignment(TextAlignment::Middle),
     )
 }
 

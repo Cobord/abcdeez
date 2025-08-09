@@ -412,7 +412,7 @@ impl ExperimentFramework {
 
         // Update participant metrics
         let accuracy = session.session_metrics.correct_trials as f64 / n_trials as f64;
-        
+
         // Store session and update participant
         let experiment = &mut self.experiments[exp_idx];
         experiment.sessions.push(session);

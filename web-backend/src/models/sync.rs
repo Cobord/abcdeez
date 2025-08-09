@@ -100,7 +100,7 @@ pub struct SyncConflict {
     pub user_id: Uuid,
     pub entity_type: String,
     pub entity_id: String,
-    pub local_data: String, // JSON
+    pub local_data: String,  // JSON
     pub remote_data: String, // JSON
     pub resolution_strategy: Option<String>,
     pub resolved_data: Option<String>, // JSON
@@ -258,22 +258,22 @@ pub struct SyncPacket {
 
 impl SyncPacket {
     pub fn calculate_checksum(&self) -> String {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
-        
+
         hasher.update(self.version.to_string());
         hasher.update(&self.device_id);
         hasher.update(&self.user_id);
-        
+
         for change in &self.changes {
             hasher.update(&change.entity_type);
             hasher.update(&change.entity_id);
             hasher.update(format!("{:?}", change.operation));
         }
-        
+
         format!("{:x}", hasher.finalize())
     }
-    
+
     pub fn verify_checksum(&self) -> bool {
         self.checksum == self.calculate_checksum()
     }
@@ -306,10 +306,9 @@ pub fn merge_sync_data(
         "learner_model" | "user_gamification" => {
             // For models, merge fields with conflict resolution
             let mut merged = local.clone();
-            if let (Some(local_obj), Some(remote_obj)) = (
-                merged.as_object_mut(),
-                remote.as_object(),
-            ) {
+            if let (Some(local_obj), Some(remote_obj)) =
+                (merged.as_object_mut(), remote.as_object())
+            {
                 for (key, remote_value) in remote_obj {
                     // Use remote value if it's newer or local doesn't have it
                     if !local_obj.contains_key(key) {

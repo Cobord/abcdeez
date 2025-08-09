@@ -22,19 +22,19 @@ pub struct Config {
     pub tracing_endpoint: Option<String>,
     pub health_check_interval_seconds: u32,
     pub performance_monitoring_enabled: bool,
-    
+
     // OAuth Providers configuration
     pub apple_client_id: String,
     pub apple_team_id: String,
     pub apple_key_id: String,
     pub apple_private_key_path: String,
     pub apple_redirect_uri: String,
-    
+
     // GitHub OAuth configuration
     pub github_client_id: String,
     pub github_client_secret: String,
     pub github_redirect_uri: String,
-    
+
     // TLS/SSL configuration
     pub tls_domain: Option<String>,
     pub tls_use_letsencrypt: bool,
@@ -77,10 +77,8 @@ impl Config {
                 .unwrap_or_else(|_| "development".to_string())
                 .parse()
                 .expect("Invalid environment"),
-            log_level: env::var("LOG_LEVEL")
-                .unwrap_or_else(|_| "debug".to_string()),
-            cors_origin: env::var("CORS_ORIGIN")
-                .unwrap_or_else(|_| "*".to_string()),
+            log_level: env::var("LOG_LEVEL").unwrap_or_else(|_| "debug".to_string()),
+            cors_origin: env::var("CORS_ORIGIN").unwrap_or_else(|_| "*".to_string()),
             rate_limit_requests: env::var("RATE_LIMIT_REQUESTS")
                 .unwrap_or_else(|_| "100".to_string())
                 .parse()
@@ -118,7 +116,7 @@ impl Config {
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
                 .expect("PERFORMANCE_MONITORING_ENABLED must be a boolean"),
-            
+
             // OAuth Providers configuration (optional)
             apple_client_id: env::var("APPLE_CLIENT_ID")
                 .unwrap_or_else(|_| "placeholder_apple_client_id".to_string()),
@@ -130,7 +128,7 @@ impl Config {
                 .unwrap_or_else(|_| "/tmp/placeholder_apple_key.p8".to_string()),
             apple_redirect_uri: env::var("APPLE_REDIRECT_URI")
                 .unwrap_or_else(|_| "https://api.yourapp.com/api/auth/apple/callback".to_string()),
-            
+
             // GitHub OAuth configuration (optional)
             github_client_id: env::var("GITHUB_CLIENT_ID")
                 .unwrap_or_else(|_| "placeholder_github_client_id".to_string()),
@@ -138,7 +136,7 @@ impl Config {
                 .unwrap_or_else(|_| "placeholder_github_client_secret".to_string()),
             github_redirect_uri: env::var("GITHUB_REDIRECT_URI")
                 .unwrap_or_else(|_| "https://api.yourapp.com/api/auth/github/callback".to_string()),
-            
+
             // TLS/SSL configuration
             tls_domain: env::var("TLS_DOMAIN").ok(),
             tls_use_letsencrypt: env::var("TLS_USE_LETSENCRYPT")
@@ -150,15 +148,14 @@ impl Config {
                 .parse()
                 .expect("TLS_PORT must be a number"),
             admin_email: env::var("ADMIN_EMAIL").ok(),
-            server_name: env::var("SERVER_NAME")
-                .unwrap_or_else(|_| "localhost".to_string()),
+            server_name: env::var("SERVER_NAME").unwrap_or_else(|_| "localhost".to_string()),
         })
     }
 
     pub fn is_production(&self) -> bool {
         self.environment == Environment::Production
     }
-    
+
     pub fn validate_production_safety(&self) -> Result<(), String> {
         if !self.is_production() {
             return Ok(());
@@ -184,31 +181,31 @@ impl Config {
         if self.apple_client_id.is_empty() {
             return Err("Apple Client ID must be configured for production".to_string());
         }
-        
+
         if self.apple_team_id.len() != 10 {
             return Err("Apple Team ID must be exactly 10 characters".to_string());
         }
-        
+
         if self.apple_key_id.len() != 10 {
             return Err("Apple Key ID must be exactly 10 characters".to_string());
         }
-        
+
         if !std::path::Path::new(&self.apple_private_key_path).exists() {
             return Err("Apple private key file not found".to_string());
         }
-        
+
         if !self.apple_redirect_uri.starts_with("https://") {
             return Err("Apple redirect URI must use HTTPS in production".to_string());
         }
-        
+
         if self.github_client_id.is_empty() {
             return Err("GitHub Client ID must be configured for production".to_string());
         }
-        
+
         if self.github_client_secret.is_empty() {
             return Err("GitHub Client Secret must be configured for production".to_string());
         }
-        
+
         if !self.github_redirect_uri.starts_with("https://") {
             return Err("GitHub redirect URI must use HTTPS in production".to_string());
         }

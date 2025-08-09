@@ -1,14 +1,14 @@
 use crate::cache::ConnectionManager;
-use anyhow::Result;
 use crate::db::DbPool;
+use anyhow::Result;
+use sqlx::Row;
 use std::{sync::Arc, time::Duration};
 use tokio::time::interval;
 use uuid::Uuid;
-use sqlx::Row;
 
-use crate::services::{AnalyticsService, LearnerService};
-use crate::services::oauth_service::{OAuthService, OAuthProvider, CredentialState};
 use crate::config::Config;
+use crate::services::oauth_service::{CredentialState, OAuthProvider, OAuthService};
+use crate::services::{AnalyticsService, LearnerService};
 
 #[derive(Debug, Clone)]
 pub enum JobType {
@@ -89,7 +89,7 @@ impl BatchJobService {
              FROM job_queue
              WHERE status = 'pending'
              ORDER BY created_at ASC
-             LIMIT 10"
+             LIMIT 10",
         )
         .fetch_all(&mut *conn)
         .await?;
@@ -214,7 +214,7 @@ impl BatchJobService {
              GROUP BY l.id, l.display_name, u.username
              HAVING COUNT(r.id) >= 100
              ORDER BY accuracy DESC
-             LIMIT 50"
+             LIMIT 50",
         )
         .bind(chrono::Utc::now() - chrono::Duration::days(30))
         .fetch_all(&mut *conn)
@@ -227,7 +227,7 @@ impl BatchJobService {
              LEFT JOIN users u ON l.user_id = u.id
              WHERE l.total_practice_time_seconds > 0
              ORDER BY l.total_practice_time_seconds DESC
-             LIMIT 50"
+             LIMIT 50",
         )
         .fetch_all(&mut *conn)
         .await?;
@@ -242,7 +242,7 @@ impl BatchJobService {
                 let username: Option<String> = row.get::<Option<String>, _>("username");
                 let accuracy: Option<f64> = row.get::<Option<f64>, _>("accuracy");
                 let total_responses: Option<i64> = row.get::<Option<i64>, _>("total_responses");
-                
+
                 Ok(serde_json::json!({
                     "rank": rank + 1,
                     "learner_id": Uuid::from_bytes(id_bytes.try_into().unwrap_or_default()),
@@ -262,8 +262,9 @@ impl BatchJobService {
                 let id_bytes: Vec<u8> = row.get::<Vec<u8>, _>("id");
                 let display_name: Option<String> = row.get::<Option<String>, _>("display_name");
                 let username: Option<String> = row.get::<Option<String>, _>("username");
-                let total_practice_time_seconds: i32 = row.get::<i32, _>("total_practice_time_seconds");
-                
+                let total_practice_time_seconds: i32 =
+                    row.get::<i32, _>("total_practice_time_seconds");
+
                 Ok(serde_json::json!({
                     "rank": rank + 1,
                     "learner_id": Uuid::from_bytes(id_bytes.try_into().unwrap_or_default()),
@@ -304,7 +305,7 @@ impl BatchJobService {
             "SELECT DISTINCT l.id
              FROM learners l
              JOIN sessions s ON l.id = s.learner_id
-             WHERE s.start_time > ?"
+             WHERE s.start_time > ?",
         )
         .bind(chrono::Utc::now() - chrono::Duration::hours(24))
         .fetch_all(&mut *conn)
@@ -329,7 +330,7 @@ impl BatchJobService {
 
                 sqlx::query(
                     "INSERT INTO model_snapshots (id, learner_id, timestamp, parameters, metrics)
-                     VALUES (?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?)",
                 )
                 .bind(&snapshot_id_bytes[..])
                 .bind(&learner_id_bytes[..])
@@ -365,7 +366,7 @@ impl BatchJobService {
 
         // Clean up old job queue entries
         let deleted_jobs = sqlx::query(
-            "DELETE FROM job_queue WHERE created_at < ? AND status IN ('completed', 'failed')"
+            "DELETE FROM job_queue WHERE created_at < ? AND status IN ('completed', 'failed')",
         )
         .bind(cutoff_date)
         .execute(&mut *conn)
@@ -404,7 +405,7 @@ impl BatchJobService {
              WHERE r.timestamp > ?
              GROUP BY l.id
              ORDER BY response_count DESC
-             LIMIT 20"
+             LIMIT 20",
         )
         .bind(chrono::Utc::now() - chrono::Duration::days(7))
         .fetch_all(&mut *db_conn)
@@ -429,7 +430,7 @@ impl BatchJobService {
         tracing::info!("Starting OAuth credential validation job");
 
         let mut conn = self.db.acquire().await?;
-        
+
         // Get all OAuth users who haven't been checked in the last 24 hours
         let oauth_users = sqlx::query(
             "SELECT u.id, u.username, u.apple_user_id, u.github_user_id, u.auth_provider,
@@ -453,7 +454,7 @@ impl BatchJobService {
             let user_id = Uuid::from_bytes(user_id_bytes.try_into().unwrap_or_default());
             let username: String = user_row.get("username");
             let auth_provider: String = user_row.get("auth_provider");
-            
+
             // Parse provider and get provider user ID
             let provider = match auth_provider.as_str() {
                 "apple" => {
@@ -475,7 +476,11 @@ impl BatchJobService {
                     }
                 }
                 _ => {
-                    tracing::warn!("Unknown auth provider for user {}: {}", username, auth_provider);
+                    tracing::warn!(
+                        "Unknown auth provider for user {}: {}",
+                        username,
+                        auth_provider
+                    );
                     continue;
                 }
             };
@@ -508,14 +513,16 @@ impl BatchJobService {
             // Record the validation result
             match validation_result {
                 Ok(credential_state) => {
-                    oauth_service.record_credential_check(
-                        &dummy_app_state,
-                        user_id,
-                        oauth_provider,
-                        &provider_user_id,
-                        credential_state.clone(),
-                        None,
-                    ).await?;
+                    oauth_service
+                        .record_credential_check(
+                            &dummy_app_state,
+                            user_id,
+                            oauth_provider,
+                            &provider_user_id,
+                            credential_state.clone(),
+                            None,
+                        )
+                        .await?;
 
                     validated_count += 1;
                     tracing::debug!(
@@ -527,14 +534,16 @@ impl BatchJobService {
                 }
                 Err(e) => {
                     let error_msg = e.to_string();
-                    oauth_service.record_credential_check(
-                        &dummy_app_state,
-                        user_id,
-                        oauth_provider,
-                        &provider_user_id,
-                        CredentialState::Unknown,
-                        Some(&error_msg),
-                    ).await?;
+                    oauth_service
+                        .record_credential_check(
+                            &dummy_app_state,
+                            user_id,
+                            oauth_provider,
+                            &provider_user_id,
+                            CredentialState::Unknown,
+                            Some(&error_msg),
+                        )
+                        .await?;
 
                     failed_count += 1;
                     tracing::warn!(
@@ -570,17 +579,15 @@ impl BatchJobService {
 
         let mut conn = self.db.acquire().await?;
         if status == "running" {
-            sqlx::query(
-                "UPDATE job_queue SET status = ?, started_at = ? WHERE id = ?"
-            )
-            .bind(status)
-            .bind(now)
-            .bind(&job_id_bytes[..])
-            .execute(&mut *conn)
-            .await?;
+            sqlx::query("UPDATE job_queue SET status = ?, started_at = ? WHERE id = ?")
+                .bind(status)
+                .bind(now)
+                .bind(&job_id_bytes[..])
+                .execute(&mut *conn)
+                .await?;
         } else {
             sqlx::query(
-                "UPDATE job_queue SET status = ?, completed_at = ?, error_message = ? WHERE id = ?"
+                "UPDATE job_queue SET status = ?, completed_at = ?, error_message = ? WHERE id = ?",
             )
             .bind(status)
             .bind(now)
@@ -604,7 +611,7 @@ impl BatchJobService {
 
         let mut conn = self.db.acquire().await?;
         sqlx::query(
-            "INSERT INTO job_queue (id, job_type, payload, status) VALUES (?, ?, ?, 'pending')"
+            "INSERT INTO job_queue (id, job_type, payload, status) VALUES (?, ?, ?, 'pending')",
         )
         .bind(&job_id_bytes[..])
         .bind(job_type.as_str())
@@ -617,10 +624,8 @@ impl BatchJobService {
 
     /// Schedule OAuth credential validation job
     pub async fn schedule_oauth_validation(&self) -> Result<Uuid> {
-        self.schedule_job(
-            JobType::OAuthCredentialValidation,
-            serde_json::json!({}),
-        ).await
+        self.schedule_job(JobType::OAuthCredentialValidation, serde_json::json!({}))
+            .await
     }
 
     /// Start periodic OAuth credential validation (runs every 6 hours)

@@ -78,11 +78,10 @@ impl GitHubOAuthService {
 
     /// Generate GitHub authorization URL
     pub fn get_authorization_url(&self, state: &str) -> AppResult<String> {
-        let mut auth_url = Url::parse("https://github.com/login/oauth/authorize")
-            .map_err(|e| {
-                error!("Failed to parse GitHub auth URL: {}", e);
-                AppError::InternalServerError
-            })?;
+        let mut auth_url = Url::parse("https://github.com/login/oauth/authorize").map_err(|e| {
+            error!("Failed to parse GitHub auth URL: {}", e);
+            AppError::InternalServerError
+        })?;
 
         {
             let mut query_pairs = auth_url.query_pairs_mut();
@@ -97,7 +96,11 @@ impl GitHubOAuthService {
     }
 
     /// Exchange authorization code for access token
-    pub async fn exchange_code_for_token(&self, code: &str, state: &str) -> AppResult<GitHubTokenResponse> {
+    pub async fn exchange_code_for_token(
+        &self,
+        code: &str,
+        state: &str,
+    ) -> AppResult<GitHubTokenResponse> {
         let mut params = HashMap::new();
         params.insert("client_id", self.config.github_client_id.as_str());
         params.insert("client_secret", self.config.github_client_secret.as_str());
@@ -105,7 +108,8 @@ impl GitHubOAuthService {
         params.insert("redirect_uri", self.config.github_redirect_uri.as_str());
         params.insert("state", state);
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .post("https://github.com/login/oauth/access_token")
             .header("Accept", "application/json")
             .header("Content-Type", "application/x-www-form-urlencoded")
@@ -118,17 +122,21 @@ impl GitHubOAuthService {
             })?;
 
         if !response.status().is_success() {
-            error!("GitHub token exchange failed with status: {}", response.status());
+            error!(
+                "GitHub token exchange failed with status: {}",
+                response.status()
+            );
             let error_text = response.text().await.unwrap_or_default();
             error!("GitHub error response: {}", error_text);
-            return Err(AppError::AuthenticationError("Failed to authenticate with GitHub".to_string()));
+            return Err(AppError::AuthenticationError(
+                "Failed to authenticate with GitHub".to_string(),
+            ));
         }
 
-        let token_response: GitHubTokenResponse = response.json().await
-            .map_err(|e| {
-                error!("Failed to parse GitHub token response: {}", e);
-                AppError::AuthenticationError("Invalid response from GitHub".to_string())
-            })?;
+        let token_response: GitHubTokenResponse = response.json().await.map_err(|e| {
+            error!("Failed to parse GitHub token response: {}", e);
+            AppError::AuthenticationError("Invalid response from GitHub".to_string())
+        })?;
 
         info!("Successfully exchanged GitHub authorization code for access token");
         Ok(token_response)
@@ -136,7 +144,8 @@ impl GitHubOAuthService {
 
     /// Get GitHub user profile
     pub async fn get_user_profile(&self, access_token: &str) -> AppResult<GitHubUser> {
-        let response = self.http_client
+        let response = self
+            .http_client
             .get("https://api.github.com/user")
             .bearer_auth(access_token)
             .header("Accept", "application/vnd.github+json")
@@ -149,25 +158,33 @@ impl GitHubOAuthService {
             })?;
 
         if !response.status().is_success() {
-            error!("GitHub user profile request failed with status: {}", response.status());
+            error!(
+                "GitHub user profile request failed with status: {}",
+                response.status()
+            );
             let error_text = response.text().await.unwrap_or_default();
             error!("GitHub error response: {}", error_text);
-            return Err(AppError::AuthenticationError("Failed to fetch user profile from GitHub".to_string()));
+            return Err(AppError::AuthenticationError(
+                "Failed to fetch user profile from GitHub".to_string(),
+            ));
         }
 
-        let user_profile: GitHubUser = response.json().await
-            .map_err(|e| {
-                error!("Failed to parse GitHub user profile: {}", e);
-                AppError::InternalServerError
-            })?;
+        let user_profile: GitHubUser = response.json().await.map_err(|e| {
+            error!("Failed to parse GitHub user profile: {}", e);
+            AppError::InternalServerError
+        })?;
 
-        info!("Successfully fetched GitHub user profile for user: {}", user_profile.login);
+        info!(
+            "Successfully fetched GitHub user profile for user: {}",
+            user_profile.login
+        );
         Ok(user_profile)
     }
 
     /// Get GitHub user's primary verified email
     pub async fn get_user_primary_email(&self, access_token: &str) -> AppResult<Option<String>> {
-        let response = self.http_client
+        let response = self
+            .http_client
             .get("https://api.github.com/user/emails")
             .bearer_auth(access_token)
             .header("Accept", "application/vnd.github+json")
@@ -180,18 +197,21 @@ impl GitHubOAuthService {
             })?;
 
         if !response.status().is_success() {
-            error!("GitHub user emails request failed with status: {}", response.status());
+            error!(
+                "GitHub user emails request failed with status: {}",
+                response.status()
+            );
             return Ok(None);
         }
 
-        let emails: Vec<GitHubEmail> = response.json().await
-            .map_err(|e| {
-                error!("Failed to parse GitHub user emails: {}", e);
-                AppError::InternalServerError
-            })?;
+        let emails: Vec<GitHubEmail> = response.json().await.map_err(|e| {
+            error!("Failed to parse GitHub user emails: {}", e);
+            AppError::InternalServerError
+        })?;
 
         // Find primary verified email
-        let primary_email = emails.iter()
+        let primary_email = emails
+            .iter()
             .find(|email| email.primary && email.verified)
             .map(|email| email.email.clone());
 
@@ -206,7 +226,8 @@ impl GitHubOAuthService {
 
     /// Validate GitHub access token (check if still valid)
     pub async fn validate_access_token(&self, access_token: &str) -> AppResult<bool> {
-        let response = self.http_client
+        let response = self
+            .http_client
             .get("https://api.github.com/user")
             .bearer_auth(access_token)
             .header("Accept", "application/vnd.github+json")
@@ -228,7 +249,10 @@ impl GitHubOAuthService {
                 Ok(false)
             }
             _ => {
-                warn!("Unexpected status from GitHub token validation: {}", response.status());
+                warn!(
+                    "Unexpected status from GitHub token validation: {}",
+                    response.status()
+                );
                 Ok(false)
             }
         }
@@ -236,9 +260,16 @@ impl GitHubOAuthService {
 
     /// Revoke GitHub access token
     pub async fn revoke_access_token(&self, access_token: &str) -> AppResult<()> {
-        let response = self.http_client
-            .delete(&format!("https://api.github.com/applications/{}/grant", self.config.github_client_id))
-            .basic_auth(&self.config.github_client_id, Some(&self.config.github_client_secret))
+        let response = self
+            .http_client
+            .delete(&format!(
+                "https://api.github.com/applications/{}/grant",
+                self.config.github_client_id
+            ))
+            .basic_auth(
+                &self.config.github_client_id,
+                Some(&self.config.github_client_secret),
+            )
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .json(&serde_json::json!({
@@ -261,7 +292,10 @@ impl GitHubOAuthService {
                 Ok(())
             }
             _ => {
-                warn!("Unexpected status from GitHub token revocation: {}", response.status());
+                warn!(
+                    "Unexpected status from GitHub token revocation: {}",
+                    response.status()
+                );
                 Err(AppError::InternalServerError)
             }
         }
@@ -269,7 +303,8 @@ impl GitHubOAuthService {
 
     /// Get rate limit information
     pub async fn get_rate_limit(&self, access_token: &str) -> AppResult<serde_json::Value> {
-        let response = self.http_client
+        let response = self
+            .http_client
             .get("https://api.github.com/rate_limit")
             .bearer_auth(access_token)
             .header("Accept", "application/vnd.github+json")
@@ -282,15 +317,17 @@ impl GitHubOAuthService {
             })?;
 
         if !response.status().is_success() {
-            error!("GitHub rate limit request failed with status: {}", response.status());
+            error!(
+                "GitHub rate limit request failed with status: {}",
+                response.status()
+            );
             return Err(AppError::InternalServerError);
         }
 
-        let rate_limit: serde_json::Value = response.json().await
-            .map_err(|e| {
-                error!("Failed to parse GitHub rate limit response: {}", e);
-                AppError::InternalServerError
-            })?;
+        let rate_limit: serde_json::Value = response.json().await.map_err(|e| {
+            error!("Failed to parse GitHub rate limit response: {}", e);
+            AppError::InternalServerError
+        })?;
 
         Ok(rate_limit)
     }
@@ -321,11 +358,11 @@ mod tests {
     fn test_github_state_generation() {
         let state1 = GitHubOAuthService::generate_state();
         let state2 = GitHubOAuthService::generate_state();
-        
+
         assert_eq!(state1.len(), 32);
         assert_eq!(state2.len(), 32);
         assert_ne!(state1, state2); // Should be different
-        
+
         // Should only contain alphanumeric characters
         assert!(state1.chars().all(|c| c.is_ascii_alphanumeric()));
         assert!(state2.chars().all(|c| c.is_ascii_alphanumeric()));
@@ -359,7 +396,7 @@ mod tests {
         "#;
 
         let user: GitHubUser = serde_json::from_str(json_data).unwrap();
-        
+
         assert_eq!(user.id, 12345);
         assert_eq!(user.login, "testuser");
         assert_eq!(user.name, Some("Test User".to_string()));

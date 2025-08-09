@@ -75,11 +75,14 @@ impl IOSAuthBridge {
         };
 
         // Call backend API
-        let user = self.api_client.apple_signin(
-            user_data.identity_token,
-            user_data.authorization_code,
-            user_info.map(|info| serde_json::to_value(info).unwrap()),
-        ).await?;
+        let user = self
+            .api_client
+            .apple_signin(
+                user_data.identity_token,
+                user_data.authorization_code,
+                user_info.map(|info| serde_json::to_value(info).unwrap()),
+            )
+            .await?;
 
         Ok(user)
     }
@@ -99,10 +102,7 @@ extern "C" {
 
 // C callback function that iOS calls when authentication completes
 #[no_mangle]
-pub extern "C" fn handle_apple_sign_in_callback(
-    json_data: *const c_char,
-    success: bool,
-) {
+pub extern "C" fn handle_apple_sign_in_callback(json_data: *const c_char, success: bool) {
     if json_data.is_null() {
         return;
     }
@@ -156,10 +156,11 @@ fn c_string_to_string(c_str: *const c_char) -> Result<String, String> {
     if c_str.is_null() {
         return Err("Null pointer".to_string());
     }
-    
+
     unsafe {
         let c_str = CStr::from_ptr(c_str);
-        c_str.to_str()
+        c_str
+            .to_str()
             .map(|s| s.to_string())
             .map_err(|e| format!("Invalid UTF-8: {}", e))
     }
@@ -185,7 +186,7 @@ mod tests {
 
         let json = serde_json::to_string(&user_data).unwrap();
         let deserialized: IOSAppleUserData = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(user_data.user_id, deserialized.user_id);
         assert_eq!(user_data.identity_token, deserialized.identity_token);
     }

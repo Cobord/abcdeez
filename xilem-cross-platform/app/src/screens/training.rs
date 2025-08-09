@@ -1,5 +1,5 @@
 use xilem::{
-    view::{button, flex, label, prose, Axis},
+    view::{button, flex, label, prose, Axis, FlexExt},
     Color, TextAlignment, WidgetView,
 };
 
@@ -135,14 +135,21 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         // Beautiful answer grid (2 columns for better layout)
         let answer_grid = if masked_buttons.len() > 2 {
             let mid = (masked_buttons.len() + 1) / 2;
-            let (left, right) = masked_buttons.split_at(mid);
+            let mut left = masked_buttons;
+            let right = left.split_off(mid);
             flex((
-                flex(left.to_vec()).direction(Axis::Vertical),
-                flex(right.to_vec()).direction(Axis::Vertical),
+                flex(left).direction(Axis::Vertical),
+                flex(right).direction(Axis::Vertical),
             ))
             .direction(Axis::Horizontal)
         } else {
-            flex((flex(masked_buttons).direction(Axis::Vertical),)).direction(Axis::Horizontal)
+            let left = masked_buttons;
+            let right: Vec<_> = Vec::new();
+            flex((
+                flex(left).direction(Axis::Vertical),
+                flex(right).direction(Axis::Vertical),
+            ))
+            .direction(Axis::Horizontal)
         };
 
         // Enhanced feedback with emoji and colors
@@ -241,11 +248,11 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 },
             );
 
-            let hint_display = if let Some(hint) = &data.current_hint {
-                card(
+            let (hint_title, hint_body) = if let Some(hint) = &data.current_hint {
+                (
                     "💡 Hint",
                     flex((
-                        prose(hint).alignment(TextAlignment::Start),
+                        prose(hint.as_str()).alignment(TextAlignment::Start),
                         label(format!("Hint Level: {:?}", data.hint_level))
                             .brush(Color::from_rgb8(100, 100, 100))
                             .alignment(TextAlignment::End),
@@ -253,11 +260,17 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     .direction(Axis::Vertical),
                 )
             } else {
-                card(
+                (
                     "💡 Hints",
-                    prose("Hints will appear here when requested").alignment(TextAlignment::Middle),
+                    flex((
+                        prose("Hints will appear here when requested")
+                            .alignment(TextAlignment::Middle),
+                        label(""),
+                    ))
+                    .direction(Axis::Vertical),
                 )
             };
+            let hint_display = card(hint_title, hint_body);
 
             Some(flex((hint_button, hint_display)).direction(Axis::Vertical))
         } else {
@@ -321,10 +334,12 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     ),
                 ))
                 .direction(Axis::Horizontal)
+                .into_any_flex()
             } else {
                 flex((label("Metrics will appear after a few responses")
                     .alignment(TextAlignment::Middle),))
                 .direction(Axis::Horizontal)
+                .into_any_flex()
             },
             // Response time trend
             if data.session_responses.len() > 2 {
@@ -394,17 +409,26 @@ pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     data.session_responses.len(),
                     data.current_metrics.accuracy_rate * 100.0
                 ),
-                |data: &mut AppData| {
+                std::sync::Arc::new(|data: &mut AppData| {
                     data.show_end_session_confirmation = false;
                     data.end_session();
-                },
-                |data: &mut AppData| {
+                }),
+                std::sync::Arc::new(|data: &mut AppData| {
                     data.show_end_session_confirmation = false;
-                },
+                }),
             ),
         ))
         .direction(Axis::Vertical)
     } else {
-        flex((main_content,)).direction(Axis::Vertical)
+        flex((
+            main_content,
+            confirm_modal(
+                "",
+                "",
+                std::sync::Arc::new(|_data: &mut AppData| {}),
+                std::sync::Arc::new(|_data: &mut AppData| {}),
+            ),
+        ))
+        .direction(Axis::Vertical)
     }
 }

@@ -26,6 +26,7 @@ pub fn domain_selection_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 Domain::DaysOfWeek => "Preview: Mon → Tue → Wed → Thu → Fri → Sat → Sun → Mon",
                 Domain::Music => "Preview: C → D → E → F → G → A → B → C",
                 Domain::Mathematics => "Preview: 1 + 1 = 2, 2 + 2 = 4, 3 × 3 = 9, ...",
+                Domain::Custom(_) => "Preview: Custom learning domain",
             };
 
             let preview = prose(preview_text)
@@ -72,20 +73,28 @@ pub fn domain_selection_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             .alignment(TextAlignment::Middle),
         prose("Choose a domain to begin your adaptive training session. Each domain offers unique learning challenges.")
             .alignment(TextAlignment::Middle),
-        // Show current selection
-        if let Some(topology) = &data.topology {
+        // Current selection card (always rendered; shows placeholders when not selected)
+        {
+            let (domain_label, nodes_label) = if let Some(topology) = &data.topology {
+                (
+                    format!("Domain: {}", data.selected_domain.display_name()),
+                    format!("Total nodes: {}", topology.nodes.len()),
+                )
+            } else {
+                (
+                    "Domain: (none)".to_string(),
+                    "Total nodes: —".to_string(),
+                )
+            };
+
             card(
                 "Current Selection",
                 flex((
-                    label(&format!("Domain: {}", data.selected_domain.display_name()))
-                        .alignment(TextAlignment::Start),
-                    label(&format!("Total nodes: {}", topology.nodes.len()))
-                        .alignment(TextAlignment::Start),
+                    label(domain_label).alignment(TextAlignment::Start),
+                    label(nodes_label).alignment(TextAlignment::Start),
                 ))
                 .direction(Axis::Vertical),
             )
-        } else {
-            label("No domain selected yet").alignment(TextAlignment::Middle)
         },
         flex(domain_cards).direction(Axis::Vertical),
         card(

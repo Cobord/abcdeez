@@ -1,6 +1,7 @@
 use axum::http::StatusCode;
+use axum::{body::Body, http::Request};
 use serde_json::json;
-use web_backend::create_app;
+use tower::ServiceExt;
 
 mod common;
 use common::*;
@@ -8,7 +9,7 @@ use common::*;
 #[tokio::test]
 async fn test_health_check() {
     let app = create_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -18,9 +19,9 @@ async fn test_health_check() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = body_to_json(response).await;
     assert_eq!(body["status"], "healthy");
 }
@@ -28,7 +29,7 @@ async fn test_health_check() {
 #[tokio::test]
 async fn test_user_registration() {
     let app = create_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -47,9 +48,9 @@ async fn test_user_registration() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::CREATED);
-    
+
     let body = body_to_json(response).await;
     assert_eq!(body["email"], "test@example.com");
     assert_eq!(body["display_name"], "Test User");
@@ -60,7 +61,7 @@ async fn test_user_registration() {
 async fn test_user_login() {
     let app = create_test_app().await;
     let user = create_test_user(&app).await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -78,9 +79,9 @@ async fn test_user_login() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = body_to_json(response).await;
     assert!(body["access_token"].is_string());
     assert!(body["refresh_token"].is_string());
@@ -92,7 +93,7 @@ async fn test_user_login() {
 async fn test_create_session() {
     let app = create_test_app().await;
     let auth = create_authenticated_user(&app).await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -115,9 +116,9 @@ async fn test_create_session() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::CREATED);
-    
+
     let body = body_to_json(response).await;
     assert!(body["session_id"].is_string());
     assert_eq!(body["domain"], "alphabet");
@@ -129,7 +130,7 @@ async fn test_get_next_task() {
     let app = create_test_app().await;
     let auth = create_authenticated_user(&app).await;
     let session = create_test_session(&app, &auth).await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -142,9 +143,9 @@ async fn test_get_next_task() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = body_to_json(response).await;
     assert!(body["task_id"].is_string());
     assert!(body["stimulus"].is_string());
@@ -157,7 +158,7 @@ async fn test_submit_task_response() {
     let auth = create_authenticated_user(&app).await;
     let session = create_test_session(&app, &auth).await;
     let task = get_next_task(&app, &auth, &session).await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -180,9 +181,9 @@ async fn test_submit_task_response() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = body_to_json(response).await;
     assert!(body["correct"].is_boolean());
     assert!(body["expected"].is_string());
@@ -194,7 +195,7 @@ async fn test_batch_trial_submission() {
     let app = create_test_app().await;
     let auth = create_authenticated_user(&app).await;
     let session = create_test_session(&app, &auth).await;
-    
+
     let trials = vec![
         json!({
             "task_id": "task1",
@@ -213,7 +214,7 @@ async fn test_batch_trial_submission() {
             "client_timestamp": "2024-01-01T00:00:10Z"
         }),
     ];
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -236,9 +237,9 @@ async fn test_batch_trial_submission() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = body_to_json(response).await;
     assert_eq!(body["accepted"], 2);
     assert!(body["session_metrics"].is_object());
@@ -248,13 +249,13 @@ async fn test_batch_trial_submission() {
 async fn test_get_user_analytics() {
     let app = create_test_app().await;
     let auth = create_authenticated_user(&app).await;
-    
+
     // Create some sessions with data
     for _ in 0..3 {
         let session = create_test_session(&app, &auth).await;
         submit_test_trials(&app, &auth, &session, 10).await;
     }
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -265,9 +266,9 @@ async fn test_get_user_analytics() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = body_to_json(response).await;
     assert!(body["summary"]["total_sessions"].as_i64().unwrap() >= 3);
     assert!(body["summary"]["average_accuracy"].is_number());
@@ -278,21 +279,18 @@ async fn test_get_user_analytics() {
 async fn test_export_user_data() {
     let app = create_test_app().await;
     let auth = create_authenticated_user(&app).await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
-                .uri(format!(
-                    "/api/v1/users/{}/export?format=json",
-                    auth.user_id
-                ))
+                .uri(format!("/api/v1/users/{}/export?format=json", auth.user_id))
                 .header("authorization", format!("Bearer {}", auth.token))
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         response.headers().get("content-type").unwrap(),
@@ -303,7 +301,7 @@ async fn test_export_user_data() {
 #[tokio::test]
 async fn test_rate_limiting() {
     let app = create_test_app().await;
-    
+
     // Send many requests quickly
     for _ in 0..150 {
         let response = app
@@ -316,7 +314,7 @@ async fn test_rate_limiting() {
             )
             .await
             .unwrap();
-        
+
         if response.status() == StatusCode::TOO_MANY_REQUESTS {
             // Rate limit hit
             assert!(response.headers().get("x-ratelimit-limit").is_some());
@@ -325,7 +323,7 @@ async fn test_rate_limiting() {
             return;
         }
     }
-    
+
     panic!("Rate limiting did not trigger");
 }
 
@@ -334,7 +332,7 @@ async fn test_session_completion() {
     let app = create_test_app().await;
     let auth = create_authenticated_user(&app).await;
     let session = create_test_session(&app, &auth).await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -346,9 +344,9 @@ async fn test_session_completion() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body = body_to_json(response).await;
     assert_eq!(body["status"], "completed");
     assert!(body["ended_at"].is_string());
@@ -357,7 +355,7 @@ async fn test_session_completion() {
 #[tokio::test]
 async fn test_unauthorized_access() {
     let app = create_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -374,14 +372,14 @@ async fn test_unauthorized_access() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
 async fn test_invalid_input_validation() {
     let app = create_test_app().await;
-    
+
     let response = app
         .oneshot(
             Request::builder()
@@ -399,9 +397,9 @@ async fn test_invalid_input_validation() {
         )
         .await
         .unwrap();
-    
+
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
-    
+
     let body = body_to_json(response).await;
     assert!(body["error"]["code"].is_string());
     assert!(body["error"]["message"].is_string());

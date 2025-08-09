@@ -33,7 +33,7 @@ pub fn parse_uuid_flexible(s: &str) -> Result<Uuid, uuid::Error> {
     if let Ok(uuid) = Uuid::parse_str(s) {
         return Ok(uuid);
     }
-    
+
     // If it's 32 characters without hyphens, add them
     if s.len() == 32 {
         let formatted = format!(
@@ -60,7 +60,7 @@ pub fn calculate_xp_reward(
     let mut xp = if correct {
         // Base XP for correct answer
         let base = (10.0 + difficulty * 20.0) as i32;
-        
+
         // Speed bonus
         let speed_bonus = match response_time_ms {
             0..=1000 => 10,
@@ -68,27 +68,24 @@ pub fn calculate_xp_reward(
             2001..=3000 => 2,
             _ => 0,
         };
-        
+
         base + speed_bonus
     } else {
         // Small consolation XP for trying
         2
     };
-    
+
     // Streak multiplier
     if streak > 0 {
         let multiplier = 1.0 + (streak.min(10) as f64 * 0.1);
         xp = (xp as f64 * multiplier) as i32;
     }
-    
+
     xp
 }
 
 /// Check if an achievement should be unlocked
-pub fn check_achievement_unlock(
-    achievement_id: &str,
-    user_stats: &UserStats,
-) -> bool {
+pub fn check_achievement_unlock(achievement_id: &str, user_stats: &UserStats) -> bool {
     match achievement_id {
         "first_day" => user_stats.total_tasks > 0,
         "getting_started" => user_stats.total_tasks >= 10,
@@ -102,7 +99,9 @@ pub fn check_achievement_unlock(
         "perfectionist" => user_stats.perfect_streak >= 20,
         "flawless_victory" => user_stats.session_accuracy >= 1.0 && user_stats.session_tasks >= 50,
         "quick_thinker" => user_stats.avg_response_time_ms < 2000 && user_stats.session_tasks >= 20,
-        "lightning_fast" => user_stats.avg_response_time_ms < 1000 && user_stats.session_tasks >= 20,
+        "lightning_fast" => {
+            user_stats.avg_response_time_ms < 1000 && user_stats.session_tasks >= 20
+        }
         _ => false,
     }
 }

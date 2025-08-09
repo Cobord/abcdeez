@@ -1,13 +1,13 @@
 use axum::{
-    body::Body,
+    body::{self, Body},
     http::{Request, Response},
     Router,
 };
 use serde_json::{json, Value};
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use std::sync::Arc;
 use tower::ServiceExt;
 use uuid::Uuid;
-use web_backend::{AppState, create_app};
+use web_backend::{build_router, create_test_state_sqlite};
 
 pub struct TestUser {
     pub user_id: String,
@@ -34,33 +34,15 @@ pub struct TestTask {
 }
 
 pub async fn create_test_app() -> Router {
-    // Create test database
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://test:test@localhost/test_graphlearning".to_string());
-    
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&database_url)
-        .await
-        .expect("Failed to connect to test database");
-    
-    // Run migrations
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
-    
-    // Create app state
-    let state = AppState::new(pool).await;
-    
-    create_app(state)
+    let state: Arc<web_backend::state::AppState> = create_test_state_sqlite().await;
+    build_router(state)
 }
 
 pub async fn create_test_user(app: &Router) -> TestUser {
     let email = format!("test-{}@example.com", Uuid::new_v4());
     let password = "SecurePass123!";
     let display_name = "Test User";
-    
+
     let response = app
         .clone()
         .oneshot(
@@ -80,9 +62,9 @@ pub async fn create_test_user(app: &Router) -> TestUser {
         )
         .await
         .unwrap();
-    
+
     let body = body_to_json(response).await;
-    
+
     TestUser {
         user_id: body["user_id"].as_str().unwrap().to_string(),
         email,
@@ -93,7 +75,7 @@ pub async fn create_test_user(app: &Router) -> TestUser {
 
 pub async fn create_authenticated_user(app: &Router) -> TestAuth {
     let user = create_test_user(app).await;
-    
+
     let response = app
         .clone()
         .oneshot(
@@ -112,9 +94,9 @@ pub async fn create_authenticated_user(app: &Router) -> TestAuth {
         )
         .await
         .unwrap();
-    
+
     let body = body_to_json(response).await;
-    
+
     TestAuth {
         user_id: user.user_id,
         token: body["access_token"].as_str().unwrap().to_string(),
@@ -146,9 +128,9 @@ pub async fn create_test_session(app: &Router, auth: &TestAuth) -> TestSession {
         )
         .await
         .unwrap();
-    
+
     let body = body_to_json(response).await;
-    
+
     TestSession {
         id: body["session_id"].as_str().unwrap().to_string(),
         domain: "alphabet".to_string(),
@@ -169,9 +151,9 @@ pub async fn get_next_task(app: &Router, auth: &TestAuth, session: &TestSession)
         )
         .await
         .unwrap();
-    
+
     let body = body_to_json(response).await;
-    
+
     TestTask {
         id: body["task_id"].as_str().unwrap().to_string(),
         stimulus: body["stimulus"].as_str().unwrap().to_string(),
@@ -192,7 +174,7 @@ pub async fn submit_test_trials(
 ) {
     for _ in 0..count {
         let task = get_next_task(app, auth, session).await;
-        
+
         let _ = app
             .clone()
             .oneshot(
@@ -220,16 +202,10 @@ pub async fn submit_test_trials(
 }
 
 pub async fn body_to_json(response: Response<Body>) -> Value {
-    let body = hyper::body::to_bytes(response.into_body())
-        .await
-        .unwrap();
+    let body = body::to_bytes(response.into_body()).await.unwrap();
     serde_json::from_slice(&body).unwrap()
 }
 
-pub async fn cleanup_test_data(pool: &PgPool) {
-    // Clean up test data after tests
-    sqlx::query!("DELETE FROM users WHERE email LIKE 'test-%@example.com'")
-        .execute(pool)
-        .await
-        .unwrap();
+pub async fn cleanup_test_data(_state: &web_backend::state::AppState) {
+    // For SQLite tests: database file is ephemeral in CI; add cleanup here if needed
 }

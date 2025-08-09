@@ -41,7 +41,10 @@ impl std::str::FromStr for OAuthProvider {
         match s.to_lowercase().as_str() {
             "apple" => Ok(OAuthProvider::Apple),
             "github" => Ok(OAuthProvider::GitHub),
-            _ => Err(AppError::ValidationError(format!("Unsupported OAuth provider: {}", s))),
+            _ => Err(AppError::ValidationError(format!(
+                "Unsupported OAuth provider: {}",
+                s
+            ))),
         }
     }
 }
@@ -65,9 +68,9 @@ pub struct OAuthUserProfile {
 #[derive(Debug, Deserialize)]
 pub struct OAuthAuthRequest {
     pub provider: String,
-    pub identity_token: Option<String>,     // For Apple Sign In
-    pub authorization_code: Option<String>, // For GitHub/other OAuth2 flows
-    pub state: Option<String>,              // For OAuth2 CSRF protection
+    pub identity_token: Option<String>,       // For Apple Sign In
+    pub authorization_code: Option<String>,   // For GitHub/other OAuth2 flows
+    pub state: Option<String>,                // For OAuth2 CSRF protection
     pub user_info: Option<serde_json::Value>, // Additional user info from client
 }
 
@@ -132,9 +135,7 @@ impl OAuthService {
                 );
                 Ok(url)
             }
-            OAuthProvider::GitHub => {
-                self.github_service.get_authorization_url(state)
-            }
+            OAuthProvider::GitHub => self.github_service.get_authorization_url(state),
         }
     }
 
@@ -143,54 +144,73 @@ impl OAuthService {
         let provider: OAuthProvider = request.provider.parse()?;
 
         match provider {
-            OAuthProvider::Apple => {
-                self.authenticate_apple(request).await
-            }
-            OAuthProvider::GitHub => {
-                self.authenticate_github(request).await
-            }
+            OAuthProvider::Apple => self.authenticate_apple(request).await,
+            OAuthProvider::GitHub => self.authenticate_github(request).await,
         }
     }
 
     /// Authenticate with Apple Sign In
-    async fn authenticate_apple(&mut self, request: OAuthAuthRequest) -> AppResult<OAuthUserProfile> {
-        let identity_token = request.identity_token
-            .ok_or_else(|| AppError::ValidationError("identity_token required for Apple Sign In".to_string()))?;
+    async fn authenticate_apple(
+        &mut self,
+        request: OAuthAuthRequest,
+    ) -> AppResult<OAuthUserProfile> {
+        let identity_token = request.identity_token.ok_or_else(|| {
+            AppError::ValidationError("identity_token required for Apple Sign In".to_string())
+        })?;
 
-        let apple_token = self.apple_service.verify_identity_token(&identity_token).await?;
+        let apple_token = self
+            .apple_service
+            .verify_identity_token(&identity_token)
+            .await?;
 
         // Convert Apple token to unified profile
         let profile = self.convert_apple_token_to_profile(apple_token, request.user_info)?;
 
-        info!("Successfully authenticated Apple user: {}", profile.username);
+        info!(
+            "Successfully authenticated Apple user: {}",
+            profile.username
+        );
         Ok(profile)
     }
 
     /// Authenticate with GitHub OAuth
     async fn authenticate_github(&self, request: OAuthAuthRequest) -> AppResult<OAuthUserProfile> {
-        let auth_code = request.authorization_code
-            .ok_or_else(|| AppError::ValidationError("authorization_code required for GitHub OAuth".to_string()))?;
-        
-        let state = request.state
-            .ok_or_else(|| AppError::ValidationError("state required for GitHub OAuth".to_string()))?;
+        let auth_code = request.authorization_code.ok_or_else(|| {
+            AppError::ValidationError("authorization_code required for GitHub OAuth".to_string())
+        })?;
+
+        let state = request.state.ok_or_else(|| {
+            AppError::ValidationError("state required for GitHub OAuth".to_string())
+        })?;
 
         // Exchange code for access token
-        let token_response = self.github_service.exchange_code_for_token(&auth_code, &state).await?;
+        let token_response = self
+            .github_service
+            .exchange_code_for_token(&auth_code, &state)
+            .await?;
 
         // Get user profile
-        let github_user = self.github_service.get_user_profile(&token_response.access_token).await?;
+        let github_user = self
+            .github_service
+            .get_user_profile(&token_response.access_token)
+            .await?;
 
         // Get primary email if not in profile
         let email = if github_user.email.is_some() {
             github_user.email.clone()
         } else {
-            self.github_service.get_user_primary_email(&token_response.access_token).await?
+            self.github_service
+                .get_user_primary_email(&token_response.access_token)
+                .await?
         };
 
         // Convert GitHub user to unified profile
         let profile = self.convert_github_user_to_profile(github_user, email)?;
 
-        info!("Successfully authenticated GitHub user: {}", profile.username);
+        info!(
+            "Successfully authenticated GitHub user: {}",
+            profile.username
+        );
         Ok(profile)
     }
 
@@ -207,29 +227,27 @@ impl OAuthService {
             .and_then(|name| {
                 if let (Some(first), Some(last)) = (
                     name.get("firstName").and_then(|f| f.as_str()),
-                    name.get("lastName").and_then(|l| l.as_str())
+                    name.get("lastName").and_then(|l| l.as_str()),
                 ) {
                     Some(format!("{} {}", first, last))
                 } else {
-                    name.get("firstName").and_then(|f| f.as_str()).map(|s| s.to_string())
+                    name.get("firstName")
+                        .and_then(|f| f.as_str())
+                        .map(|s| s.to_string())
                 }
             });
 
         // Generate username from email or use Apple ID
-        let username = apple_token.email
+        let username = apple_token
+            .email
             .as_ref()
-            .map(|email| {
-                email.split('@')
-                    .next()
-                    .unwrap_or("apple_user")
-                    .to_string()
-            })
+            .map(|email| email.split('@').next().unwrap_or("apple_user").to_string())
             .unwrap_or_else(|| format!("apple_{}", &apple_token.sub[..8]));
 
         let email_verified = apple_token.is_email_verified();
         let is_private_email = apple_token.is_private_email();
         let raw_profile = serde_json::to_value(&apple_token).unwrap_or_default();
-        
+
         Ok(OAuthUserProfile {
             provider: OAuthProvider::Apple,
             provider_user_id: apple_token.sub,
@@ -238,7 +256,7 @@ impl OAuthService {
             email: apple_token.email,
             email_verified,
             is_private_email,
-            avatar_url: None, // Apple doesn't provide avatars
+            avatar_url: None,  // Apple doesn't provide avatars
             profile_url: None, // Apple doesn't have public profiles
             raw_profile,
         })
@@ -251,14 +269,14 @@ impl OAuthService {
         email: Option<String>,
     ) -> AppResult<OAuthUserProfile> {
         let raw_profile = serde_json::to_value(&github_user).unwrap_or_default();
-        
+
         Ok(OAuthUserProfile {
             provider: OAuthProvider::GitHub,
             provider_user_id: github_user.id.to_string(),
             username: github_user.login,
             display_name: github_user.name,
             email,
-            email_verified: true, // GitHub emails are verified when primary
+            email_verified: true,    // GitHub emails are verified when primary
             is_private_email: false, // GitHub doesn't use private relay
             avatar_url: Some(github_user.avatar_url),
             profile_url: Some(github_user.html_url),
@@ -268,7 +286,7 @@ impl OAuthService {
 
     /// Validate OAuth credentials for a provider
     pub async fn validate_credentials(
-        &self, 
+        &self,
         provider: OAuthProvider,
         access_token: &str,
     ) -> AppResult<CredentialState> {
@@ -281,7 +299,10 @@ impl OAuthService {
                 Ok(CredentialState::Unknown)
             }
             OAuthProvider::GitHub => {
-                let is_valid = self.github_service.validate_access_token(access_token).await?;
+                let is_valid = self
+                    .github_service
+                    .validate_access_token(access_token)
+                    .await?;
                 Ok(if is_valid {
                     CredentialState::Authorized
                 } else {
@@ -304,9 +325,7 @@ impl OAuthService {
                 info!("Apple credential revocation must be done client-side");
                 Ok(())
             }
-            OAuthProvider::GitHub => {
-                self.github_service.revoke_access_token(access_token).await
-            }
+            OAuthProvider::GitHub => self.github_service.revoke_access_token(access_token).await,
         }
     }
 
@@ -320,7 +339,10 @@ impl OAuthService {
         credential_state: CredentialState,
         error_details: Option<&str>,
     ) -> AppResult<()> {
-        let mut conn = app_state.db_pool.acquire().await
+        let mut conn = app_state
+            .db_pool
+            .acquire()
+            .await
             .map_err(|e| AppError::DatabaseError(e))?;
 
         let check_id = Uuid::new_v4();
@@ -362,14 +384,17 @@ impl OAuthService {
         user_id: Uuid,
         provider: OAuthProvider,
     ) -> AppResult<Option<(DateTime<Utc>, CredentialState)>> {
-        let mut conn = app_state.db_pool.acquire().await
+        let mut conn = app_state
+            .db_pool
+            .acquire()
+            .await
             .map_err(|e| AppError::DatabaseError(e))?;
 
         let user_id_bytes = user_id.as_bytes();
         let result = sqlx::query(
             "SELECT last_check_time, credential_state FROM oauth_credential_checks
              WHERE user_id = ? AND provider = ?
-             ORDER BY last_check_time DESC LIMIT 1"
+             ORDER BY last_check_time DESC LIMIT 1",
         )
         .bind(&user_id_bytes[..])
         .bind(provider.to_string())
@@ -378,11 +403,13 @@ impl OAuthService {
         .map_err(|e| AppError::DatabaseError(e))?;
 
         if let Some(row) = result {
-            let last_check_time: DateTime<Utc> = row.try_get("last_check_time")
+            let last_check_time: DateTime<Utc> = row
+                .try_get("last_check_time")
                 .map_err(|e| AppError::DatabaseError(e))?;
-            let state_str: String = row.try_get("credential_state")
+            let state_str: String = row
+                .try_get("credential_state")
                 .map_err(|e| AppError::DatabaseError(e))?;
-            
+
             let credential_state = match state_str.as_str() {
                 "authorized" => CredentialState::Authorized,
                 "revoked" => CredentialState::Revoked,
@@ -408,9 +435,18 @@ mod tests {
 
     #[test]
     fn test_oauth_provider_parsing() {
-        assert_eq!("apple".parse::<OAuthProvider>().unwrap(), OAuthProvider::Apple);
-        assert_eq!("github".parse::<OAuthProvider>().unwrap(), OAuthProvider::GitHub);
-        assert_eq!("APPLE".parse::<OAuthProvider>().unwrap(), OAuthProvider::Apple);
+        assert_eq!(
+            "apple".parse::<OAuthProvider>().unwrap(),
+            OAuthProvider::Apple
+        );
+        assert_eq!(
+            "github".parse::<OAuthProvider>().unwrap(),
+            OAuthProvider::GitHub
+        );
+        assert_eq!(
+            "APPLE".parse::<OAuthProvider>().unwrap(),
+            OAuthProvider::Apple
+        );
         assert!("invalid".parse::<OAuthProvider>().is_err());
     }
 

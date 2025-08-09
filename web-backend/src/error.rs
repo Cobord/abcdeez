@@ -21,14 +21,21 @@ pub enum AppError {
     ValidationError(String),
     AuthenticationError(String),
     RateLimitExceeded,
-    
+
     // Core library errors
     CoreError(graph_learning_core::Error),
     TaskGenerationError(String),
     NumericalError(String),
     StatisticalError(String),
-    ConvergenceError { iterations: usize, tolerance: f64, final_error: f64 },
-    InsufficientData { required: usize, actual: usize },
+    ConvergenceError {
+        iterations: usize,
+        tolerance: f64,
+        final_error: f64,
+    },
+    InsufficientData {
+        required: usize,
+        actual: usize,
+    },
 }
 
 impl fmt::Display for AppError {
@@ -47,19 +54,30 @@ impl fmt::Display for AppError {
             AppError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
             AppError::AuthenticationError(msg) => write!(f, "Authentication error: {}", msg),
             AppError::RateLimitExceeded => write!(f, "Rate limit exceeded"),
-            
+
             // Core library errors
             AppError::CoreError(e) => write!(f, "Core library error: {}", e),
             AppError::TaskGenerationError(msg) => write!(f, "Task generation error: {}", msg),
             AppError::NumericalError(msg) => write!(f, "Numerical error: {}", msg),
             AppError::StatisticalError(msg) => write!(f, "Statistical error: {}", msg),
-            AppError::ConvergenceError { iterations, tolerance, final_error } => {
-                write!(f, "Convergence error: failed after {} iterations (tolerance: {}, error: {})", 
-                       iterations, tolerance, final_error)
-            },
+            AppError::ConvergenceError {
+                iterations,
+                tolerance,
+                final_error,
+            } => {
+                write!(
+                    f,
+                    "Convergence error: failed after {} iterations (tolerance: {}, error: {})",
+                    iterations, tolerance, final_error
+                )
+            }
             AppError::InsufficientData { required, actual } => {
-                write!(f, "Insufficient data: required {}, got {}", required, actual)
-            },
+                write!(
+                    f,
+                    "Insufficient data: required {}, got {}",
+                    required, actual
+                )
+            }
         }
     }
 }
@@ -76,12 +94,16 @@ impl IntoResponse for AppError {
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             AppError::ConflictError(msg) => (StatusCode::CONFLICT, msg),
             AppError::UnprocessableEntity(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
-            AppError::InternalServerError => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
-            }
+            AppError::InternalServerError => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal server error".to_string(),
+            ),
             AppError::DatabaseError(e) => {
                 tracing::error!("Database error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Database error".to_string(),
+                )
             }
             AppError::RedisError(e) => {
                 tracing::error!("Redis error: {:?}", e);
@@ -89,36 +111,63 @@ impl IntoResponse for AppError {
             }
             AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::AuthenticationError(msg) => (StatusCode::UNAUTHORIZED, msg),
-            AppError::RateLimitExceeded => {
-                (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded".to_string())
-            }
-            
+            AppError::RateLimitExceeded => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "Rate limit exceeded".to_string(),
+            ),
+
             // Core library errors
             AppError::CoreError(e) => {
                 tracing::error!("Core library error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Core library error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Core library error".to_string(),
+                )
             }
             AppError::TaskGenerationError(msg) => {
                 tracing::warn!("Task generation error: {}", msg);
-                (StatusCode::UNPROCESSABLE_ENTITY, format!("Task generation failed: {}", msg))
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    format!("Task generation failed: {}", msg),
+                )
             }
             AppError::NumericalError(msg) => {
                 tracing::error!("Numerical error: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Numerical computation error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Numerical computation error".to_string(),
+                )
             }
             AppError::StatisticalError(msg) => {
                 tracing::error!("Statistical error: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Statistical computation error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Statistical computation error".to_string(),
+                )
             }
-            AppError::ConvergenceError { iterations, tolerance, final_error } => {
-                tracing::warn!("Convergence failure: {} iterations, tolerance: {}, error: {}", 
-                              iterations, tolerance, final_error);
-                (StatusCode::UNPROCESSABLE_ENTITY, "Algorithm failed to converge".to_string())
+            AppError::ConvergenceError {
+                iterations,
+                tolerance,
+                final_error,
+            } => {
+                tracing::warn!(
+                    "Convergence failure: {} iterations, tolerance: {}, error: {}",
+                    iterations,
+                    tolerance,
+                    final_error
+                );
+                (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "Algorithm failed to converge".to_string(),
+                )
             }
-            AppError::InsufficientData { required, actual } => {
-                (StatusCode::BAD_REQUEST, 
-                 format!("Insufficient data: required {} samples, got {}", required, actual))
-            }
+            AppError::InsufficientData { required, actual } => (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Insufficient data: required {} samples, got {}",
+                    required, actual
+                ),
+            ),
         };
 
         let body = Json(json!({

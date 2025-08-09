@@ -1,11 +1,11 @@
-#[cfg(feature = "sqlite")]
-use sqlx::{sqlite::SqlitePool, Pool, Sqlite};
 #[cfg(feature = "postgres")]
 use sqlx::{postgres::PgPool, Pool, Postgres};
+#[cfg(feature = "sqlite")]
+use sqlx::{sqlite::SqlitePool, Pool, Sqlite};
 
 use anyhow::Result;
-use uuid::Uuid;
 use std::time::Duration;
+use uuid::Uuid;
 
 #[cfg(feature = "sqlite")]
 pub type DbPool = SqlitePool;
@@ -33,25 +33,19 @@ impl Database {
 
     // Generic query execution with proper error handling
     pub async fn execute_query(&self, query: &str) -> Result<u64> {
-        let result = sqlx::query(query)
-            .execute(&self.pool)
-            .await?;
+        let result = sqlx::query(query).execute(&self.pool).await?;
         Ok(result.rows_affected())
     }
 
     // Fetch a single row
     pub async fn fetch_one(&self, query: &str) -> Result<DbRow> {
-        let row = sqlx::query(query)
-            .fetch_one(&self.pool)
-            .await?;
+        let row = sqlx::query(query).fetch_one(&self.pool).await?;
         Ok(row)
     }
 
     // Fetch all rows
     pub async fn fetch_all(&self, query: &str) -> Result<Vec<DbRow>> {
-        let rows = sqlx::query(query)
-            .fetch_all(&self.pool)
-            .await?;
+        let rows = sqlx::query(query).fetch_all(&self.pool).await?;
         Ok(rows)
     }
 }
@@ -102,7 +96,9 @@ pub fn uuid_to_bytes(uuid: Uuid) -> Vec<u8> {
 }
 
 pub fn bytes_to_uuid(bytes: Vec<u8>) -> Result<Uuid> {
-    let array: [u8; 16] = bytes.try_into().map_err(|_| anyhow::anyhow!("Invalid UUID bytes"))?;
+    let array: [u8; 16] = bytes
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Invalid UUID bytes"))?;
     Ok(Uuid::from_bytes(array))
 }
 

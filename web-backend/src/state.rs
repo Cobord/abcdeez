@@ -1,4 +1,6 @@
-use crate::{cache, cache::ConnectionManager, config::Config, db::DbPool, services::BatchJobService};
+use crate::{
+    cache, cache::ConnectionManager, config::Config, db::DbPool, services::BatchJobService,
+};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -22,7 +24,7 @@ impl AppState {
             cache_conn.clone(),
             config.clone(),
         ));
-        
+
         Self {
             db_pool,
             redis_conn: cache_conn.clone(),

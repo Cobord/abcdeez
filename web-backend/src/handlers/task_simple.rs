@@ -10,14 +10,13 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
-    models::{session::Session, learner::Learner},
+    models::{learner::Learner, session::Session},
     services::{adaptation_service::AdaptationService, learner_service::LearnerService},
     state::AppState,
 };
 
 use graph_learning_core::{
-    Task, TaskGenerator, TaskType, Topology,
-    bayesian::BayesianLearnerModel, learner::LearnerModel,
+    bayesian::BayesianLearnerModel, learner::LearnerModel, Task, TaskGenerator, TaskType, Topology,
 };
 
 /// Simple task generation endpoint that works with current Axum version
@@ -27,15 +26,17 @@ pub async fn generate_simple(
     Query(params): Query<SimpleTaskRequest>,
 ) -> AppResult<Json<SimpleTaskResponse>> {
     // Get topology type
-    let topology_type = params.topology_type.unwrap_or_else(|| "alphabet".to_string());
-    
+    let topology_type = params
+        .topology_type
+        .unwrap_or_else(|| "alphabet".to_string());
+
     // Create topology from type
     let topology = create_topology_from_string(&topology_type)?;
     let mut task_generator = TaskGenerator::new(topology.clone());
-    
+
     // Generate a task
     let task = task_generator.generate_task(None);
-    
+
     Ok(Json(SimpleTaskResponse {
         task_type: format!("{:?}", task.task_type),
         prompt: task.prompt,
@@ -60,7 +61,7 @@ pub async fn get_difficulty(
     task_type_difficulties.insert("KJump".to_string(), 0.6);
     task_type_difficulties.insert("Segment".to_string(), 0.5);
     task_type_difficulties.insert("Index".to_string(), 0.7);
-    
+
     Ok(Json(DifficultyResponse {
         task_type_difficulties,
         recommended_difficulty: params.learner_id.map(|_| 0.5),
@@ -82,7 +83,7 @@ pub async fn generate_hint(
         "Index" => "Count the position of this letter in the alphabet (A=1, B=2, etc.).",
         _ => "Break down the problem into smaller steps.",
     };
-    
+
     Ok(Json(HintResponse {
         hint_text: hint_text.to_string(),
         hint_level: 1,
@@ -98,23 +99,35 @@ fn create_topology_from_string(topology_type: &str) -> AppResult<Topology> {
         "numbers" => {
             let numbers: Vec<String> = (1..=26).map(|n| n.to_string()).collect();
             Ok(Topology::new_linear(numbers))
-        },
+        }
         "days_of_week" => {
             let days = vec![
-                "Monday".to_string(), "Tuesday".to_string(), "Wednesday".to_string(),
-                "Thursday".to_string(), "Friday".to_string(), "Saturday".to_string(),
-                "Sunday".to_string()
+                "Monday".to_string(),
+                "Tuesday".to_string(),
+                "Wednesday".to_string(),
+                "Thursday".to_string(),
+                "Friday".to_string(),
+                "Saturday".to_string(),
+                "Sunday".to_string(),
             ];
             Ok(Topology::new_cyclic(days))
-        },
+        }
         "music_notes" => {
             let notes = vec![
-                "C".to_string(), "D".to_string(), "E".to_string(), "F".to_string(),
-                "G".to_string(), "A".to_string(), "B".to_string()
+                "C".to_string(),
+                "D".to_string(),
+                "E".to_string(),
+                "F".to_string(),
+                "G".to_string(),
+                "A".to_string(),
+                "B".to_string(),
             ];
             Ok(Topology::new_linear(notes))
-        },
-        _ => Err(AppError::BadRequest(format!("Unknown topology type: {}", topology_type)))
+        }
+        _ => Err(AppError::BadRequest(format!(
+            "Unknown topology type: {}",
+            topology_type
+        ))),
     }
 }
 

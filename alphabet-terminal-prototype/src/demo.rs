@@ -23,36 +23,39 @@ pub fn run_demo() {
     for i in 1..=10 {
         println!("Task {}/10", i);
         println!("──────────────────────────────────────────────────");
-        
+
         let task = scheduler.select_next_task();
         println!("Question: {}", task.prompt);
-        
+
         if !task.options.is_empty() {
             println!("Options:");
             for (idx, option) in task.options.iter().enumerate() {
                 println!("  [{}] {}", idx + 1, option);
             }
         }
-        
+
         let simulated_answer = if rand::random::<f64>() > 0.3 {
             task.correct_answer.clone()
         } else {
             task.options.get(1).unwrap_or(&"Wrong".to_string()).clone()
         };
-        
+
         println!("Simulated answer: {}", simulated_answer);
-        
+
         session.start_task(Some(task.task_type.clone()));
         let response = session.submit_answer(simulated_answer);
-        
+
         if response.correct {
             println!("✓ CORRECT!");
         } else {
-            println!("✗ INCORRECT - Correct answer: {}", response.task.correct_answer);
+            println!(
+                "✗ INCORRECT - Correct answer: {}",
+                response.task.correct_answer
+            );
         }
-        
+
         scheduler.update_model(&response.task, response.correct, response.response_time_ms);
-        
+
         println!();
     }
 
@@ -72,16 +75,28 @@ pub fn run_demo() {
 
     println!("Graph-Coded Mastery Metrics:");
     println!("──────────────────────────────────────────────────");
-    println!("Bidirectionality Index: {:.3}", metrics.bidirectionality_index);
+    println!(
+        "Bidirectionality Index: {:.3}",
+        metrics.bidirectionality_index
+    );
     println!("  (Lower is better - measures forward/backward asymmetry)");
     println!();
-    println!("Symbolic Distance Slope: {:.3}", metrics.symbolic_distance_slope);
+    println!(
+        "Symbolic Distance Slope: {:.3}",
+        metrics.symbolic_distance_slope
+    );
     println!("  (Lower is better - indicates direct retrieval vs scanning)");
     println!();
-    println!("Chunk Boundary Penalty: {:.3}", metrics.chunk_boundary_penalty);
+    println!(
+        "Chunk Boundary Penalty: {:.3}",
+        metrics.chunk_boundary_penalty
+    );
     println!("  (Lower is better - measures mental segmentation)");
     println!();
-    println!("Average Memory Strength: {:.1}%", metrics.avg_memory_strength * 100.0);
+    println!(
+        "Average Memory Strength: {:.1}%",
+        metrics.avg_memory_strength * 100.0
+    );
     println!();
 
     println!("Operation Proficiencies:");
@@ -162,11 +177,15 @@ pub fn demonstrate_eig() {
 
     let topology = crate::topology::Topology::alphabet();
     let learner_model = crate::learner::LearnerModel::new("eig_demo".to_string(), &topology);
-    let mut scheduler = crate::adaptive::AdaptiveScheduler::new_with_eig(learner_model, topology.clone(), true);
-    
-    println!("Initial model entropy: {:.2}", scheduler.get_model_entropy());
+    let mut scheduler =
+        crate::adaptive::AdaptiveScheduler::new_with_eig(learner_model, topology.clone(), true);
+
+    println!(
+        "Initial model entropy: {:.2}",
+        scheduler.get_model_entropy()
+    );
     println!("\nGenerating candidate tasks and ranking by EIG...\n");
-    
+
     // Generate various task types
     let mut task_gen = crate::tasks::TaskGenerator::new(topology.clone());
     let candidates = vec![
@@ -191,10 +210,10 @@ pub fn demonstrate_eig() {
             k: 3,
         })),
     ];
-    
+
     let bayesian_model = scheduler.get_bayesian_model();
     let ranked = bayesian_model.rank_tasks_by_eig(candidates);
-    
+
     println!("Tasks ranked by Expected Information Gain:");
     println!("──────────────────────────────────────────────────");
     for (i, (task, eig)) in ranked.iter().enumerate().take(5) {
@@ -203,48 +222,55 @@ pub fn demonstrate_eig() {
         println!("   Type: {:?}", task.task_type);
         println!();
     }
-    
+
     println!("Simulating 10 adaptive selections with EIG...\n");
     let mut total_entropy_reduction = 0.0;
     let initial_entropy = scheduler.get_model_entropy();
-    
+
     for i in 1..=10 {
         let entropy_before = scheduler.get_model_entropy();
         let task = scheduler.select_next_task();
-        
+
         // Simulate response
         let correct = rand::random::<f64>() > 0.3;
         scheduler.update_model(&task, correct, 1000);
-        
+
         let entropy_after = scheduler.get_model_entropy();
         let reduction = entropy_before - entropy_after;
         total_entropy_reduction += reduction;
-        
-        println!("Round {}: Entropy {:.3} -> {:.3} (Δ = {:.4})", 
-            i, entropy_before, entropy_after, reduction);
+
+        println!(
+            "Round {}: Entropy {:.3} -> {:.3} (Δ = {:.4})",
+            i, entropy_before, entropy_after, reduction
+        );
     }
-    
+
     println!("\n──────────────────────────────────────────────────");
     println!("Total entropy reduction: {:.3}", total_entropy_reduction);
     println!("Final model entropy: {:.3}", scheduler.get_model_entropy());
-    println!("Entropy reduction rate: {:.1}%", 
-        (initial_entropy - scheduler.get_model_entropy()) / initial_entropy * 100.0);
-    
+    println!(
+        "Entropy reduction rate: {:.1}%",
+        (initial_entropy - scheduler.get_model_entropy()) / initial_entropy * 100.0
+    );
+
     println!("\nComparing with Random Selection:");
     println!("──────────────────────────────────────────────────");
-    
+
     let learner_model2 = crate::learner::LearnerModel::new("random".to_string(), &topology);
-    let mut scheduler2 = crate::adaptive::AdaptiveScheduler::new_with_eig(learner_model2, topology.clone(), false);
-    
+    let mut scheduler2 =
+        crate::adaptive::AdaptiveScheduler::new_with_eig(learner_model2, topology.clone(), false);
+
     let initial_entropy2 = scheduler2.get_model_entropy();
     for _ in 1..=10 {
         let task = scheduler2.select_next_task();
         let correct = rand::random::<f64>() > 0.3;
         scheduler2.update_model(&task, correct, 1000);
     }
-    
-    println!("Random selection entropy reduction: {:.1}%",
-        (initial_entropy2 - scheduler2.get_model_entropy()) / initial_entropy2 * 100.0);
+
+    println!(
+        "Random selection entropy reduction: {:.1}%",
+        (initial_entropy2 - scheduler2.get_model_entropy()) / initial_entropy2 * 100.0
+    );
     println!("\nEIG-based selection is more efficient at reducing uncertainty!");
 }
 
@@ -258,19 +284,19 @@ pub fn demonstrate_statistical_analysis() {
     let mut responses = Vec::new();
 
     println!("Simulating 50 training trials...\n");
-    
+
     for i in 0..50 {
         session.start_task(None);
         let correct = rand::random::<f64>() > (0.4 - i as f64 * 0.008);
         let rt = 1000.0 + rand::random::<f64>() * 500.0 - i as f64 * 10.0;
-        
+
         if let Some(task) = &session.current_task {
             let answer = if correct {
                 task.correct_answer.clone()
             } else {
                 "Wrong".to_string()
             };
-            
+
             let response = crate::tasks::TaskResponse {
                 task: task.clone(),
                 user_answer: answer,
@@ -290,29 +316,49 @@ pub fn demonstrate_statistical_analysis() {
 
     println!("\n1. Learning Curve Analysis:");
     println!("──────────────────────────────────────────────────");
-    println!("   Improvement rate: {:.2}%", analysis.learning_curves.improvement_rate * 100.0);
+    println!(
+        "   Improvement rate: {:.2}%",
+        analysis.learning_curves.improvement_rate * 100.0
+    );
     if let Some(plateau) = analysis.learning_curves.plateau_point {
         println!("   Performance plateau reached at trial: {}", plateau);
     }
-    println!("   Final accuracy: {:.1}%", 
-        analysis.learning_curves.accuracy_over_time.last().unwrap_or(&0.0) * 100.0);
+    println!(
+        "   Final accuracy: {:.1}%",
+        analysis
+            .learning_curves
+            .accuracy_over_time
+            .last()
+            .unwrap_or(&0.0)
+            * 100.0
+    );
 
     println!("\n2. Strategy Analysis:");
     println!("──────────────────────────────────────────────────");
-    println!("   RT-Distance Correlation: {:.3}", analysis.strategy_analysis.rt_distance_correlation);
-    println!("   Strategy Classification: {:?}", analysis.strategy_analysis.strategy_classification);
+    println!(
+        "   RT-Distance Correlation: {:.3}",
+        analysis.strategy_analysis.rt_distance_correlation
+    );
+    println!(
+        "   Strategy Classification: {:?}",
+        analysis.strategy_analysis.strategy_classification
+    );
     if let Some(transition) = analysis.strategy_analysis.transition_point {
         println!("   Strategy transition detected at trial: {}", transition);
     }
 
     println!("\n3. Error Pattern Analysis:");
     println!("──────────────────────────────────────────────────");
-    println!("   Locality index: {:.2} (proportion of errors within distance 1-2)", 
-        analysis.error_patterns.locality_index);
-    
+    println!(
+        "   Locality index: {:.2} (proportion of errors within distance 1-2)",
+        analysis.error_patterns.locality_index
+    );
+
     if !analysis.error_patterns.systematic_errors.is_empty() {
         println!("   Systematic errors detected:");
-        for (expected, actual, count) in &analysis.error_patterns.systematic_errors[..3.min(analysis.error_patterns.systematic_errors.len())] {
+        for (expected, actual, count) in &analysis.error_patterns.systematic_errors
+            [..3.min(analysis.error_patterns.systematic_errors.len())]
+        {
             println!("     {} <-> {}: {} times", expected, actual, count);
         }
     }
@@ -321,17 +367,25 @@ pub fn demonstrate_statistical_analysis() {
     println!("──────────────────────────────────────────────────");
     for (task_type, stats) in analysis.task_type_stats.iter().take(3) {
         println!("   {}:", task_type);
-        println!("     Mean RT: {:.0}ms (SD: {:.0}ms)", stats.mean, stats.std_dev);
-        println!("     Median: {:.0}ms, IQR: {:.0}ms", stats.median, stats.iqr);
+        println!(
+            "     Mean RT: {:.0}ms (SD: {:.0}ms)",
+            stats.mean, stats.std_dev
+        );
+        println!(
+            "     Median: {:.0}ms, IQR: {:.0}ms",
+            stats.median, stats.iqr
+        );
     }
 
     println!("\n5. Ex-Gaussian RT Model:");
     println!("──────────────────────────────────────────────────");
-    let all_rts: Vec<f64> = analysis.rt_by_distance.values()
+    let all_rts: Vec<f64> = analysis
+        .rt_by_distance
+        .values()
         .flatten()
         .cloned()
         .collect();
-    
+
     if !all_rts.is_empty() {
         let ex_gaussian = crate::statistics::ExGaussianModel::fit(&all_rts);
         println!("   μ (Gaussian mean): {:.0}ms", ex_gaussian.params.mu);
@@ -483,7 +537,8 @@ pub fn demonstrate_extended_tasks() {
 
     println!("4. Insertion Adaptation:");
     println!("──────────────────────────────────────────────────");
-    let task = ext_gen.generate_insertion_adaptation("X".to_string(), "M".to_string(), "Q".to_string());
+    let task =
+        ext_gen.generate_insertion_adaptation("X".to_string(), "M".to_string(), "Q".to_string());
     println!("   {}", task.prompt);
     println!("   Answer: {}\n", task.correct_answer);
 
@@ -495,13 +550,19 @@ pub fn demonstrate_extended_tasks() {
 
     println!("6. Landmark Navigation:");
     println!("──────────────────────────────────────────────────");
-    let task = ext_gen.generate_landmark_navigation("A".to_string(), "Z".to_string(), "M".to_string());
+    let task =
+        ext_gen.generate_landmark_navigation("A".to_string(), "Z".to_string(), "M".to_string());
     println!("   {}", task.prompt);
     println!("   Answer: {}\n", task.correct_answer);
 
     println!("7. Macro Discovery:");
     println!("──────────────────────────────────────────────────");
-    let task = ext_gen.generate_macro_discovery(vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string()]);
+    let task = ext_gen.generate_macro_discovery(vec![
+        "A".to_string(),
+        "B".to_string(),
+        "C".to_string(),
+        "D".to_string(),
+    ]);
     println!("   {}", task.prompt);
     println!("   Answer: {}\n", task.correct_answer);
 
@@ -513,65 +574,83 @@ pub fn demonstrate_extended_tasks() {
 
     println!("9. Projection Switch:");
     println!("──────────────────────────────────────────────────");
-    let task = ext_gen.generate_projection_switch("E".to_string(), "alphabetical".to_string(), "vowels_only".to_string());
+    let task = ext_gen.generate_projection_switch(
+        "E".to_string(),
+        "alphabetical".to_string(),
+        "vowels_only".to_string(),
+    );
     println!("   {}", task.prompt);
     println!("   Answer: {}\n", task.correct_answer);
 
     println!("\n═══════════════════════════════════════════════════");
-    println!("Dynamic Topology Demonstration");  
+    println!("Dynamic Topology Demonstration");
     println!("═══════════════════════════════════════════════════\n");
 
-    let base_topology = crate::topology::Topology::new_linear(vec!["A".to_string(), "B".to_string(), "C".to_string()]);
+    let base_topology = crate::topology::Topology::new_linear(vec![
+        "A".to_string(),
+        "B".to_string(),
+        "C".to_string(),
+    ]);
     let mut dynamic = crate::extended_tasks::DynamicTopology::new(base_topology);
-    
+
     println!("Initial topology: A -> B -> C");
-    
+
     dynamic.apply_modification(crate::extended_tasks::GraphModification::AddNode {
         id: "node_3".to_string(),
         label: "D".to_string(),
         position: 3.0,
     });
-    
+
     dynamic.apply_modification(crate::extended_tasks::GraphModification::AddEdge {
         from: "node_2".to_string(),
         to: "node_3".to_string(),
         weight: 1.0,
     });
-    
+
     println!("After adding D: A -> B -> C -> D");
-    
+
     dynamic.apply_modification(crate::extended_tasks::GraphModification::AddEdge {
         from: "node_0".to_string(),
         to: "node_2".to_string(),
         weight: 2.0,
     });
-    
+
     println!("Added shortcut: A --(2)--> C");
-    
+
     println!("\n═══════════════════════════════════════════════════");
-    println!("Transfer Learning Demonstration");  
+    println!("Transfer Learning Demonstration");
     println!("═══════════════════════════════════════════════════\n");
-    
-    let source = crate::topology::Topology::new_linear(vec!["1".to_string(), "2".to_string(), "3".to_string()]);
-    let target = crate::topology::Topology::new_linear(vec!["One".to_string(), "Two".to_string(), "Three".to_string()]);
-    
+
+    let source = crate::topology::Topology::new_linear(vec![
+        "1".to_string(),
+        "2".to_string(),
+        "3".to_string(),
+    ]);
+    let target = crate::topology::Topology::new_linear(vec![
+        "One".to_string(),
+        "Two".to_string(),
+        "Three".to_string(),
+    ]);
+
     let transfer = crate::extended_tasks::TransferLearning::new(source.clone(), target.clone());
-    
+
     let source_task = crate::tasks::Task {
-        task_type: crate::tasks::TaskType::Successor { item: "2".to_string() },
+        task_type: crate::tasks::TaskType::Successor {
+            item: "2".to_string(),
+        },
         prompt: "What comes after '2'?".to_string(),
         correct_answer: "3".to_string(),
         options: vec!["1".to_string(), "3".to_string()],
         difficulty: 0.3,
         operation: crate::learner::OperationType::Successor,
     };
-    
+
     if let Some(transferred) = transfer.transfer_task(&source_task) {
         println!("Source task: {}", source_task.prompt);
         println!("Transferred: {}", transferred.prompt);
         println!("Isomorphic mapping preserved!");
     }
-    
+
     let efficiency = transfer.measure_transfer_efficiency(0.8, 0.95);
     println!("Transfer efficiency: {:.0}%", efficiency * 100.0);
 }

@@ -1,12 +1,15 @@
-use std::sync::{Arc, atomic::{AtomicU64, AtomicI64, Ordering}};
-use std::time::{SystemTime, UNIX_EPOCH, Instant, Duration};
-use std::collections::HashMap;
-use tokio::sync::RwLock;
-use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{
+    atomic::{AtomicI64, AtomicU64, Ordering},
+    Arc,
+};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::sync::RwLock;
 
-pub mod metrics;
 pub mod health;
+pub mod metrics;
 pub mod performance;
 
 use crate::state::AppState;
@@ -114,30 +117,33 @@ impl MetricsCollector {
     /// Increment request count and record duration
     pub async fn record_request(&self, endpoint: &str, duration_ms: u64, is_error: bool) {
         self.request_count.fetch_add(1, Ordering::Relaxed);
-        self.request_duration_ms.fetch_add(duration_ms, Ordering::Relaxed);
-        
+        self.request_duration_ms
+            .fetch_add(duration_ms, Ordering::Relaxed);
+
         if is_error {
             self.error_count.fetch_add(1, Ordering::Relaxed);
         }
 
         // Update endpoint-specific metrics
         let mut endpoint_metrics = self.endpoint_metrics.write().await;
-        let metrics = endpoint_metrics.entry(endpoint.to_string()).or_insert(EndpointMetrics {
-            total_requests: 0,
-            total_duration_ms: 0,
-            error_count: 0,
-            last_accessed: Utc::now(),
-            avg_duration_ms: 0.0,
-        });
+        let metrics = endpoint_metrics
+            .entry(endpoint.to_string())
+            .or_insert(EndpointMetrics {
+                total_requests: 0,
+                total_duration_ms: 0,
+                error_count: 0,
+                last_accessed: Utc::now(),
+                avg_duration_ms: 0.0,
+            });
 
         metrics.total_requests += 1;
         metrics.total_duration_ms += duration_ms;
         metrics.last_accessed = Utc::now();
-        
+
         if is_error {
             metrics.error_count += 1;
         }
-        
+
         metrics.avg_duration_ms = metrics.total_duration_ms as f64 / metrics.total_requests as f64;
     }
 
@@ -198,7 +204,7 @@ impl MetricsCollector {
     pub async fn get_snapshot(&self) -> MetricsSnapshot {
         let uptime = self.start_time.elapsed().unwrap_or(Duration::from_secs(0));
         let endpoint_metrics = self.endpoint_metrics.read().await.clone();
-        
+
         MetricsSnapshot {
             uptime_seconds: uptime.as_secs(),
             request_count: self.request_count.load(Ordering::Relaxed),
@@ -243,7 +249,8 @@ pub struct MetricsSnapshot {
 }
 
 /// Global metrics instance
-static METRICS: once_cell::sync::Lazy<MetricsCollector> = once_cell::sync::Lazy::new(MetricsCollector::new);
+static METRICS: once_cell::sync::Lazy<MetricsCollector> =
+    once_cell::sync::Lazy::new(MetricsCollector::new);
 
 pub fn global_metrics() -> &'static MetricsCollector {
     &METRICS
@@ -265,6 +272,8 @@ impl RequestTimer {
 
     pub async fn finish(self, is_error: bool) {
         let duration_ms = self.start.elapsed().as_millis() as u64;
-        global_metrics().record_request(&self.endpoint, duration_ms, is_error).await;
+        global_metrics()
+            .record_request(&self.endpoint, duration_ms, is_error)
+            .await;
     }
 }

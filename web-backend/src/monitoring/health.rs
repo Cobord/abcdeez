@@ -1,35 +1,37 @@
 use axum::{extract::State, Json};
-use std::sync::Arc;
-use std::time::{Instant, Duration};
 use chrono::Utc;
-use tracing::{warn, error};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tracing::{error, warn};
 
 use crate::{
-    error::{AppResult, AppError}, 
+    error::{AppError, AppResult},
+    monitoring::{ComponentStatus, HealthStatus, SystemHealth},
     state::AppState,
-    monitoring::{SystemHealth, HealthStatus, ComponentStatus}
 };
 
 /// Comprehensive health check endpoint
-pub async fn detailed_health_check(State(state): State<Arc<AppState>>) -> AppResult<Json<SystemHealth>> {
+pub async fn detailed_health_check(
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<SystemHealth>> {
     let start_time = Instant::now();
-    
+
     // Check database health
     let db_status = check_database_health(&state).await;
-    
-    // Check cache health  
+
+    // Check cache health
     let cache_status = check_cache_health(&state).await;
-    
+
     // Get system metrics
     let memory_usage = get_memory_usage();
     let cpu_usage = get_cpu_usage();
-    
+
     // Calculate uptime
     let uptime = crate::monitoring::global_metrics()
         .start_time
         .elapsed()
         .unwrap_or(Duration::from_secs(0));
-    
+
     // Calculate error rate
     let metrics_snapshot = crate::monitoring::global_metrics().get_snapshot().await;
     let error_rate = if metrics_snapshot.request_count > 0 {
@@ -37,10 +39,10 @@ pub async fn detailed_health_check(State(state): State<Arc<AppState>>) -> AppRes
     } else {
         0.0
     };
-    
+
     // Determine overall health status
     let overall_status = determine_health_status(&db_status, &cache_status, error_rate, cpu_usage);
-    
+
     let health = SystemHealth {
         status: overall_status,
         uptime_seconds: uptime.as_secs(),
@@ -52,19 +54,24 @@ pub async fn detailed_health_check(State(state): State<Arc<AppState>>) -> AppRes
         error_rate,
         last_check: Utc::now(),
     };
-    
+
     // Log health status if degraded or unhealthy
     match health.status {
         HealthStatus::Degraded => {
-            warn!("System health degraded - error_rate: {:.2}%, cpu: {:.1}%", error_rate, cpu_usage);
-        },
+            warn!(
+                "System health degraded - error_rate: {:.2}%, cpu: {:.1}%",
+                error_rate, cpu_usage
+            );
+        }
         HealthStatus::Unhealthy => {
-            error!("System unhealthy - error_rate: {:.2}%, cpu: {:.1}%, db: {:?}, cache: {:?}", 
-                error_rate, cpu_usage, db_status.status, cache_status.status);
-        },
+            error!(
+                "System unhealthy - error_rate: {:.2}%, cpu: {:.1}%, db: {:?}, cache: {:?}",
+                error_rate, cpu_usage, db_status.status, cache_status.status
+            );
+        }
         _ => {}
     }
-    
+
     Ok(Json(health))
 }
 
@@ -75,14 +82,14 @@ pub async fn simple_health_check(State(state): State<Arc<AppState>>) -> AppResul
         .fetch_one(&state.db_pool)
         .await
         .is_ok();
-    
+
     // Quick cache ping
     let mut conn = state.cache_conn.clone();
     let cache_ok = crate::cache::cmd("PING")
         .query_async::<String>(&mut conn)
         .await
         .is_ok();
-    
+
     if db_ok && cache_ok {
         Ok("OK")
     } else {
@@ -92,10 +99,10 @@ pub async fn simple_health_check(State(state): State<Arc<AppState>>) -> AppResul
 
 async fn check_database_health(state: &AppState) -> ComponentStatus {
     let start = Instant::now();
-    
+
     match sqlx::query("SELECT COUNT(*) as count FROM users LIMIT 1")
         .fetch_one(&state.db_pool)
-        .await 
+        .await
     {
         Ok(_) => ComponentStatus {
             status: HealthStatus::Healthy,
@@ -118,10 +125,10 @@ async fn check_database_health(state: &AppState) -> ComponentStatus {
 async fn check_cache_health(state: &AppState) -> ComponentStatus {
     let start = Instant::now();
     let mut conn = state.cache_conn.clone();
-    
+
     match crate::cache::cmd("PING")
         .query_async::<String>(&mut conn)
-        .await 
+        .await
     {
         Ok(_) => ComponentStatus {
             status: HealthStatus::Healthy,
@@ -151,19 +158,20 @@ fn determine_health_status(
     if matches!(db_status.status, HealthStatus::Unhealthy) {
         return HealthStatus::Unhealthy;
     }
-    
+
     // System is degraded if:
     // - Cache is down (non-critical but affects performance)
     // - High error rate (>5%)
     // - High CPU usage (>80%)
     // - Slow database response (>1000ms)
-    if matches!(cache_status.status, HealthStatus::Unhealthy) ||
-       error_rate > 5.0 ||
-       cpu_usage > 80.0 ||
-       db_status.response_time_ms > 1000 {
+    if matches!(cache_status.status, HealthStatus::Unhealthy)
+        || error_rate > 5.0
+        || cpu_usage > 80.0
+        || db_status.response_time_ms > 1000
+    {
         return HealthStatus::Degraded;
     }
-    
+
     HealthStatus::Healthy
 }
 
@@ -184,7 +192,7 @@ fn get_memory_usage() -> u64 {
             }
         }
     }
-    
+
     // Fallback for non-Unix systems or if proc filesystem is unavailable
     0
 }
@@ -194,7 +202,7 @@ fn get_cpu_usage() -> f32 {
     // you'd calculate CPU usage over a time window
     // For now, return a placeholder that could be enhanced
     // with proper CPU monitoring libraries
-    
+
     // Get load average on Unix systems
     #[cfg(unix)]
     {
@@ -207,18 +215,20 @@ fn get_cpu_usage() -> f32 {
             }
         }
     }
-    
+
     // Fallback
     0.0
 }
 
 /// Background health monitoring task
 pub async fn start_health_monitor(state: Arc<AppState>) {
-    let mut interval = tokio::time::interval(Duration::from_secs(state.config.health_check_interval_seconds as u64));
-    
+    let mut interval = tokio::time::interval(Duration::from_secs(
+        state.config.health_check_interval_seconds as u64,
+    ));
+
     loop {
         interval.tick().await;
-        
+
         // Perform periodic health checks
         let health = match detailed_health_check(axum::extract::State(state.clone())).await {
             Ok(Json(health)) => health,
@@ -227,25 +237,30 @@ pub async fn start_health_monitor(state: Arc<AppState>) {
                 continue;
             }
         };
-        
+
         // Log significant health changes
         match health.status {
             HealthStatus::Degraded => {
                 warn!("System health check: DEGRADED - error_rate: {:.2}%, active_connections: {}, uptime: {}s", 
                     health.error_rate, health.active_connections, health.uptime_seconds);
-            },
+            }
             HealthStatus::Unhealthy => {
                 error!("System health check: UNHEALTHY - immediate attention required");
-            },
+            }
             HealthStatus::Healthy => {
                 // Only log healthy status periodically (every 10 checks)
-                if health.uptime_seconds % (state.config.health_check_interval_seconds as u64 * 10) < state.config.health_check_interval_seconds as u64 {
-                    tracing::info!("System health check: HEALTHY - uptime: {}s, active_connections: {}", 
-                        health.uptime_seconds, health.active_connections);
+                if health.uptime_seconds % (state.config.health_check_interval_seconds as u64 * 10)
+                    < state.config.health_check_interval_seconds as u64
+                {
+                    tracing::info!(
+                        "System health check: HEALTHY - uptime: {}s, active_connections: {}",
+                        health.uptime_seconds,
+                        health.active_connections
+                    );
                 }
             }
         }
-        
+
         // Could store health history in database or cache for trending analysis
         // store_health_history(&state, &health).await;
     }

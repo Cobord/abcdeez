@@ -78,7 +78,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'user-manual/**'
+      - 'xilem-cross-platform/user-manual/**'
+      - 'alphabet-terminal-prototype/book/**'
       - 'admin-manual/**'
       - 'dev-manual/**'
 ```
@@ -234,17 +235,6 @@ PRODUCTION_ADMIN_EMAIL=admin@yourdomain.com
 - **Development**: `http://localhost:8080/auth/github/callback`
 - **Staging**: `https://staging.abcdeez.fg-goose.online/auth/github/callback`
 - **Production**: `https://abcdeez.fg-goose.online/auth/github/callback`
-
-## 📊 Monitoring & Status
-
-### Deployment Status Badges
-
-Add to your README.md:
-```markdown
-[![Deploy Staging](https://github.com/your-org/graph-learning-system/workflows/Deploy%20to%20Staging/badge.svg)](https://github.com/your-org/graph-learning-system/actions/workflows/deploy-staging.yml)
-
-[![Deploy Production](https://github.com/your-org/graph-learning-system/workflows/Deploy%20to%20Production/badge.svg)](https://github.com/your-org/graph-learning-system/actions/workflows/deploy-production.yml)
-```
 
 ### GitHub Environments
 

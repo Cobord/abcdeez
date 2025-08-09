@@ -1,38 +1,45 @@
 use axum::{
-    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, Path, State, Query},
-    response::Response,
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Path, Query, State,
+    },
     http::StatusCode,
+    response::Response,
 };
 use futures_util::{sink::SinkExt, stream::StreamExt};
-use std::sync::Arc;
-use uuid::Uuid;
-use tokio::time::{interval, Duration};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use std::sync::Arc;
+use tokio::time::{interval, Duration};
+use uuid::Uuid;
 
-use graph_learning_core::{
-    Task,
-    hints::{InterventionAction, HintLevel},
-};
 use crate::{
-    state::AppState,
-    services::{AdaptationService, AnalyticsService, LearnerService},
-    middleware::Claims,
     error::AppError,
+    middleware::Claims,
+    services::{AdaptationService, AnalyticsService, LearnerService},
+    state::AppState,
+};
+use graph_learning_core::{
+    hints::{HintLevel, InterventionAction},
+    Task,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ClientMessage {
-    StartTask { payload: serde_json::Value },
-    SubmitResponse { 
+    StartTask {
+        payload: serde_json::Value,
+    },
+    SubmitResponse {
         task_type: String,
         task_data: serde_json::Value,
         user_answer: Option<String>,
         response_time_ms: i64,
     },
-    RequestHint { hint_level: Option<String> },
+    RequestHint {
+        hint_level: Option<String>,
+    },
     Pause,
     Resume,
     Heartbeat,
@@ -41,13 +48,33 @@ pub enum ClientMessage {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ServerMessage {
-    Task { payload: TaskMessage, timestamp: i64 },
-    Hint { payload: HintMessage, timestamp: i64 },
-    Feedback { payload: FeedbackMessage, timestamp: i64 },
-    Intervention { payload: InterventionMessage, timestamp: i64 },
-    StatsUpdate { payload: StatsMessage, timestamp: i64 },
-    Error { message: String, timestamp: i64 },
-    Heartbeat { timestamp: i64 },
+    Task {
+        payload: TaskMessage,
+        timestamp: i64,
+    },
+    Hint {
+        payload: HintMessage,
+        timestamp: i64,
+    },
+    Feedback {
+        payload: FeedbackMessage,
+        timestamp: i64,
+    },
+    Intervention {
+        payload: InterventionMessage,
+        timestamp: i64,
+    },
+    StatsUpdate {
+        payload: StatsMessage,
+        timestamp: i64,
+    },
+    Error {
+        message: String,
+        timestamp: i64,
+    },
+    Heartbeat {
+        timestamp: i64,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -111,7 +138,7 @@ pub async fn session_handler(
     validation.validate_exp = true;
     validation.validate_nbf = true;
     validation.leeway = 60;
-    
+
     let token_data = decode::<Claims>(
         &query.token,
         &DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
@@ -121,30 +148,41 @@ pub async fn session_handler(
         tracing::warn!("WebSocket auth failed: {:?}", e);
         (StatusCode::UNAUTHORIZED, "Invalid token".to_string())
     })?;
-    
+
     // Verify session belongs to user
     let session_id_bytes = session_id.as_bytes();
     let user_id_bytes = token_data.claims.sub.as_bytes();
-    
-    let mut conn = state.db_pool.acquire().await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e)))?;
-    
+
+    let mut conn = state.db_pool.acquire().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Database error: {}", e),
+        )
+    })?;
+
     let session_exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM sessions s 
          JOIN learners l ON s.learner_id = l.id 
-         WHERE s.id = ? AND l.user_id = ?)"
+         WHERE s.id = ? AND l.user_id = ?)",
     )
     .bind(&session_id_bytes[..])
     .bind(&user_id_bytes[..])
     .fetch_one(&mut *conn)
     .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e)))?;
-    
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Database error: {}", e),
+        )
+    })?;
+
     if !session_exists {
         return Err((StatusCode::FORBIDDEN, "Session access denied".to_string()));
     }
-    
-    Ok(ws.on_upgrade(move |socket| handle_session_socket(socket, state, session_id, token_data.claims)))
+
+    Ok(ws.on_upgrade(move |socket| {
+        handle_session_socket(socket, state, session_id, token_data.claims)
+    }))
 }
 
 pub async fn analytics_handler(
@@ -157,7 +195,7 @@ pub async fn analytics_handler(
     validation.validate_exp = true;
     validation.validate_nbf = true;
     validation.leeway = 60;
-    
+
     let token_data = decode::<Claims>(
         &query.token,
         &DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
@@ -167,33 +205,49 @@ pub async fn analytics_handler(
         tracing::warn!("Analytics WebSocket auth failed: {:?}", e);
         (StatusCode::UNAUTHORIZED, "Invalid token".to_string())
     })?;
-    
+
     // Check for analytics permission
-    if !token_data.claims.permissions.contains(&"analytics_access".to_string()) 
-        && token_data.claims.role != "admin" 
-        && token_data.claims.role != "researcher" {
+    if !token_data
+        .claims
+        .permissions
+        .contains(&"analytics_access".to_string())
+        && token_data.claims.role != "admin"
+        && token_data.claims.role != "researcher"
+    {
         return Err((StatusCode::FORBIDDEN, "Analytics access denied".to_string()));
     }
-    
+
     Ok(ws.on_upgrade(move |socket| handle_analytics_socket(socket, state, token_data.claims)))
 }
 
-async fn handle_session_socket(socket: WebSocket, state: Arc<AppState>, session_id: Uuid, claims: Claims) {
-    tracing::info!("WebSocket connected for session {} by user {}", session_id, claims.username);
+async fn handle_session_socket(
+    socket: WebSocket,
+    state: Arc<AppState>,
+    session_id: Uuid,
+    claims: Claims,
+) {
+    tracing::info!(
+        "WebSocket connected for session {} by user {}",
+        session_id,
+        claims.username
+    );
 
     let (mut sender, mut receiver) = socket.split();
-    
+
     // Get session info and verify it exists
     let session_info = match get_session_info(&state, session_id).await {
         Ok(info) => info,
         Err(e) => {
             tracing::error!("Failed to get session info: {}", e);
-            let _ = sender.send(Message::Text(
-                serde_json::to_string(&ServerMessage::Error {
-                    message: "Session not found".to_string(),
-                    timestamp: chrono::Utc::now().timestamp(),
-                }).unwrap_or_default()
-            )).await;
+            let _ = sender
+                .send(Message::Text(
+                    serde_json::to_string(&ServerMessage::Error {
+                        message: "Session not found".to_string(),
+                        timestamp: chrono::Utc::now().timestamp(),
+                    })
+                    .unwrap_or_default(),
+                ))
+                .await;
             return;
         }
     };
@@ -207,7 +261,7 @@ async fn handle_session_socket(socket: WebSocket, state: Arc<AppState>, session_
 
     // Set up heartbeat
     let mut heartbeat_interval = interval(Duration::from_secs(30));
-    
+
     // Session state tracking
     let mut current_task: Option<Task> = None;
     let mut task_start_time: Option<chrono::DateTime<chrono::Utc>> = None;
@@ -247,7 +301,7 @@ async fn handle_session_socket(socket: WebSocket, state: Arc<AppState>, session_
                     _ => {}
                 }
             },
-            
+
             // Send periodic heartbeat
             _ = heartbeat_interval.tick() => {
                 if let Err(_) = sender.send(Message::Text(
@@ -268,7 +322,7 @@ async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>, claims
     tracing::info!("Analytics WebSocket connected for user {}", claims.username);
 
     let (mut sender, mut receiver) = socket.split();
-    
+
     // Create analytics service
     let analytics_service = AnalyticsService::new(
         state.db_pool.clone().into(),
@@ -295,7 +349,7 @@ async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>, claims
                     _ => {}
                 }
             },
-            
+
             // Broadcast live metrics
             _ = broadcast_interval.tick() => {
                 match analytics_service.get_real_time_metrics().await {
@@ -350,14 +404,14 @@ async fn handle_client_message(
         ClientMessage::StartTask { payload: _ } => {
             // Get session topology
             let topology = get_session_topology(state, session_id).await?;
-            
+
             // Generate next task
             let task = adaptation_service
                 .select_next_task(learner_id, &topology)
                 .await?;
 
             let predicted_rt = 2000.0; // Would be calculated from learner model
-            
+
             let task_message = TaskMessage {
                 task: task.clone(),
                 difficulty: task.difficulty,
@@ -372,18 +426,20 @@ async fn handle_client_message(
                 timestamp,
             };
 
-            sender.send(Message::Text(serde_json::to_string(&response)?)).await?;
-        },
+            sender
+                .send(Message::Text(serde_json::to_string(&response)?))
+                .await?;
+        }
 
-        ClientMessage::SubmitResponse { 
-            task_type, 
-            task_data, 
-            user_answer, 
-            response_time_ms 
+        ClientMessage::SubmitResponse {
+            task_type,
+            task_data,
+            user_answer,
+            response_time_ms,
         } => {
             // Validate response (simplified)
             let is_correct = user_answer.is_some(); // Simplified validation
-            
+
             // Update recent errors
             recent_errors.push(is_correct);
             if recent_errors.len() > 10 {
@@ -394,17 +450,21 @@ async fn handle_client_message(
             let feedback = FeedbackMessage {
                 correct: is_correct,
                 expected_answer: None, // Would be calculated from task
-                explanation: if is_correct { 
-                    Some("Correct!".to_string()) 
-                } else { 
-                    Some("That's not quite right.".to_string()) 
+                explanation: if is_correct {
+                    Some("Correct!".to_string())
+                } else {
+                    Some("That's not quite right.".to_string())
                 },
             };
 
-            sender.send(Message::Text(serde_json::to_string(&ServerMessage::Feedback {
-                payload: feedback,
-                timestamp,
-            })?)).await?;
+            sender
+                .send(Message::Text(serde_json::to_string(
+                    &ServerMessage::Feedback {
+                        payload: feedback,
+                        timestamp,
+                    },
+                )?))
+                .await?;
 
             // Check for intervention
             let error_count = recent_errors.iter().filter(|&&correct| !correct).count();
@@ -416,7 +476,7 @@ async fn handle_client_message(
 
             if let Ok(Some(intervention)) = adaptation_service
                 .should_intervene(learner_id, session_id, elapsed_ms, error_count)
-                .await 
+                .await
             {
                 let intervention_msg = match intervention {
                     InterventionAction::ProvideHint(level) => InterventionMessage {
@@ -441,7 +501,9 @@ async fn handle_client_message(
                     },
                     InterventionAction::SuggestBreak => InterventionMessage {
                         intervention_type: "break".to_string(),
-                        message: "You've been practicing for a while. Consider taking a short break!".to_string(),
+                        message:
+                            "You've been practicing for a while. Consider taking a short break!"
+                                .to_string(),
                         suggestion: None,
                     },
                     InterventionAction::SkipTask => InterventionMessage {
@@ -451,17 +513,22 @@ async fn handle_client_message(
                     },
                 };
 
-                sender.send(Message::Text(serde_json::to_string(&ServerMessage::Intervention {
-                    payload: intervention_msg,
-                    timestamp,
-                })?)).await?;
+                sender
+                    .send(Message::Text(serde_json::to_string(
+                        &ServerMessage::Intervention {
+                            payload: intervention_msg,
+                            timestamp,
+                        },
+                    )?))
+                    .await?;
             }
 
             // Send stats update
-            let accuracy = if recent_errors.is_empty() { 
-                0.0 
-            } else { 
-                recent_errors.iter().filter(|&&correct| correct).count() as f64 / recent_errors.len() as f64 
+            let accuracy = if recent_errors.is_empty() {
+                0.0
+            } else {
+                recent_errors.iter().filter(|&&correct| correct).count() as f64
+                    / recent_errors.len() as f64
             };
 
             let stats = StatsMessage {
@@ -471,11 +538,15 @@ async fn handle_client_message(
                 average_response_time_ms: *response_time_ms as f64,
             };
 
-            sender.send(Message::Text(serde_json::to_string(&ServerMessage::StatsUpdate {
-                payload: stats,
-                timestamp,
-            })?)).await?;
-        },
+            sender
+                .send(Message::Text(serde_json::to_string(
+                    &ServerMessage::StatsUpdate {
+                        payload: stats,
+                        timestamp,
+                    },
+                )?))
+                .await?;
+        }
 
         ClientMessage::RequestHint { hint_level } => {
             if let Some(task) = current_task {
@@ -495,24 +566,28 @@ async fn handle_client_message(
                     hint_level: hint_level.clone().unwrap_or("mild".to_string()),
                 };
 
-                sender.send(Message::Text(serde_json::to_string(&ServerMessage::Hint {
-                    payload: hint_msg,
-                    timestamp,
-                })?)).await?;
+                sender
+                    .send(Message::Text(serde_json::to_string(
+                        &ServerMessage::Hint {
+                            payload: hint_msg,
+                            timestamp,
+                        },
+                    )?))
+                    .await?;
             }
-        },
+        }
 
         ClientMessage::Pause => {
             tracing::info!("Session {} paused", session_id);
-        },
+        }
 
         ClientMessage::Resume => {
             tracing::info!("Session {} resumed", session_id);
-        },
+        }
 
         ClientMessage::Heartbeat => {
             // Client heartbeat received, no action needed
-        },
+        }
     }
 
     Ok(())
@@ -525,18 +600,21 @@ struct SessionInfo {
     topology_type: String,
 }
 
-async fn get_session_info(state: &AppState, session_id: Uuid) -> Result<SessionInfo, Box<dyn std::error::Error + Send + Sync>> {
+async fn get_session_info(
+    state: &AppState,
+    session_id: Uuid,
+) -> Result<SessionInfo, Box<dyn std::error::Error + Send + Sync>> {
     let session_id_bytes = session_id.as_bytes();
-    
+
     // Use a raw query with proper binding
     let mut conn = state.db_pool.acquire().await?;
     let row = sqlx::query(
-        "SELECT learner_id, topology_type FROM sessions WHERE id = ? AND status = 'active'"
+        "SELECT learner_id, topology_type FROM sessions WHERE id = ? AND status = 'active'",
     )
     .bind(&session_id_bytes[..])
     .fetch_one(&mut *conn)
     .await?;
-    
+
     let learner_id_bytes: Vec<u8> = row.try_get("learner_id")?;
     let learner_id = Uuid::from_bytes(learner_id_bytes.try_into().unwrap_or_default());
     let topology_type: String = row.try_get("topology_type")?;
@@ -547,17 +625,19 @@ async fn get_session_info(state: &AppState, session_id: Uuid) -> Result<SessionI
     })
 }
 
-async fn get_session_topology(state: &AppState, session_id: Uuid) -> Result<graph_learning_core::Topology, Box<dyn std::error::Error + Send + Sync>> {
+async fn get_session_topology(
+    state: &AppState,
+    session_id: Uuid,
+) -> Result<graph_learning_core::Topology, Box<dyn std::error::Error + Send + Sync>> {
     let session_id_bytes = session_id.as_bytes();
-    
+
     // Use a raw query with proper binding
     let mut conn = state.db_pool.acquire().await?;
-    let topology_data: String = sqlx::query_scalar(
-        "SELECT topology_data FROM sessions WHERE id = ?"
-    )
-    .bind(&session_id_bytes[..])
-    .fetch_one(&mut *conn)
-    .await?;
+    let topology_data: String =
+        sqlx::query_scalar("SELECT topology_data FROM sessions WHERE id = ?")
+            .bind(&session_id_bytes[..])
+            .fetch_one(&mut *conn)
+            .await?;
     let topology: graph_learning_core::Topology = serde_json::from_str(&topology_data)
         .unwrap_or_else(|_| graph_learning_core::Topology::alphabet());
 

@@ -1,19 +1,21 @@
-pub mod learner_service;
 pub mod adaptation_service;
 pub mod analytics_service;
 pub mod audit;
 pub mod batch_jobs;
+pub mod learner_service;
 
 // OAuth services
 pub mod apple_auth_service;
 pub mod github_oauth_service;
 pub mod oauth_service;
 
-pub use learner_service::LearnerService;
 pub use adaptation_service::AdaptationService;
 pub use analytics_service::AnalyticsService;
 pub use audit::AuditService;
 pub use batch_jobs::BatchJobService;
+pub use learner_service::LearnerService;
 
 // OAuth service exports
-pub use oauth_service::{OAuthService, OAuthProvider, OAuthUserProfile, OAuthAuthRequest, OAuthAuthResponse};
+pub use oauth_service::{
+    OAuthAuthRequest, OAuthAuthResponse, OAuthProvider, OAuthService, OAuthUserProfile,
+};

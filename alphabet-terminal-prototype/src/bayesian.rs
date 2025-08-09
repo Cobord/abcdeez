@@ -1041,81 +1041,82 @@ impl BayesianLearnerModel {
     pub fn posterior_predictive_check(&self, n_replications: usize) -> PosteriorPredictiveCheck {
         let mut rng = thread_rng();
         let mut replicated_data = Vec::new();
-        
+
         for _ in 0..n_replications {
             let sampled_model = self.sample_from_posterior(&mut rng);
             let mut replicated_responses = Vec::new();
-            
+
             // Generate replicated responses for each observed task
             for response in &self.response_history {
                 let prob = self.predict_with_params(&sampled_model, &response.task);
                 let replicated_correct = rng.gen::<f64>() < prob;
-                
+
                 // Simulate response time using Ex-Gaussian
                 let rt_mean = 1000.0 + response.task.difficulty * 500.0;
                 let rt = self.sample_response_time(rt_mean, &mut rng);
-                
+
                 replicated_responses.push(ResponseData {
                     task: response.task.clone(),
                     correct: replicated_correct,
                     response_time: rt,
                 });
             }
-            
+
             replicated_data.push(replicated_responses);
         }
-        
+
         // Calculate test statistics
         let observed_stats = self.calculate_test_statistics(&self.response_history);
-        let replicated_stats: Vec<TestStatistics> = replicated_data.iter()
+        let replicated_stats: Vec<TestStatistics> = replicated_data
+            .iter()
             .map(|data| self.calculate_test_statistics(data))
             .collect();
-        
+
         PosteriorPredictiveCheck {
             observed_statistics: observed_stats,
             replicated_statistics: replicated_stats,
             n_replications,
         }
     }
-    
+
     /// Sample response time from Ex-Gaussian distribution
     fn sample_response_time(&self, mean: f64, rng: &mut impl Rng) -> f64 {
-        use rand_distr::{Normal, Exp};
-        
+        use rand_distr::{Exp, Normal};
+
         // Ex-Gaussian parameters
         let mu = mean * 0.8;
         let sigma = mean * 0.15;
         let tau = mean * 0.2;
-        
+
         // Sample from normal and exponential
         let normal = Normal::new(mu, sigma).unwrap_or(Normal::new(1000.0, 150.0).unwrap());
         let exp = Exp::new(1.0 / tau).unwrap_or(Exp::new(0.001).unwrap());
-        
+
         let normal_sample: f64 = normal.sample(rng);
         let exp_sample: f64 = exp.sample(rng);
-        
-        (normal_sample + exp_sample).max(100.0)  // Minimum 100ms RT
+
+        (normal_sample + exp_sample).max(100.0) // Minimum 100ms RT
     }
-    
+
     /// Calculate test statistics for a set of responses
     fn calculate_test_statistics(&self, responses: &[ResponseData]) -> TestStatistics {
         let n = responses.len() as f64;
         let n_correct = responses.iter().filter(|r| r.correct).count() as f64;
         let accuracy = n_correct / n;
-        
-        let mean_rt = responses.iter()
-            .map(|r| r.response_time)
-            .sum::<f64>() / n;
-        
-        let rt_variance = responses.iter()
+
+        let mean_rt = responses.iter().map(|r| r.response_time).sum::<f64>() / n;
+
+        let rt_variance = responses
+            .iter()
             .map(|r| (r.response_time - mean_rt).powi(2))
-            .sum::<f64>() / n;
-        
+            .sum::<f64>()
+            / n;
+
         // Calculate autocorrelation of correctness
         let autocorr = if responses.len() > 1 {
             let mut sum = 0.0;
             for i in 1..responses.len() {
-                let prev = if responses[i-1].correct { 1.0 } else { 0.0 };
+                let prev = if responses[i - 1].correct { 1.0 } else { 0.0 };
                 let curr = if responses[i].correct { 1.0 } else { 0.0 };
                 sum += (prev - accuracy) * (curr - accuracy);
             }
@@ -1123,7 +1124,7 @@ impl BayesianLearnerModel {
         } else {
             0.0
         };
-        
+
         TestStatistics {
             accuracy,
             mean_rt,
@@ -1155,24 +1156,24 @@ impl PosteriorPredictiveCheck {
     pub fn calculate_p_values(&self) -> PosteriorPredictivePValues {
         let p_accuracy = self.calculate_p_value(
             self.observed_statistics.accuracy,
-            self.replicated_statistics.iter().map(|s| s.accuracy)
+            self.replicated_statistics.iter().map(|s| s.accuracy),
         );
-        
+
         let p_mean_rt = self.calculate_p_value(
             self.observed_statistics.mean_rt,
-            self.replicated_statistics.iter().map(|s| s.mean_rt)
+            self.replicated_statistics.iter().map(|s| s.mean_rt),
         );
-        
+
         let p_rt_std = self.calculate_p_value(
             self.observed_statistics.rt_std,
-            self.replicated_statistics.iter().map(|s| s.rt_std)
+            self.replicated_statistics.iter().map(|s| s.rt_std),
         );
-        
+
         let p_autocorr = self.calculate_p_value(
             self.observed_statistics.autocorrelation,
-            self.replicated_statistics.iter().map(|s| s.autocorrelation)
+            self.replicated_statistics.iter().map(|s| s.autocorrelation),
         );
-        
+
         PosteriorPredictivePValues {
             accuracy: p_accuracy,
             mean_rt: p_mean_rt,
@@ -1180,35 +1181,36 @@ impl PosteriorPredictiveCheck {
             autocorrelation: p_autocorr,
         }
     }
-    
+
     /// Calculate two-tailed p-value
-    fn calculate_p_value<I>(&self, observed: f64, replicated: I) -> f64 
-    where 
-        I: Iterator<Item = f64>
+    fn calculate_p_value<I>(&self, observed: f64, replicated: I) -> f64
+    where
+        I: Iterator<Item = f64>,
     {
         let replicated: Vec<f64> = replicated.collect();
         let n = replicated.len() as f64;
-        
-        let more_extreme = replicated.iter()
+
+        let more_extreme = replicated
+            .iter()
             .filter(|&&r| (r - observed).abs() >= (observed - observed).abs())
             .count() as f64;
-        
+
         more_extreme / n
     }
-    
+
     /// Check if model adequately fits the data
     pub fn check_model_adequacy(&self, alpha: f64) -> ModelAdequacy {
         let p_values = self.calculate_p_values();
-        
+
         ModelAdequacy {
             accuracy_adequate: p_values.accuracy > alpha,
             mean_rt_adequate: p_values.mean_rt > alpha,
             rt_std_adequate: p_values.rt_std > alpha,
             autocorr_adequate: p_values.autocorrelation > alpha,
-            overall_adequate: p_values.accuracy > alpha && 
-                             p_values.mean_rt > alpha &&
-                             p_values.rt_std > alpha &&
-                             p_values.autocorrelation > alpha,
+            overall_adequate: p_values.accuracy > alpha
+                && p_values.mean_rt > alpha
+                && p_values.rt_std > alpha
+                && p_values.autocorrelation > alpha,
         }
     }
 }

@@ -97,7 +97,7 @@ impl InMemoryCache {
     fn del(&mut self, key: &str) -> bool {
         self.map.remove(key).is_some()
     }
-    
+
     fn exists(&mut self, key: &str) -> bool {
         // Check existence and remove if expired
         if let Some(entry) = self.map.get(key) {
@@ -110,7 +110,7 @@ impl InMemoryCache {
             false
         }
     }
-    
+
     fn incr(&mut self, key: &str) -> Result<i64, CacheError> {
         // Get current value or default to 0
         let current = if let Some(entry) = self.map.get(key) {
@@ -123,16 +123,19 @@ impl InMemoryCache {
         } else {
             0
         };
-        
+
         let new_value = current + 1;
         // Store with no expiry (will be set by EXPIRE if needed)
-        self.map.insert(key.to_string(), Entry {
-            value: new_value.to_string(),
-            expires_at: None,
-        });
+        self.map.insert(
+            key.to_string(),
+            Entry {
+                value: new_value.to_string(),
+                expires_at: None,
+            },
+        );
         Ok(new_value)
     }
-    
+
     fn expire(&mut self, key: &str, ttl_secs: u64) -> bool {
         if let Some(entry) = self.map.get_mut(key) {
             entry.expires_at = Instant::now().checked_add(Duration::from_secs(ttl_secs));
@@ -309,7 +312,9 @@ impl Command {
             }
             "EXPIRE" => {
                 if self.args.len() != 2 {
-                    return Err(CacheError::InvalidArgs("EXPIRE requires 2 arguments: key ttl_seconds"));
+                    return Err(CacheError::InvalidArgs(
+                        "EXPIRE requires 2 arguments: key ttl_seconds",
+                    ));
                 }
                 let key = &self.args[0];
                 let ttl_secs = u64::from_str(&self.args[1])
@@ -330,13 +335,19 @@ pub trait FromCacheResponse: Sized {
     fn from_set() -> Result<Self, CacheError>;
     fn from_del(_deleted: bool) -> Result<Self, CacheError>;
     fn from_exists(_exists: bool) -> Result<Self, CacheError> {
-        Err(CacheError::InvalidCommand("EXISTS not supported for this type".to_string()))
+        Err(CacheError::InvalidCommand(
+            "EXISTS not supported for this type".to_string(),
+        ))
     }
     fn from_incr(_value: i64) -> Result<Self, CacheError> {
-        Err(CacheError::InvalidCommand("INCR not supported for this type".to_string()))
+        Err(CacheError::InvalidCommand(
+            "INCR not supported for this type".to_string(),
+        ))
     }
     fn from_expire(_success: bool) -> Result<Self, CacheError> {
-        Err(CacheError::InvalidCommand("EXPIRE not supported for this type".to_string()))
+        Err(CacheError::InvalidCommand(
+            "EXPIRE not supported for this type".to_string(),
+        ))
     }
 }
 
@@ -352,17 +363,25 @@ impl FromCacheResponse for String {
     fn from_del(_deleted: bool) -> Result<Self, CacheError> {
         Ok("OK".to_string())
     }
-    
+
     fn from_exists(exists: bool) -> Result<Self, CacheError> {
-        Ok(if exists { "1".to_string() } else { "0".to_string() })
+        Ok(if exists {
+            "1".to_string()
+        } else {
+            "0".to_string()
+        })
     }
-    
+
     fn from_incr(value: i64) -> Result<Self, CacheError> {
         Ok(value.to_string())
     }
-    
+
     fn from_expire(success: bool) -> Result<Self, CacheError> {
-        Ok(if success { "1".to_string() } else { "0".to_string() })
+        Ok(if success {
+            "1".to_string()
+        } else {
+            "0".to_string()
+        })
     }
 }
 
@@ -379,7 +398,7 @@ impl FromCacheResponse for () {
     fn from_del(_deleted: bool) -> Result<Self, CacheError> {
         Ok(())
     }
-    
+
     fn from_expire(_success: bool) -> Result<Self, CacheError> {
         Ok(())
     }

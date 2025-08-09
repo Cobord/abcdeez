@@ -5,26 +5,26 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use uuid::Uuid;
 use tokio::time::Instant;
+use uuid::Uuid;
 
 use crate::{
-    error::AppError, 
+    error::AppError,
+    services::audit::{AuditContext, AuditService},
     state::AppState,
-    services::audit::{AuditService, AuditContext},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: Uuid, // User ID
     pub username: String,
-    pub exp: i64, // Expiration time
-    pub iat: i64, // Issued at
-    pub role: String, // User role
-    pub permissions: Vec<String>, // User permissions
+    pub exp: i64,                   // Expiration time
+    pub iat: i64,                   // Issued at
+    pub role: String,               // User role
+    pub permissions: Vec<String>,   // User permissions
     pub session_id: Option<String>, // Session tracking
 }
 
@@ -35,12 +35,8 @@ pub async fn auth_middleware(
 ) -> Result<Response, AppError> {
     // Skip auth for certain paths
     let path = request.uri().path();
-    let public_paths = vec![
-        "/api/auth/register",
-        "/api/auth/login", 
-        "/api/auth/refresh",
-    ];
-    
+    let public_paths = vec!["/api/auth/register", "/api/auth/login", "/api/auth/refresh"];
+
     if public_paths.contains(&path) || path.starts_with("/health/") {
         return Ok(next.run(request).await);
     }
@@ -80,7 +76,7 @@ pub async fn auth_middleware(
         if let Ok(blacklisted) = crate::cache::cmd("EXISTS")
             .arg(&blacklist_key)
             .query_async::<String>(&mut conn)
-            .await 
+            .await
         {
             if blacklisted.parse::<i64>().unwrap_or(0) > 0 {
                 tracing::warn!("Attempted use of blacklisted session: {}", session_id);
@@ -91,7 +87,11 @@ pub async fn auth_middleware(
 
     // Verify user still exists and is active
     let user_id_bytes = token_data.claims.sub.as_bytes();
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     let user_active = sqlx::query_scalar::<_, bool>(
         "SELECT CASE WHEN metadata->>'$.status' IS NULL OR metadata->>'$.status' != 'disabled' THEN true ELSE false END
          FROM users WHERE id = ?"
@@ -103,7 +103,10 @@ pub async fn auth_middleware(
     .unwrap_or(false);
 
     if !user_active {
-        tracing::warn!("Attempted access with disabled/deleted user: {}", token_data.claims.sub);
+        tracing::warn!(
+            "Attempted access with disabled/deleted user: {}",
+            token_data.claims.sub
+        );
         return Err(AppError::Unauthorized);
     }
 
@@ -118,7 +121,8 @@ pub async fn auth_middleware(
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
 
-    if current_requests > (state.config.rate_limit_requests * 2) as i64 { // Higher limit for authenticated users
+    if current_requests > (state.config.rate_limit_requests * 2) as i64 {
+        // Higher limit for authenticated users
         return Err(AppError::RateLimitExceeded);
     }
 
@@ -146,8 +150,11 @@ pub async fn require_researcher(
     next: Next,
 ) -> Result<Response, AppError> {
     if claims.role != "researcher" && claims.role != "admin" {
-        tracing::warn!("Researcher access denied for user: {} with role: {}", 
-            claims.username, claims.role);
+        tracing::warn!(
+            "Researcher access denied for user: {} with role: {}",
+            claims.username,
+            claims.role
+        );
         return Err(AppError::Forbidden);
     }
     Ok(next.run(request).await)
@@ -160,8 +167,11 @@ pub async fn require_analytics_permission(
     next: Next,
 ) -> Result<Response, AppError> {
     if !claims.permissions.contains(&"analytics_access".to_string()) && claims.role != "admin" {
-        tracing::warn!("Analytics access denied for user: {} with permissions: {:?}", 
-            claims.username, claims.permissions);
+        tracing::warn!(
+            "Analytics access denied for user: {} with permissions: {:?}",
+            claims.username,
+            claims.permissions
+        );
         return Err(AppError::Forbidden);
     }
     Ok(next.run(request).await)
@@ -174,7 +184,11 @@ pub async fn require_admin(
     next: Next,
 ) -> Result<Response, AppError> {
     if claims.role != "admin" {
-        tracing::warn!("Admin access denied for user: {} with role: {}", claims.username, claims.role);
+        tracing::warn!(
+            "Admin access denied for user: {} with role: {}",
+            claims.username,
+            claims.role
+        );
         return Err(AppError::Forbidden);
     }
     Ok(next.run(request).await)
@@ -188,57 +202,70 @@ pub async fn security_headers(
 ) -> Response {
     let path = request.uri().path().to_string();
     let mut response = next.run(request).await;
-    
+
     let headers = response.headers_mut();
-    
+
     // Core security headers (always applied)
     headers.insert("X-Content-Type-Options", "nosniff".parse().unwrap());
     headers.insert("X-Frame-Options", "DENY".parse().unwrap());
     headers.insert("X-XSS-Protection", "1; mode=block".parse().unwrap());
-    headers.insert("Referrer-Policy", "strict-origin-when-cross-origin".parse().unwrap());
-    
+    headers.insert(
+        "Referrer-Policy",
+        "strict-origin-when-cross-origin".parse().unwrap(),
+    );
+
     // Conditional security headers based on environment
     if state.config.environment == crate::config::Environment::Production {
         // Strict HSTS for production
-        headers.insert("Strict-Transport-Security", 
-            "max-age=31536000; includeSubDomains; preload".parse().unwrap());
-        
+        headers.insert(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains; preload"
+                .parse()
+                .unwrap(),
+        );
+
         // Strict CSP for production
         headers.insert("Content-Security-Policy", 
             "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; object-src 'none'; media-src 'self'; frame-src 'none'; sandbox allow-scripts allow-same-origin allow-forms; base-uri 'self';".parse().unwrap());
     } else {
         // Relaxed headers for development
-        headers.insert("Strict-Transport-Security", 
-            "max-age=0".parse().unwrap());
-        
+        headers.insert("Strict-Transport-Security", "max-age=0".parse().unwrap());
+
         headers.insert("Content-Security-Policy", 
             "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: wss:;".parse().unwrap());
     }
-    
+
     // API-specific headers
     if path.starts_with("/api/") {
         headers.insert("X-API-Version", "1.0".parse().unwrap());
-        headers.insert("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0".parse().unwrap());
+        headers.insert(
+            "Cache-Control",
+            "no-store, no-cache, must-revalidate, max-age=0"
+                .parse()
+                .unwrap(),
+        );
         headers.insert("Pragma", "no-cache".parse().unwrap());
-        
+
         // Remove server info for APIs
         headers.remove("server");
     }
-    
+
     // Security headers for sensitive endpoints
     if path.starts_with("/api/admin/") || path.starts_with("/api/auth/") {
         headers.insert("X-Permitted-Cross-Domain-Policies", "none".parse().unwrap());
         headers.insert("X-DNS-Prefetch-Control", "off".parse().unwrap());
         headers.insert("X-Download-Options", "noopen".parse().unwrap());
-        
+
         // Additional CSP for admin endpoints
         if let Some(csp) = headers.get_mut("Content-Security-Policy") {
             if let Ok(csp_str) = csp.to_str() {
-                *csp = format!("{}; require-trusted-types-for 'script';", csp_str).parse().unwrap();
+                *csp = format!("{}; require-trusted-types-for 'script';", csp_str)
+                    .parse()
+                    .unwrap();
             }
         }
     }
-    
+
     response
 }
 
@@ -250,17 +277,17 @@ pub async fn rate_limit(
 ) -> Result<Response, AppError> {
     let path = request.uri().path();
     let method = request.method();
-    
+
     // Endpoint-specific rate limits
     let (limit, window, burst_limit) = determine_rate_limits(&state.config, path, method);
-    
+
     // Get client identifier with better IP detection
     let client_id = get_client_identifier(&request);
     let rate_key = format!("rate_limit:{}", client_id);
     let burst_key = format!("burst_limit:{}", client_id);
-    
+
     let mut conn = state.cache_conn.clone();
-    
+
     // Check burst limit (shorter window, higher threshold)
     let burst_count: i64 = crate::cache::cmd("GET")
         .arg(&burst_key)
@@ -269,11 +296,11 @@ pub async fn rate_limit(
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
-    
+
     if burst_count > burst_limit {
         return Err(AppError::RateLimitExceeded);
     }
-    
+
     // Increment burst counter with short TTL (1 minute)
     crate::cache::cmd("INCR")
         .arg(&burst_key)
@@ -286,7 +313,7 @@ pub async fn rate_limit(
         .query_async::<()>(&mut conn)
         .await
         .ok();
-    
+
     // Check regular rate limit
     let current_count: i64 = crate::cache::cmd("GET")
         .arg(&rate_key)
@@ -316,57 +343,72 @@ pub async fn rate_limit(
     // Add rate limit headers to response
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
-    
+
     headers.insert("X-RateLimit-Limit", limit.to_string().parse().unwrap());
-    headers.insert("X-RateLimit-Remaining", (limit - current_count - 1).max(0).to_string().parse().unwrap());
+    headers.insert(
+        "X-RateLimit-Remaining",
+        (limit - current_count - 1)
+            .max(0)
+            .to_string()
+            .parse()
+            .unwrap(),
+    );
     headers.insert("X-RateLimit-Window", window.to_string().parse().unwrap());
-    
+
     Ok(response)
 }
 
 /// Determine rate limits based on endpoint and method
-fn determine_rate_limits(config: &crate::config::Config, path: &str, method: &Method) -> (i64, u32, i64) {
+fn determine_rate_limits(
+    config: &crate::config::Config,
+    path: &str,
+    method: &Method,
+) -> (i64, u32, i64) {
     let base_limit = config.rate_limit_requests as i64;
     let base_window = config.rate_limit_window_seconds;
-    
+
     // More restrictive limits for sensitive endpoints
     match (path, method) {
         // Authentication endpoints - very restrictive
         (path, &Method::POST) if path.starts_with("/api/auth/login") => {
             (5, base_window as u32, 10) // 5 login attempts per window, burst of 10
-        },
+        }
         (path, &Method::POST) if path.starts_with("/api/auth/register") => {
             (3, base_window as u32, 5) // 3 registration attempts per window
-        },
-        
+        }
+
         // Admin endpoints - restrictive
         (path, _) if path.starts_with("/api/admin/") => {
             (base_limit / 4, base_window as u32, base_limit / 2) // Quarter normal limit
-        },
-        
+        }
+
         // Analytics endpoints - moderate restriction
         (path, _) if path.starts_with("/api/analytics/") => {
             (base_limit / 2, base_window as u32, base_limit) // Half normal limit
-        },
-        
+        }
+
         // Export endpoints - very restrictive
         (path, _) if path.contains("/export") => {
             (2, (base_window * 2) as u32, 3) // 2 exports per double window
-        },
-        
+        }
+
         // Write operations - more restrictive than reads
-        (path, &Method::POST) | (path, &Method::PUT) | (path, &Method::PATCH) | (path, &Method::DELETE) 
-            if path.starts_with("/api/") => {
+        (path, &Method::POST)
+        | (path, &Method::PUT)
+        | (path, &Method::PATCH)
+        | (path, &Method::DELETE)
+            if path.starts_with("/api/") =>
+        {
             (base_limit / 2, base_window as u32, base_limit) // Half limit for writes
-        },
-        
+        }
+
         // Health checks - very permissive
         (path, _) if path.starts_with("/health/") => {
             (base_limit * 5, base_window as u32, base_limit * 10) // 5x normal limit
-        },
-        
+        }
+
         // Default limits
-        _ => (base_limit, base_window as u32, base_limit * 2)
+        _ => (base_limit, base_window as u32, base_limit * 2),
     }
 }
 
@@ -376,29 +418,35 @@ fn get_client_identifier(request: &Request) -> String {
     if let Some(claims) = request.extensions().get::<Claims>() {
         return format!("user:{}", claims.sub);
     }
-    
+
     // Extract IP address with proxy support
-    let ip = request.headers()
+    let ip = request
+        .headers()
         .get("x-forwarded-for")
         .and_then(|h| h.to_str().ok())
         .and_then(|s| s.split(',').next())
         .map(|s| s.trim())
         .or_else(|| {
-            request.headers()
+            request
+                .headers()
                 .get("x-real-ip")
                 .and_then(|h| h.to_str().ok())
         })
         .unwrap_or("unknown");
-    
+
     // Combine IP with user agent for better fingerprinting
-    let user_agent = request.headers()
+    let user_agent = request
+        .headers()
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
         .unwrap_or("unknown");
-    
+
     // Create a simple hash to avoid storing full user agent strings
-    format!("ip:{}:ua:{}", ip, 
-        user_agent.chars().take(20).collect::<String>())
+    format!(
+        "ip:{}:ua:{}",
+        ip,
+        user_agent.chars().take(20).collect::<String>()
+    )
 }
 
 /// IP blocking middleware for security
@@ -407,31 +455,33 @@ pub async fn ip_blocking(
     request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
-    let ip = request.headers()
+    let ip = request
+        .headers()
         .get("x-forwarded-for")
         .and_then(|h| h.to_str().ok())
         .and_then(|s| s.split(',').next())
         .map(|s| s.trim())
         .or_else(|| {
-            request.headers()
+            request
+                .headers()
                 .get("x-real-ip")
                 .and_then(|h| h.to_str().ok())
         })
         .unwrap_or("unknown");
-    
+
     // Check if IP is in blocklist
     let blocklist_key = format!("blocked_ip:{}", ip);
     let mut conn = state.cache_conn.clone();
-    
+
     if let Ok(_) = crate::cache::cmd("GET")
         .arg(&blocklist_key)
         .query_async::<String>(&mut conn)
-        .await 
+        .await
     {
         tracing::warn!("Blocked request from IP: {}", ip);
         return Err(AppError::Forbidden);
     }
-    
+
     // Check for suspicious patterns (high error rate)
     let error_key = format!("ip_errors:{}", ip);
     let error_count: i64 = crate::cache::cmd("GET")
@@ -441,7 +491,7 @@ pub async fn ip_blocking(
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
-    
+
     // Auto-block IPs with too many errors
     if error_count > 50 {
         // Block for 1 hour
@@ -451,60 +501,63 @@ pub async fn ip_blocking(
             .arg("auto_blocked")
             .query_async::<String>(&mut conn)
             .await;
-        
+
         tracing::warn!("Auto-blocked IP due to error rate: {}", ip);
         return Err(AppError::Forbidden);
     }
-    
+
     Ok(next.run(request).await)
 }
 
 /// Content validation middleware for API endpoints
-pub async fn content_validation(
-    request: Request,
-    next: Next,
-) -> Result<Response, AppError> {
+pub async fn content_validation(request: Request, next: Next) -> Result<Response, AppError> {
     let path = request.uri().path();
-    
+
     // Skip validation for non-API endpoints
     if !path.starts_with("/api/") {
         return Ok(next.run(request).await);
     }
-    
+
     // Validate Content-Type for POST/PUT/PATCH requests
-    if matches!(request.method(), &Method::POST | &Method::PUT | &Method::PATCH) {
-        let content_type = request.headers()
+    if matches!(
+        request.method(),
+        &Method::POST | &Method::PUT | &Method::PATCH
+    ) {
+        let content_type = request
+            .headers()
             .get("content-type")
             .and_then(|h| h.to_str().ok())
             .unwrap_or("");
-        
+
         // Require JSON content type for API endpoints (except file uploads)
-        if !content_type.starts_with("application/json") 
-            && !content_type.starts_with("multipart/form-data") 
-            && !path.contains("/upload") {
+        if !content_type.starts_with("application/json")
+            && !content_type.starts_with("multipart/form-data")
+            && !path.contains("/upload")
+        {
             return Err(AppError::BadRequest(
-                "Invalid Content-Type. Expected application/json".to_string()
+                "Invalid Content-Type. Expected application/json".to_string(),
             ));
         }
-        
+
         // Check Content-Length to prevent large payloads
         if let Some(length_header) = request.headers().get("content-length") {
             if let Ok(length) = length_header.to_str().unwrap_or("0").parse::<u64>() {
-                let max_size = if path.contains("/upload") { 
+                let max_size = if path.contains("/upload") {
                     10_000_000 // 10MB for uploads
-                } else { 
-                    1_000_000  // 1MB for regular API calls
+                } else {
+                    1_000_000 // 1MB for regular API calls
                 };
-                
+
                 if length > max_size {
-                    return Err(AppError::BadRequest(
-                        format!("Request too large. Maximum size: {} bytes", max_size)
-                    ));
+                    return Err(AppError::BadRequest(format!(
+                        "Request too large. Maximum size: {} bytes",
+                        max_size
+                    )));
                 }
             }
         }
     }
-    
+
     Ok(next.run(request).await)
 }
 
@@ -518,33 +571,33 @@ pub async fn audit_middleware(
     let method = request.method().clone();
     let path = request.uri().path().to_string();
     let query = request.uri().query().map(|q| q.to_string());
-    
+
     // Skip audit logging for health checks and metrics endpoints
     if path.starts_with("/health/") || path.starts_with("/metrics") {
         return next.run(request).await;
     }
-    
+
     // Extract user context from request extensions (set by auth middleware)
     let claims = request.extensions().get::<Claims>().cloned();
     let audit_context = AuditContext::from_request(&request, claims.as_ref());
-    
+
     // Run the request
     let response = next.run(request).await;
     let status = response.status();
     let duration = start_time.elapsed();
-    
+
     // Log API call for compliance
     let action = match method {
         Method::GET => "read",
-        Method::POST => "create", 
+        Method::POST => "create",
         Method::PUT | Method::PATCH => "update",
         Method::DELETE => "delete",
         _ => "unknown",
     };
-    
+
     // Determine resource type from path
     let (resource_type, resource_id) = parse_resource_from_path(&path);
-    
+
     let audit_details = serde_json::json!({
         "method": method.to_string(),
         "path": path,
@@ -555,17 +608,22 @@ pub async fn audit_middleware(
         "user_agent": audit_context.user_agent,
         "session_id": audit_context.session_id
     });
-    
+
     // Log failed requests as security events
     if status.is_client_error() || status.is_server_error() {
         let _result = AuditService::log_security_event(
             &state.db_pool,
             &audit_context,
-            if status.is_client_error() { "client_error".to_string() } else { "server_error".to_string() },
+            if status.is_client_error() {
+                "client_error".to_string()
+            } else {
+                "server_error".to_string()
+            },
             audit_details.clone(),
-        ).await;
+        )
+        .await;
     }
-    
+
     // Log all API calls for compliance (background task to avoid blocking)
     let db_pool = state.db_pool.clone();
     let context = audit_context.clone();
@@ -577,22 +635,23 @@ pub async fn audit_middleware(
             resource_type,
             resource_id,
             Some(audit_details),
-        ).await;
+        )
+        .await;
     });
-    
+
     response
 }
 
 /// Parse resource type and ID from API path
 fn parse_resource_from_path(path: &str) -> (String, String) {
     let segments: Vec<&str> = path.trim_start_matches("/api/").split('/').collect();
-    
+
     match segments.as_slice() {
         ["auth", action] => ("auth".to_string(), action.to_string()),
         ["learners"] => ("learners".to_string(), "collection".to_string()),
         ["learners", id] => ("learner".to_string(), id.to_string()),
         ["learners", id, sub] => ("learner".to_string(), format!("{}:{}", id, sub)),
-        ["sessions"] => ("sessions".to_string(), "collection".to_string()),  
+        ["sessions"] => ("sessions".to_string(), "collection".to_string()),
         ["sessions", id] => ("session".to_string(), id.to_string()),
         ["sessions", id, sub] => ("session".to_string(), format!("{}:{}", id, sub)),
         ["analytics", endpoint] => ("analytics".to_string(), endpoint.to_string()),
@@ -619,7 +678,7 @@ pub async fn audit_sensitive_operation(
         "sensitive_operation": true,
         "timestamp": chrono::Utc::now()
     });
-    
+
     let _ = AuditService::log_event_with_context(
         &state.db_pool,
         context,
@@ -627,5 +686,6 @@ pub async fn audit_sensitive_operation(
         resource_type.to_string(),
         resource_id.to_string(),
         Some(enhanced_details),
-    ).await;
+    )
+    .await;
 }

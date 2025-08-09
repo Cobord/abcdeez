@@ -29,7 +29,8 @@ pub async fn create(
     let user_id = req.user_id.or(Some(claims.sub));
 
     // Create learner using the service
-    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+    let learner_service =
+        LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
 
     let learner = learner_service
         .create_learner(user_id, req.display_name.clone())
@@ -72,7 +73,8 @@ pub async fn get(
     claims: Extension<Claims>,
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Learner>> {
-    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+    let learner_service =
+        LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
 
     let learner = learner_service
         .get_learner(id)
@@ -108,7 +110,8 @@ pub async fn update(
     Json(req): Json<UpdateLearnerRequest>,
 ) -> AppResult<Json<Learner>> {
     // First get the existing learner to check permissions
-    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+    let learner_service =
+        LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
 
     let learner = learner_service
         .get_learner(id)
@@ -126,12 +129,16 @@ pub async fn update(
     let learner_bytes = id.as_bytes();
     let now = chrono::Utc::now();
 
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     sqlx::query(
         "UPDATE learners SET display_name = COALESCE(?, display_name),
                            metadata = COALESCE(?, metadata),
                            last_active = ?
-         WHERE id = ?"
+         WHERE id = ?",
     )
     .bind(req.display_name.clone())
     .bind(req.metadata.clone().map(|m| m.to_string()))
@@ -184,7 +191,8 @@ pub async fn stats(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<LearnerStats>> {
     // Check permissions first
-    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+    let learner_service =
+        LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
 
     let learner = learner_service
         .get_learner(id)
@@ -201,14 +209,17 @@ pub async fn stats(
     let learner_bytes = id.as_bytes();
 
     // Get session count
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
-    let session_stats = sqlx::query(
-        "SELECT COUNT(*) as total_sessions FROM sessions WHERE learner_id = ?"
-    )
-    .bind(&learner_bytes[..])
-    .fetch_one(&mut *conn)
-    .await
-    .map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+    let session_stats =
+        sqlx::query("SELECT COUNT(*) as total_sessions FROM sessions WHERE learner_id = ?")
+            .bind(&learner_bytes[..])
+            .fetch_one(&mut *conn)
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
 
     // Get response statistics
     let response_stats = sqlx::query(
@@ -217,7 +228,7 @@ pub async fn stats(
             AVG(CASE WHEN correct THEN 1.0 ELSE 0.0 END) as accuracy
          FROM responses r
          JOIN sessions s ON r.session_id = s.id
-         WHERE s.learner_id = ?"
+         WHERE s.learner_id = ?",
     )
     .bind(&learner_bytes[..])
     .fetch_one(&mut *conn)
@@ -234,7 +245,7 @@ pub async fn stats(
          WHERE s.learner_id = ?
            AND r.timestamp > ?
          GROUP BY DATE(r.timestamp)
-         ORDER BY date"
+         ORDER BY date",
     )
     .bind(&learner_bytes[..])
     .bind(chrono::Utc::now() - chrono::Duration::days(30))
@@ -248,7 +259,9 @@ pub async fn stats(
             let date_str: String = row.get("date");
             let date = chrono::NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")
                 .unwrap_or_else(|_| chrono::Utc::now().date_naive())
-                .and_hms_opt(12, 0, 0).unwrap().and_utc();
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc();
             let accuracy: Option<f64> = row.get("daily_accuracy");
             (date, accuracy.unwrap_or(0.0))
         })
@@ -257,7 +270,9 @@ pub async fn stats(
     let stats = LearnerStats {
         total_sessions: session_stats.get::<i64, _>("total_sessions"),
         total_tasks_completed: response_stats.get::<i64, _>("total_tasks"),
-        overall_accuracy: response_stats.get::<Option<f64>, _>("accuracy").unwrap_or(0.0),
+        overall_accuracy: response_stats
+            .get::<Option<f64>, _>("accuracy")
+            .unwrap_or(0.0),
         total_practice_time_seconds: learner.total_practice_time_seconds,
         last_active: learner.last_active,
         preferred_difficulty: 0.5, // TODO: Calculate from learner model
@@ -273,7 +288,8 @@ pub async fn export(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
     // Check permissions first
-    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+    let learner_service =
+        LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
 
     let learner = learner_service
         .get_learner(id)
@@ -293,8 +309,7 @@ pub async fn export(
     {
         Ok(export) => {
             // Convert to JSON for the API response
-            serde_json::to_value(&export)
-                .map_err(|_| AppError::InternalServerError)?
+            serde_json::to_value(&export).map_err(|_| AppError::InternalServerError)?
         }
         Err(_) => {
             // Fallback to basic export structure if full export fails
@@ -332,7 +347,8 @@ pub async fn delete(
     Path(id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     // Check permissions first
-    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+    let learner_service =
+        LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
 
     let learner = learner_service
         .get_learner(id)
@@ -374,7 +390,8 @@ pub async fn sessions(
     Path(id): Path<Uuid>,
 ) -> AppResult<Json<Vec<Session>>> {
     // Check permissions first
-    let learner_service = LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
+    let learner_service =
+        LearnerService::new(state.db_pool.clone().into(), state.redis_conn.clone());
 
     let learner = learner_service
         .get_learner(id)
@@ -389,14 +406,18 @@ pub async fn sessions(
 
     // Get sessions for this learner
     let learner_bytes = id.as_bytes();
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
-    
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+
     let session_rows = sqlx::query(
         "SELECT id, learner_id, topology_type, topology_data, status, 
                 start_time, end_time, summary
          FROM sessions 
          WHERE learner_id = ? 
-         ORDER BY start_time DESC"
+         ORDER BY start_time DESC",
     )
     .bind(&learner_bytes[..])
     .fetch_all(&mut *conn)
@@ -408,18 +429,20 @@ pub async fn sessions(
         .map(|row| {
             let id_bytes: Vec<u8> = row.get("id");
             let learner_id_bytes: Vec<u8> = row.get("learner_id");
-            
+
             Session {
                 id: Uuid::from_bytes(id_bytes.try_into().unwrap_or_default()),
                 learner_id: Uuid::from_bytes(learner_id_bytes.try_into().unwrap_or_default()),
                 topology_type: row.get("topology_type"),
-                topology_data: row.get::<Option<String>, _>("topology_data")
+                topology_data: row
+                    .get::<Option<String>, _>("topology_data")
                     .and_then(|s| serde_json::from_str(&s).ok())
                     .unwrap_or_else(|| serde_json::json!({})),
                 status: row.get("status"),
                 start_time: row.get("start_time"),
                 end_time: row.get("end_time"),
-                summary: row.get::<Option<String>, _>("summary")
+                summary: row
+                    .get::<Option<String>, _>("summary")
                     .and_then(|s| serde_json::from_str(&s).ok()),
             }
         })

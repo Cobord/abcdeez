@@ -4,7 +4,7 @@ use argon2::{
 };
 use axum::{extract::State, http::StatusCode, Json};
 use chrono::{Duration, Utc};
-use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use sqlx::Row;
@@ -16,20 +16,19 @@ use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
     models::user::{
-        CreateUserRequest, LoginRequest, TokenResponse, User, UserResponse,
-        OAuthCallbackRequest, AppleSignInRequest, OAuthAuthUrlResponse,
+        AppleSignInRequest, CreateUserRequest, LoginRequest, OAuthAuthUrlResponse,
+        OAuthCallbackRequest, TokenResponse, User, UserResponse,
     },
     services::{
         audit::AuditService,
-        oauth_service::{OAuthService, OAuthProvider, OAuthAuthRequest, OAuthUserProfile},
+        oauth_service::{OAuthAuthRequest, OAuthProvider, OAuthService, OAuthUserProfile},
     },
     state::AppState,
 };
 
 // Email validation regex
-static EMAIL_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap()
-});
+static EMAIL_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap());
 
 pub async fn register(
     State(state): State<Arc<AppState>>,
@@ -41,7 +40,7 @@ pub async fn register(
             "Username must be between 3 and 50 characters".to_string(),
         ));
     }
-    
+
     // Validate password strength if required
     if state.config.require_strong_passwords {
         validate_password_strength(&req.password)?;
@@ -50,23 +49,31 @@ pub async fn register(
             "Password must be at least 8 characters".to_string(),
         ));
     }
-    
+
     // Enhanced email validation
     if !EMAIL_REGEX.is_match(&req.email) || req.email.len() > 254 {
         return Err(AppError::ValidationError(
             "Invalid email format".to_string(),
         ));
     }
-    
+
     // Check for username/email restrictions
-    if req.username.chars().any(|c| !c.is_alphanumeric() && c != '_' && c != '-') {
+    if req
+        .username
+        .chars()
+        .any(|c| !c.is_alphanumeric() && c != '_' && c != '-')
+    {
         return Err(AppError::ValidationError(
             "Username can only contain letters, numbers, underscores and hyphens".to_string(),
         ));
     }
 
     // Check if user already exists
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     let existing = sqlx::query("SELECT id FROM users WHERE username = ? OR email = ?")
         .bind(&req.username)
         .bind(&req.email)
@@ -95,7 +102,7 @@ pub async fn register(
 
     sqlx::query(
         "INSERT INTO users (id, username, email, password_hash, created_at, updated_at, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?)"
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(user_id_bytes.as_ref())
     .bind(&req.username)
@@ -140,14 +147,17 @@ pub async fn register(
     .await
     .ok();
 
-    Ok((StatusCode::CREATED, Json(UserResponse {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        created_at: user.created_at,
-        updated_at: user.updated_at,
-        metadata: user.metadata,
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(UserResponse {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
+            metadata: user.metadata,
+        }),
+    ))
 }
 
 // Password strength validation helper
@@ -157,25 +167,37 @@ fn validate_password_strength(password: &str) -> AppResult<()> {
             "Password must be at least 8 characters long".to_string(),
         ));
     }
-    
+
     let has_upper = password.chars().any(|c| c.is_uppercase());
     let has_lower = password.chars().any(|c| c.is_lowercase());
     let has_digit = password.chars().any(|c| c.is_numeric());
-    let has_special = password.chars().any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
-    
+    let has_special = password
+        .chars()
+        .any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
+
     if !has_upper || !has_lower || !has_digit || !has_special {
         return Err(AppError::ValidationError(
             "Password must contain at least one uppercase letter, lowercase letter, digit, and special character".to_string(),
         ));
     }
-    
+
     // Check for common weak patterns
     let lower_password = password.to_lowercase();
     let weak_patterns = vec![
-        "password", "123456", "qwerty", "abc123", "admin", "letmein",
-        "welcome", "monkey", "dragon", "master", "shadow", "password123"
+        "password",
+        "123456",
+        "qwerty",
+        "abc123",
+        "admin",
+        "letmein",
+        "welcome",
+        "monkey",
+        "dragon",
+        "master",
+        "shadow",
+        "password123",
     ];
-    
+
     for pattern in weak_patterns {
         if lower_password.contains(pattern) {
             return Err(AppError::ValidationError(
@@ -183,7 +205,7 @@ fn validate_password_strength(password: &str) -> AppResult<()> {
             ));
         }
     }
-    
+
     Ok(())
 }
 
@@ -191,7 +213,7 @@ fn validate_password_strength(password: &str) -> AppResult<()> {
 async fn track_failed_login_attempt(state: &AppState, username: &str) -> AppResult<()> {
     let failed_attempts_key = format!("failed_attempts:{}", username);
     let mut conn = state.cache_conn.clone();
-    
+
     // Increment failed attempts counter
     let current_attempts: i64 = crate::cache::cmd("INCR")
         .arg(&failed_attempts_key)
@@ -200,28 +222,32 @@ async fn track_failed_login_attempt(state: &AppState, username: &str) -> AppResu
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(1);
-    
+
     // Set expiration for the counter (reset after lockout period)
     let _ = crate::cache::cmd("EXPIRE")
         .arg(&failed_attempts_key)
         .arg((state.config.login_lockout_duration_minutes * 60) as i32)
         .query_async::<()>(&mut conn)
         .await;
-    
+
     // If exceeded max attempts, lock the account
     if current_attempts >= state.config.max_failed_login_attempts as i64 {
         let lockout_key = format!("lockout:{}", username);
-        let lockout_until = chrono::Utc::now().timestamp() + (state.config.login_lockout_duration_minutes * 60) as i64;
-        
+        let lockout_until = chrono::Utc::now().timestamp()
+            + (state.config.login_lockout_duration_minutes * 60) as i64;
+
         let _ = crate::cache::cmd("SET")
             .arg(&lockout_key)
             .arg(lockout_until.to_string())
             .query_async::<()>(&mut conn)
             .await;
-        
-        tracing::warn!("Account locked due to too many failed attempts: {}", username);
+
+        tracing::warn!(
+            "Account locked due to too many failed attempts: {}",
+            username
+        );
     }
-    
+
     Ok(())
 }
 
@@ -232,19 +258,20 @@ pub async fn login(
     // Check for account lockout
     let lockout_key = format!("lockout:{}", req.username);
     let mut conn = state.cache_conn.clone();
-    
+
     if let Ok(lockout_time) = crate::cache::cmd("GET")
         .arg(&lockout_key)
         .query_async::<String>(&mut conn)
-        .await 
+        .await
     {
         if let Ok(lockout_timestamp) = lockout_time.parse::<i64>() {
             let now = chrono::Utc::now().timestamp();
             if now < lockout_timestamp {
                 let remaining = lockout_timestamp - now;
-                return Err(AppError::ValidationError(
-                    format!("Account locked. Try again in {} seconds", remaining)
-                ));
+                return Err(AppError::ValidationError(format!(
+                    "Account locked. Try again in {} seconds",
+                    remaining
+                )));
             } else {
                 // Lockout expired, remove it
                 let _ = crate::cache::cmd("DEL")
@@ -255,10 +282,14 @@ pub async fn login(
         }
     }
     // Get user from database
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     let user_row = sqlx::query(
         "SELECT id, username, email, password_hash, created_at, updated_at, metadata
-         FROM users WHERE username = ?"
+         FROM users WHERE username = ?",
     )
     .bind(&req.username)
     .fetch_optional(&mut *conn)
@@ -279,7 +310,8 @@ pub async fn login(
 
     // Verify password
     let password_hash: String = user_row.get::<String, _>("password_hash");
-    let parsed_hash = PasswordHash::new(&password_hash).map_err(|_| AppError::InternalServerError)?;
+    let parsed_hash =
+        PasswordHash::new(&password_hash).map_err(|_| AppError::InternalServerError)?;
 
     let argon2 = Argon2::default();
     let password_valid = argon2
@@ -305,7 +337,11 @@ pub async fn login(
     crate::monitoring::global_metrics().record_auth(true);
 
     let user_id_bytes: Vec<u8> = user_row.get::<Vec<u8>, _>("id");
-    let user_id = Uuid::from_bytes(user_id_bytes.try_into().map_err(|_| AppError::InternalServerError)?);
+    let user_id = Uuid::from_bytes(
+        user_id_bytes
+            .try_into()
+            .map_err(|_| AppError::InternalServerError)?,
+    );
 
     // Get user role and permissions from metadata
     let metadata_str: Option<String> = user_row.get("metadata");
@@ -313,17 +349,23 @@ pub async fn login(
         .clone()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_else(|| serde_json::json!({}));
-    
-    let role = metadata.get("role")
+
+    let role = metadata
+        .get("role")
         .and_then(|r| r.as_str())
         .unwrap_or("user")
         .to_string();
-        
-    let permissions = metadata.get("permissions")
+
+    let permissions = metadata
+        .get("permissions")
         .and_then(|p| p.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
         .unwrap_or_else(|| vec!["read_own_data".to_string()]);
-    
+
     // Generate session ID for tracking
     let session_id = Uuid::new_v4().to_string();
 
@@ -354,7 +396,7 @@ pub async fn login(
 
     // Use explicit HS256 algorithm for security
     let header = Header::new(Algorithm::HS256);
-    
+
     let access_token = encode(
         &header,
         &access_claims,
@@ -433,7 +475,7 @@ pub async fn refresh(
     // Decode refresh token to get user info
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
     validation.algorithms = vec![jsonwebtoken::Algorithm::HS256];
-    
+
     let token_data = jsonwebtoken::decode::<Claims>(
         refresh_token,
         &jsonwebtoken::DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
@@ -477,7 +519,10 @@ pub async fn refresh(
     )?;
 
     // Get user details for response
-    let mut conn = state.db_pool.acquire().await
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
         .map_err(|e| AppError::DatabaseError(e))?;
 
     let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = ?")
@@ -560,10 +605,14 @@ pub async fn me(
     let user_id_bytes = user_id.as_bytes();
 
     // Get user from database
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     let user_row = sqlx::query(
         "SELECT id, username, email, password_hash, created_at, updated_at, metadata
-         FROM users WHERE id = ?"
+         FROM users WHERE id = ?",
     )
     .bind(&user_id_bytes[..])
     .fetch_optional(&mut *conn)
@@ -580,7 +629,9 @@ pub async fn me(
         apple_user_id: user_row.get("apple_user_id"),
         github_user_id: user_row.get("github_user_id"),
         oauth_provider_id: user_row.get("oauth_provider_id"),
-        auth_provider: user_row.get::<Option<String>, _>("auth_provider").unwrap_or_else(|| "local".to_string()),
+        auth_provider: user_row
+            .get::<Option<String>, _>("auth_provider")
+            .unwrap_or_else(|| "local".to_string()),
         is_private_email: user_row.get("is_private_email"),
         created_at: user_row.get("created_at"),
         updated_at: user_row.get("updated_at"),
@@ -599,12 +650,13 @@ pub async fn oauth_authorization_url(
     State(state): State<Arc<AppState>>,
     axum::extract::Path(provider): axum::extract::Path<String>,
 ) -> AppResult<Json<OAuthAuthUrlResponse>> {
-    let oauth_provider: OAuthProvider = provider.parse()
-        .map_err(|_| AppError::ValidationError(format!("Unsupported OAuth provider: {}", provider)))?;
+    let oauth_provider: OAuthProvider = provider.parse().map_err(|_| {
+        AppError::ValidationError(format!("Unsupported OAuth provider: {}", provider))
+    })?;
 
     let oauth_service = OAuthService::new(state.config.clone());
     let oauth_state = OAuthService::generate_state();
-    
+
     let authorization_url = oauth_service.get_authorization_url(oauth_provider, &oauth_state)?;
 
     // Store OAuth state in cache for CSRF protection
@@ -613,10 +665,13 @@ pub async fn oauth_authorization_url(
     let _: Result<(), _> = crate::cache::cmd("SETEX")
         .arg(&state_key)
         .arg(600) // 10 minutes
-        .arg(serde_json::json!({
-            "provider": oauth_provider,
-            "created_at": chrono::Utc::now().timestamp()
-        }).to_string())
+        .arg(
+            serde_json::json!({
+                "provider": oauth_provider,
+                "created_at": chrono::Utc::now().timestamp()
+            })
+            .to_string(),
+        )
         .query_async(&mut conn)
         .await;
 
@@ -633,7 +688,7 @@ pub async fn apple_signin(
     Json(req): Json<AppleSignInRequest>,
 ) -> AppResult<Json<TokenResponse>> {
     let mut oauth_service = OAuthService::new(state.config.clone());
-    
+
     let oauth_request = OAuthAuthRequest {
         provider: "apple".to_string(),
         identity_token: Some(req.identity_token),
@@ -644,10 +699,10 @@ pub async fn apple_signin(
 
     // Authenticate with Apple
     let oauth_profile = oauth_service.authenticate(oauth_request).await?;
-    
+
     // Create or get existing user
     let user = get_or_create_oauth_user(&state, &oauth_profile).await?;
-    
+
     // Generate our app's JWT tokens
     let token_response = generate_tokens(&state, &user).await?;
 
@@ -686,7 +741,9 @@ pub async fn oauth_callback(
         .ok();
 
     if cached_state.is_none() {
-        return Err(AppError::AuthenticationError("Invalid or expired OAuth state".to_string()));
+        return Err(AppError::AuthenticationError(
+            "Invalid or expired OAuth state".to_string(),
+        ));
     }
 
     // Remove used state token
@@ -696,7 +753,7 @@ pub async fn oauth_callback(
         .await;
 
     let mut oauth_service = OAuthService::new(state.config.clone());
-    
+
     let oauth_request = OAuthAuthRequest {
         provider: req.provider.clone(),
         identity_token: None,
@@ -707,10 +764,10 @@ pub async fn oauth_callback(
 
     // Authenticate with OAuth provider
     let oauth_profile = oauth_service.authenticate(oauth_request).await?;
-    
+
     // Create or get existing user
     let user = get_or_create_oauth_user(&state, &oauth_profile).await?;
-    
+
     // Generate our app's JWT tokens
     let token_response = generate_tokens(&state, &user).await?;
 
@@ -739,29 +796,28 @@ async fn get_or_create_oauth_user(
     state: &AppState,
     oauth_profile: &OAuthUserProfile,
 ) -> AppResult<User> {
-    let mut conn = state.db_pool.acquire().await
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
         .map_err(|e| AppError::DatabaseError(e))?;
 
     // Check if user exists by OAuth provider ID
     let existing_user = match oauth_profile.provider {
         OAuthProvider::Apple => {
-            sqlx::query_as::<_, User>(
-                "SELECT * FROM users WHERE apple_user_id = ?"
-            )
-            .bind(&oauth_profile.provider_user_id)
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(|e| AppError::DatabaseError(e))?
-        },
+            sqlx::query_as::<_, User>("SELECT * FROM users WHERE apple_user_id = ?")
+                .bind(&oauth_profile.provider_user_id)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| AppError::DatabaseError(e))?
+        }
         OAuthProvider::GitHub => {
-            sqlx::query_as::<_, User>(
-                "SELECT * FROM users WHERE github_user_id = ?"
-            )
-            .bind(&oauth_profile.provider_user_id)
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(|e| AppError::DatabaseError(e))?
-        },
+            sqlx::query_as::<_, User>("SELECT * FROM users WHERE github_user_id = ?")
+                .bind(&oauth_profile.provider_user_id)
+                .fetch_optional(&mut *conn)
+                .await
+                .map_err(|e| AppError::DatabaseError(e))?
+        }
     };
 
     if let Some(user) = existing_user {
@@ -775,10 +831,7 @@ async fn get_or_create_oauth_user(
 }
 
 /// Helper function to create new OAuth user
-async fn create_oauth_user(
-    state: &AppState,
-    oauth_profile: &OAuthUserProfile,
-) -> AppResult<User> {
+async fn create_oauth_user(state: &AppState, oauth_profile: &OAuthUserProfile) -> AppResult<User> {
     let user_id = Uuid::new_v4();
     let now = chrono::Utc::now();
 
@@ -798,7 +851,10 @@ async fn create_oauth_user(
         "created_via_oauth": true
     });
 
-    let mut conn = state.db_pool.acquire().await
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
         .map_err(|e| AppError::DatabaseError(e))?;
 
     // Insert new OAuth user with provider-specific fields
@@ -811,7 +867,7 @@ async fn create_oauth_user(
         "INSERT INTO users (
             id, username, email, password_hash, apple_user_id, github_user_id, 
             oauth_provider_id, auth_provider, is_private_email, created_at, updated_at, metadata
-        ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(user_id.as_bytes().as_slice())
     .bind(&username)
@@ -844,7 +900,10 @@ async fn create_oauth_user(
         metadata: Some(metadata),
     };
 
-    info!("Created new OAuth user: {} (provider: {})", user.username, oauth_profile.provider);
+    info!(
+        "Created new OAuth user: {} (provider: {})",
+        user.username, oauth_profile.provider
+    );
 
     Ok(user)
 }
@@ -854,7 +913,9 @@ async fn ensure_unique_username(
     db_pool: &crate::db::DbPool,
     base_username: &str,
 ) -> AppResult<String> {
-    let mut conn = db_pool.acquire().await
+    let mut conn = db_pool
+        .acquire()
+        .await
         .map_err(|e| AppError::DatabaseError(e))?;
 
     let mut username = base_username.to_string();
@@ -866,7 +927,8 @@ async fn ensure_unique_username(
             .fetch_one(&mut *conn)
             .await
             .map_err(|e| AppError::DatabaseError(e))?
-            .get::<i64, _>("count") > 0;
+            .get::<i64, _>("count")
+            > 0;
 
         if !exists {
             return Ok(username);
@@ -882,11 +944,10 @@ async fn ensure_unique_username(
 }
 
 /// Helper function to update user's last login time
-async fn update_user_last_login(
-    db_pool: &crate::db::DbPool,
-    user_id: Uuid,
-) -> AppResult<()> {
-    let mut conn = db_pool.acquire().await
+async fn update_user_last_login(db_pool: &crate::db::DbPool, user_id: Uuid) -> AppResult<()> {
+    let mut conn = db_pool
+        .acquire()
+        .await
         .map_err(|e| AppError::DatabaseError(e))?;
 
     sqlx::query("UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = ?")
@@ -928,7 +989,7 @@ async fn generate_tokens(state: &AppState, user: &User) -> AppResult<TokenRespon
 
     // Use explicit HS256 algorithm for security
     let header = Header::new(Algorithm::HS256);
-    
+
     let access_token = encode(
         &header,
         &access_claims,

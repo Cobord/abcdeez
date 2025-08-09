@@ -1,13 +1,10 @@
-use axum::{
-    extract::Request,
-    http::HeaderMap,
-};
+use crate::{db::DbPool, middleware::Claims};
+use anyhow::Result;
+use axum::{extract::Request, http::HeaderMap};
 use chrono::Utc;
 use sqlx::Row;
-use uuid::Uuid;
-use anyhow::Result;
-use crate::{db::DbPool, middleware::Claims};
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub struct AuditService;
 
@@ -24,7 +21,7 @@ pub struct AuditContext {
 impl AuditContext {
     pub fn from_request(request: &Request, claims: Option<&Claims>) -> Self {
         let headers = request.headers();
-        
+
         Self {
             user_id: claims.map(|c| c.sub),
             username: claims.map(|c| c.username.clone()),
@@ -34,7 +31,7 @@ impl AuditContext {
             role: claims.map(|c| c.role.clone()),
         }
     }
-    
+
     pub fn anonymous(headers: &HeaderMap) -> Self {
         Self {
             user_id: None,
@@ -45,15 +42,17 @@ impl AuditContext {
             role: None,
         }
     }
-    
+
     fn extract_ip_address(headers: &HeaderMap) -> Option<String> {
         // Check for forwarded headers first (proxy/load balancer)
-        headers.get("x-forwarded-for")
+        headers
+            .get("x-forwarded-for")
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.split(',').next()) // Get first IP in chain
             .map(|s| s.trim().to_string())
             .or_else(|| {
-                headers.get("x-real-ip")
+                headers
+                    .get("x-real-ip")
                     .and_then(|h| h.to_str().ok())
                     .map(|s| s.to_string())
             })
@@ -61,9 +60,10 @@ impl AuditContext {
             // For now, we'll use a placeholder since we can't access connection info
             .or_else(|| Some("127.0.0.1".to_string()))
     }
-    
+
     fn extract_user_agent(headers: &HeaderMap) -> Option<String> {
-        headers.get("user-agent")
+        headers
+            .get("user-agent")
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string())
     }
@@ -103,7 +103,7 @@ impl AuditService {
 
         Ok(())
     }
-    
+
     pub async fn log_event_with_context(
         db: &DbPool,
         context: &AuditContext,
@@ -121,9 +121,10 @@ impl AuditService {
             changes,
             context.ip_address.clone(),
             context.user_agent.clone(),
-        ).await
+        )
+        .await
     }
-    
+
     pub async fn log_security_event(
         db: &DbPool,
         context: &AuditContext,
@@ -137,7 +138,7 @@ impl AuditService {
             "session_id": context.session_id,
             "role": context.role
         });
-        
+
         Self::log_event_with_context(
             db,
             context,
@@ -145,9 +146,10 @@ impl AuditService {
             "system".to_string(),
             event_type,
             Some(enhanced_details),
-        ).await
+        )
+        .await
     }
-    
+
     pub async fn log_data_access(
         db: &DbPool,
         context: &AuditContext,
@@ -161,7 +163,7 @@ impl AuditService {
             "query_parameters": query_parameters,
             "data_access": true
         });
-        
+
         Self::log_event_with_context(
             db,
             context,
@@ -169,7 +171,8 @@ impl AuditService {
             resource_type,
             resource_id,
             Some(access_details),
-        ).await
+        )
+        .await
     }
 
     pub async fn get_audit_trail(
@@ -188,7 +191,7 @@ impl AuditService {
                 "SELECT timestamp, action, resource_type, resource_id, changes, ip_address 
                  FROM audit_log 
                  WHERE resource_type = ? AND resource_id = ? 
-                 ORDER BY timestamp DESC LIMIT ?"
+                 ORDER BY timestamp DESC LIMIT ?",
             )
             .bind(rt)
             .bind(rid)
@@ -200,7 +203,7 @@ impl AuditService {
                 "SELECT timestamp, action, resource_type, resource_id, changes, ip_address 
                  FROM audit_log 
                  WHERE user_id = ? 
-                 ORDER BY timestamp DESC LIMIT ?"
+                 ORDER BY timestamp DESC LIMIT ?",
             )
             .bind(&uid_bytes[..])
             .bind(limit)
@@ -210,7 +213,7 @@ impl AuditService {
             sqlx::query(
                 "SELECT timestamp, action, resource_type, resource_id, changes, ip_address 
                  FROM audit_log 
-                 ORDER BY timestamp DESC LIMIT ?"
+                 ORDER BY timestamp DESC LIMIT ?",
             )
             .bind(limit)
             .fetch_all(&mut *conn)

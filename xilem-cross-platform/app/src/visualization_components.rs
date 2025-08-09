@@ -91,6 +91,8 @@ pub fn response_time_histogram_chart(
         } else {
             flex((
                 label("Complete tasks to see timing data").brush(Color::from_rgb8(128, 128, 128)),
+                label(""),
+                label(""),
             ))
             .direction(Axis::Horizontal)
         },
@@ -160,9 +162,13 @@ pub fn metrics_radar_chart(
 }
 
 /// Create a progress ring component
-pub fn progress_ring_chart(percentage: f64, label: &str, size: u32) -> impl WidgetView<AppData> {
+pub fn progress_ring_chart(
+    percentage: f64,
+    label_text: &str,
+    size: u32,
+) -> impl WidgetView<AppData> {
     // Generate the progress ring
-    let chart_data = match create_progress_ring(percentage, size, size, label) {
+    let chart_data = match create_progress_ring(percentage, size, size, label_text) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create progress ring: {}", e);
@@ -172,7 +178,7 @@ pub fn progress_ring_chart(percentage: f64, label: &str, size: u32) -> impl Widg
 
     flex((
         label(format!("{:.0}%", percentage)).brush(get_metric_color(percentage / 100.0)),
-        label(label).brush(Color::from_rgb8(128, 128, 128)),
+        label(label_text).brush(Color::from_rgb8(128, 128, 128)),
     ))
     .direction(Axis::Vertical)
 }
@@ -187,7 +193,8 @@ pub fn scatter_plot_chart(
     title: &str,
 ) -> impl WidgetView<AppData> {
     // Generate the scatter plot
-    let chart_data = match create_scatter_plot(data, width, height, x_label, y_label, title) {
+    // Note: scatter plot not implemented in visualizations.rs yet; show placeholder for now
+    let chart_data = match (|| -> Result<Vec<u8>, String> { Err("not implemented".into()) })() {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create scatter plot: {}", e);
@@ -330,29 +337,30 @@ pub fn session_comparison_chart(
     flex((
         label("📊 Session Comparison").brush(Color::from_rgb8(102, 126, 234)),
         if sessions.len() >= 2 {
-            flex(
-                sessions
-                    .iter()
-                    .enumerate()
-                    .map(|(i, session)| {
-                        let accuracy = session.iter().filter(|r| r.correct).count() as f64
-                            / session.len().max(1) as f64
-                            * 100.0;
-                        flex((
-                            label(format!("Session {}", i + 1))
-                                .brush(Color::from_rgb8(128, 128, 128)),
-                            label(format!("{:.1}%", accuracy))
-                                .brush(get_metric_color(accuracy / 100.0)),
-                        ))
-                        .direction(Axis::Horizontal)
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .direction(Axis::Vertical)
+            let rows: Vec<_> = sessions
+                .iter()
+                .enumerate()
+                .map(|(i, session)| {
+                    let accuracy = session.iter().filter(|r| r.correct).count() as f64
+                        / session.len().max(1) as f64
+                        * 100.0;
+                    flex((
+                        label(format!("Session {}", i + 1)).brush(Color::from_rgb8(128, 128, 128)),
+                        label(format!("{:.1}%", accuracy))
+                            .brush(get_metric_color(accuracy / 100.0)),
+                    ))
+                    .direction(Axis::Horizontal)
+                })
+                .collect();
+            flex(rows).direction(Axis::Vertical)
         } else {
-            flex((label("Complete more sessions to see comparisons")
-                .brush(Color::from_rgb8(128, 128, 128)),))
-            .direction(Axis::Vertical)
+            let rows: Vec<_> = vec![flex((
+                label("Complete more sessions to see comparisons")
+                    .brush(Color::from_rgb8(128, 128, 128)),
+                label(""),
+            ))
+            .direction(Axis::Horizontal)];
+            flex(rows).direction(Axis::Vertical)
         },
     ))
     .direction(Axis::Vertical)

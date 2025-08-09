@@ -31,18 +31,23 @@ use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::Config;
-use crate::handlers::{admin, analytics, auth, experiment, gamification, learner, music, session, sync, task, task_simple};
-use crate::middleware::{audit_middleware, auth_middleware, content_validation, ip_blocking, rate_limit, require_admin, require_analytics_permission, security_headers};
+use crate::handlers::{
+    admin, analytics, auth, experiment, gamification, learner, music, session, sync, task,
+    task_simple,
+};
+use crate::middleware::{
+    audit_middleware, auth_middleware, content_validation, ip_blocking, rate_limit, require_admin,
+    require_analytics_permission, security_headers,
+};
 use crate::monitoring::{health, metrics, performance};
 use crate::state::AppState;
 
 // Handler to serve the admin panel HTML
 async fn serve_admin_panel() -> Result<Html<String>, error::AppError> {
-    let admin_html = std::fs::read_to_string("static/admin.html")
-        .map_err(|e| {
-            error!("Failed to read admin panel HTML: {}", e);
-            error::AppError::InternalServerError
-        })?;
+    let admin_html = std::fs::read_to_string("static/admin.html").map_err(|e| {
+        error!("Failed to read admin panel HTML: {}", e);
+        error::AppError::InternalServerError
+    })?;
     Ok(Html(admin_html))
 }
 
@@ -59,15 +64,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load configuration
     let config = Config::from_env()?;
-    
+
     // Validate production safety
     if let Err(e) = config.validate_production_safety() {
         error!("Production safety validation failed: {}", e);
         return Err(e.into());
     }
-    
-    info!("Starting web backend - Environment: {:?}, Port: {}", 
-        config.environment, config.port);
+
+    info!(
+        "Starting web backend - Environment: {:?}, Port: {}",
+        config.environment, config.port
+    );
 
     // Initialize database
     let db_pool = match db::init_pool(&config.database_url).await {
@@ -101,9 +108,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/auth/refresh", post(auth::refresh))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/me", get(auth::me))
-        
         // OAuth routes
-        .route("/auth/oauth/:provider/authorize", get(auth::oauth_authorization_url))
+        .route(
+            "/auth/oauth/:provider/authorize",
+            get(auth::oauth_authorization_url),
+        )
         .route("/auth/oauth/callback", post(auth::oauth_callback))
         .route("/auth/apple/signin", post(auth::apple_signin))
         // Learner routes (protected)
@@ -125,7 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/tasks/generate", get(task_simple::generate_simple))
         .route("/tasks/difficulty", get(task_simple::get_difficulty))
         .route("/tasks/hint", get(task_simple::generate_hint))
-        // Analytics routes (protected with analytics permissions)  
+        // Analytics routes (protected with analytics permissions)
         .route("/analytics/population", get(analytics::population))
         .route("/analytics/bottlenecks", get(analytics::bottlenecks))
         .route("/analytics/strategies", get(analytics::strategies))
@@ -136,10 +145,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/analytics/compare", post(analytics::compare))
         .route("/analytics/live", get(analytics::live))
         // Advanced analytics routes with core statistics
-        .route("/analytics/response-time-analysis", get(analytics::response_time_analysis))
-        .route("/analytics/learner/:id/performance", get(analytics::learner_performance_analysis))
-        .route("/analytics/population/strategies", get(analytics::population_strategy_analysis))
-        .route("/analytics/learner/:id/adaptive-difficulty", get(analytics::adaptive_difficulty_analysis))
+        .route(
+            "/analytics/response-time-analysis",
+            get(analytics::response_time_analysis),
+        )
+        .route(
+            "/analytics/learner/:id/performance",
+            get(analytics::learner_performance_analysis),
+        )
+        .route(
+            "/analytics/population/strategies",
+            get(analytics::population_strategy_analysis),
+        )
+        .route(
+            "/analytics/learner/:id/adaptive-difficulty",
+            get(analytics::adaptive_difficulty_analysis),
+        )
         // Apply analytics permission middleware to analytics routes
         .layer(axum_middleware::from_fn(require_analytics_permission))
         // Experiment routes (protected)
@@ -156,10 +177,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/music/audio/:note", get(music::audio))
         // Gamification routes (protected)
         .route("/gamification/profile", get(gamification::get_profile))
-        .route("/gamification/achievements", get(gamification::get_achievements))
-        .route("/gamification/achievements/:id/unlock", post(gamification::unlock_achievement))
-        .route("/gamification/leaderboard", get(gamification::get_leaderboard))
-        .route("/gamification/leaderboard/update", post(gamification::update_leaderboard_score))
+        .route(
+            "/gamification/achievements",
+            get(gamification::get_achievements),
+        )
+        .route(
+            "/gamification/achievements/:id/unlock",
+            post(gamification::unlock_achievement),
+        )
+        .route(
+            "/gamification/leaderboard",
+            get(gamification::get_leaderboard),
+        )
+        .route(
+            "/gamification/leaderboard/update",
+            post(gamification::update_leaderboard_score),
+        )
         .route("/gamification/xp/add", post(gamification::add_xp))
         // Sync routes (protected)
         .route("/sync/devices", post(sync::register_device))
@@ -174,7 +207,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/admin/audit", get(admin::audit_trail))
         .route("/admin/jobs", get(admin::list_jobs))
         .route("/admin/jobs", post(admin::trigger_job))
-        .route("/admin/oauth-validation", post(admin::trigger_oauth_validation))
+        .route(
+            "/admin/oauth-validation",
+            post(admin::trigger_oauth_validation),
+        )
         .route("/admin/config", post(admin::update_config))
         .route("/admin/audit-report", get(admin::audit_report))
         // Apply admin-only middleware to admin routes
@@ -210,11 +246,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/metrics", get(metrics::prometheus_metrics))
         .route("/metrics/json", get(metrics::json_metrics))
         .route("/performance", get(performance::get_performance_metrics))
-        .route("/performance/endpoints", get(performance::get_endpoint_performance));
+        .route(
+            "/performance/endpoints",
+            get(performance::get_endpoint_performance),
+        );
 
     // Static routes
-    let static_routes = Router::new()
-        .route("/admin", get(serve_admin_panel));
+    let static_routes = Router::new().route("/admin", get(serve_admin_panel));
 
     // Combine all routes
     let app = Router::new()
@@ -226,7 +264,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             app_state.clone(),
             audit_middleware,
         ))
-        .layer(axum_middleware::from_fn(performance::performance_middleware))
+        .layer(axum_middleware::from_fn(
+            performance::performance_middleware,
+        ))
         .layer(axum_middleware::from_fn_with_state(
             app_state.clone(),
             security_headers,
@@ -236,9 +276,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 CorsLayer::permissive()
             } else {
                 CorsLayer::new()
-                    .allow_origin(config.cors_origin.parse::<axum::http::HeaderValue>()
-                        .expect("Invalid CORS origin"))
-                    .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH])
+                    .allow_origin(
+                        config
+                            .cors_origin
+                            .parse::<axum::http::HeaderValue>()
+                            .expect("Invalid CORS origin"),
+                    )
+                    .allow_methods([
+                        Method::GET,
+                        Method::POST,
+                        Method::PUT,
+                        Method::DELETE,
+                        Method::PATCH,
+                    ])
                     .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
             };
             cors
@@ -250,11 +300,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start background monitoring tasks
     let health_monitor_state = app_state.clone();
     let performance_monitor_state = app_state.clone();
-    
+
     tokio::spawn(async move {
         health::start_health_monitor(health_monitor_state).await;
     });
-    
+
     tokio::spawn(async move {
         performance::start_performance_monitor(performance_monitor_state).await;
     });
@@ -262,15 +312,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start background job workers
     let batch_job_worker_state = app_state.clone();
     let oauth_validator_state = app_state.clone();
-    
+
     // Start main batch job worker
     tokio::spawn(async move {
-        batch_job_worker_state.batch_job_service.start_worker().await;
+        batch_job_worker_state
+            .batch_job_service
+            .start_worker()
+            .await;
     });
-    
+
     // Start OAuth credential validation scheduler
     tokio::spawn(async move {
-        oauth_validator_state.batch_job_service.start_oauth_validation_scheduler().await;
+        oauth_validator_state
+            .batch_job_service
+            .start_oauth_validation_scheduler()
+            .await;
     });
 
     // Setup TLS if configured
@@ -295,10 +351,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let https_addr = SocketAddr::from(([0, 0, 0, 0], config.tls_port));
 
     // Add ACME challenge route to the app
-    let app = app.route("/.well-known/acme-challenge/:token", 
-                       axum::routing::get(crate::tls::handle_acme_challenge));
+    let app = app.route(
+        "/.well-known/acme-challenge/:token",
+        axum::routing::get(crate::tls::handle_acme_challenge),
+    );
 
-    info!("Starting server with TLS support - HTTP: {}, HTTPS: {}", http_addr, https_addr);
+    info!(
+        "Starting server with TLS support - HTTP: {}, HTTPS: {}",
+        http_addr, https_addr
+    );
 
     // Start server with TLS support
     crate::tls::serve_with_tls(app, http_addr, https_addr, tls_acceptor).await?;

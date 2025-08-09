@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
+use graph_learning_core::TopologyType;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use graph_learning_core::{TopologyType};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Session {

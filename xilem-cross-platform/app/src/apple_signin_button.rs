@@ -37,19 +37,19 @@ pub fn apple_signin_button(
 ) -> impl WidgetView<AppData> {
     let (bg_color, text_color, border_color) = match style {
         AppleSignInButtonStyle::Black => (
-            Color::from_rgb8(0, 0, 0),           // Apple Black
-            Color::from_rgb8(255, 255, 255),     // White text
+            Color::from_rgb8(0, 0, 0),       // Apple Black
+            Color::from_rgb8(255, 255, 255), // White text
             None,
         ),
         AppleSignInButtonStyle::White => (
-            Color::from_rgb8(255, 255, 255),     // White background
-            Color::from_rgb8(0, 0, 0),           // Black text
+            Color::from_rgb8(255, 255, 255), // White background
+            Color::from_rgb8(0, 0, 0),       // Black text
             None,
         ),
         AppleSignInButtonStyle::WhiteOutline => (
-            Color::from_rgb8(255, 255, 255),     // White background
-            Color::from_rgb8(0, 0, 0),           // Black text
-            Some(Color::from_rgb8(0, 0, 0)),     // Black border
+            Color::from_rgb8(255, 255, 255), // White background
+            Color::from_rgb8(0, 0, 0),       // Black text
+            Some(Color::from_rgb8(0, 0, 0)), // Black border
         ),
     };
 
@@ -60,50 +60,35 @@ pub fn apple_signin_button(
             } else {
                 "Sign in with Apple"
             }
-        },
+        }
         AppleSignInButtonType::Continue => {
             if data.oauth_login_in_flight {
                 "Continuing with Apple..."
             } else {
                 "Continue with Apple"
             }
-        },
+        }
         AppleSignInButtonType::SignUp => {
             if data.oauth_login_in_flight {
                 "Signing up with Apple..."
             } else {
                 "Sign up with Apple"
             }
-        },
+        }
     };
 
     // Apple requires specific sizing and styling
-    let button_content = flex((
-        // Apple logo (using  as approximation - in production, use official Apple logo)
-        label("").alignment(TextAlignment::Start),
-        // Button text with proper spacing
-        label(button_text)
-            .brush(text_color)
-            .alignment(TextAlignment::Middle),
-    ))
-    .direction(Axis::Horizontal);
-
     let mut apple_button = button(
-        button_content,
+        label(button_text).brush(text_color),
         |data: &mut AppData| {
             if !data.oauth_login_in_flight {
                 data.apple_sign_in();
             }
         },
-    )
-    .brush(bg_color);
+    );
 
     // Add border if specified
-    if let Some(_border) = border_color {
-        // Note: Xilem may not support borders directly - this would need custom styling
-        // In a real implementation, you'd need to add border support or use a custom widget
-        apple_button = apple_button.brush(bg_color);
-    }
+    // Background color for button not supported directly; text is styled above.
 
     apple_button
 }
@@ -127,7 +112,7 @@ pub fn continue_with_apple_button(data: &AppData) -> impl WidgetView<AppData> {
 }
 
 /// Apple Sign In button compliance notes:
-/// 
+///
 /// REQUIRED for App Store approval:
 /// 1. Must use official Apple logo and branding
 /// 2. Minimum height: 30pt (40px at 1x)  
@@ -137,14 +122,14 @@ pub fn continue_with_apple_button(data: &AppData) -> impl WidgetView<AppData> {
 /// 6. Must use San Francisco font (system font on iOS)
 /// 7. Logo must be vertically and horizontally centered
 /// 8. Cannot be modified beyond Apple's approved styles
-/// 
+///
 /// PLACEMENT RULES:
 /// 1. If offering other third-party sign-in options, Apple button must be:
-///    - Equal or greater prominence 
+///    - Equal or greater prominence
 ///    - Positioned above or to the left of other options
 /// 2. Cannot be placed in a toolbar or navigation bar
 /// 3. Must be placed in sign-in/sign-up flow, not buried in settings
-/// 
+///
 /// TEXT REQUIREMENTS:
 /// 1. Use "Sign in with Apple" for initial authentication
 /// 2. Use "Continue with Apple" for returning users  

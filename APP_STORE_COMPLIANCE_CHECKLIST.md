@@ -16,7 +16,7 @@ This comprehensive checklist covers all requirements for submitting the Xilem-ba
 - [x] Works offline for existing authenticated users
 
 ✅ **Button Design Requirements**
-- [x] Uses official Apple logo and branding (requires actual logo asset)
+- [ ] Uses official Apple logo and branding (requires actual logo asset)
 - [x] Minimum height: 44pt (iOS touch target requirement)
 - [x] Proper color schemes: Black, White, White with outline only
 - [x] Corner radius: 6pt for rounded buttons

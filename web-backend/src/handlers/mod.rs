@@ -1,11 +1,11 @@
+pub mod admin;
+pub mod analytics;
 pub mod auth;
+pub mod experiment;
+pub mod gamification;
 pub mod learner;
+pub mod music;
 pub mod session;
+pub mod sync;
 pub mod task;
 pub mod task_simple;
-pub mod analytics;
-pub mod experiment;
-pub mod music;
-pub mod admin;
-pub mod gamification;
-pub mod sync;

@@ -13,12 +13,12 @@ pub struct User {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub metadata: Option<serde_json::Value>,
-    
+
     // OAuth provider fields
     pub apple_user_id: Option<String>,
     pub github_user_id: Option<String>,
     pub oauth_provider_id: Option<String>, // Primary OAuth provider ID
-    pub auth_provider: String, // "local", "apple", "github"
+    pub auth_provider: String,             // "local", "apple", "github"
     pub is_private_email: Option<bool>,
 }
 

@@ -1,6 +1,7 @@
 // offline.rs - Offline-first storage and sync system for the Adaptive Learning System
 
 use chrono::{DateTime, Utc};
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -298,17 +299,16 @@ impl OfflineStorage {
 
         db.execute(
             "INSERT INTO responses
-             (id, session_id, task_data, response, correct, response_time_ms, timestamp, hint_used, sync_status)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'pending')",
+             (id, session_id, task_data, response, correct, response_time_ms, timestamp, sync_status)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'pending')",
             rusqlite::params![
                 uuid::Uuid::new_v4().to_string(),
                 session_id,
                 task_json,
-                response.response,
+                response.user_answer,
                 response.correct,
-                response.response_time_ms,
+                (response.response_time_ms as i64),
                 response.timestamp.to_rfc3339(),
-                response.hint_used,
             ],
         )?;
 
@@ -411,7 +411,7 @@ impl OfflineStorage {
         // Load from database
         let db = self.db.read().await;
         let mut stmt = db.prepare(
-            "SELECT task_data, response, correct, response_time_ms, timestamp, hint_used
+            "SELECT task_data, response, correct, response_time_ms, timestamp
              FROM responses WHERE session_id = ?1 ORDER BY timestamp",
         )?;
 
@@ -427,9 +427,12 @@ impl OfflineStorage {
                             Box::new(e),
                         )
                     })?,
-                    response: row.get(1)?,
-                    correct: row.get(2)?,
-                    response_time_ms: row.get(3)?,
+                    user_answer: row.get::<_, String>(1)?,
+                    correct: row.get::<_, bool>(2)?,
+                    response_time_ms: {
+                        let v: i64 = row.get(3)?;
+                        v as u128
+                    },
                     timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(4)?)
                         .map_err(|e| {
                             rusqlite::Error::FromSqlConversionFailure(
@@ -439,7 +442,6 @@ impl OfflineStorage {
                             )
                         })?
                         .with_timezone(&Utc),
-                    hint_used: row.get(5)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -701,7 +703,10 @@ pub enum ApiError {
 /// Network connectivity monitor
 pub struct ConnectivityMonitor {
     online: Arc<RwLock<bool>>,
-    listeners: Arc<RwLock<Vec<Box<dyn Fn(bool) + Send + Sync>>>>,
+    // Listeners do not need to be Send/Sync because callbacks are executed
+    // on the same task that sets the status. Relaxing this bound avoids
+    // unnecessary Send requirements for captured values (like local storage).
+    listeners: Arc<RwLock<Vec<Box<dyn Fn(bool)>>>>,
 }
 
 impl ConnectivityMonitor {
@@ -731,7 +736,7 @@ impl ConnectivityMonitor {
 
     pub async fn add_listener<F>(&self, listener: F)
     where
-        F: Fn(bool) + Send + Sync + 'static,
+        F: Fn(bool) + 'static,
     {
         let mut listeners = self.listeners.write().await;
         listeners.push(Box::new(listener));

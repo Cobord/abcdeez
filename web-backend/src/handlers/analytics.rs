@@ -14,7 +14,9 @@ use crate::{
     state::AppState,
 };
 use graph_learning_core::{
-    statistics::{DetailedStatistics, ExGaussianModel, ExGaussianParameters, StrategyType, SessionAnalyzer},
+    statistics::{
+        DetailedStatistics, ExGaussianModel, ExGaussianParameters, SessionAnalyzer, StrategyType,
+    },
     Topology,
 };
 
@@ -48,8 +50,10 @@ pub async fn population(
     claims: Extension<Claims>,
     Query(params): Query<PopulationQuery>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let analytics_service =
-        AnalyticsService::new(Arc::new(state.db_pool.clone()), Arc::new(state.redis_conn.clone()));
+    let analytics_service = AnalyticsService::new(
+        Arc::new(state.db_pool.clone()),
+        Arc::new(state.redis_conn.clone()),
+    );
 
     let population_stats = analytics_service
         .population_stats()
@@ -80,8 +84,10 @@ pub async fn bottlenecks(
     claims: Extension<Claims>,
     Query(params): Query<BottlenecksQuery>,
 ) -> AppResult<Json<Vec<serde_json::Value>>> {
-    let analytics_service =
-        AnalyticsService::new(Arc::new(state.db_pool.clone()), Arc::new(state.redis_conn.clone()));
+    let analytics_service = AnalyticsService::new(
+        Arc::new(state.db_pool.clone()),
+        Arc::new(state.redis_conn.clone()),
+    );
 
     let min_samples = params.min_samples.unwrap_or(50);
 
@@ -121,7 +127,11 @@ pub async fn strategies(
     claims: Extension<Claims>,
 ) -> AppResult<Json<serde_json::Value>> {
     // Get strategy distribution from database
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
     let strategy_stats = sqlx::query(
         "SELECT
             COUNT(*) as total_learners,
@@ -132,7 +142,7 @@ pub async fn strategies(
          FROM responses r
          JOIN sessions s ON r.session_id = s.id
          WHERE r.timestamp > ?
-         GROUP BY s.learner_id"
+         GROUP BY s.learner_id",
     )
     .bind(chrono::Utc::now() - chrono::Duration::days(30))
     .fetch_all(&mut *conn)
@@ -211,8 +221,10 @@ pub async fn learning_curves(
     claims: Extension<Claims>,
     Query(params): Query<LearningCurvesQuery>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let analytics_service =
-        AnalyticsService::new(Arc::new(state.db_pool.clone()), Arc::new(state.redis_conn.clone()));
+    let analytics_service = AnalyticsService::new(
+        Arc::new(state.db_pool.clone()),
+        Arc::new(state.redis_conn.clone()),
+    );
 
     // Parse learner IDs if provided
     let learner_ids = if let Some(ids_str) = params.learner_ids {
@@ -285,8 +297,10 @@ pub async fn compare(
     claims: Extension<Claims>,
     Json(req): Json<CompareRequest>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let analytics_service =
-        AnalyticsService::new(Arc::new(state.db_pool.clone()), Arc::new(state.redis_conn.clone()));
+    let analytics_service = AnalyticsService::new(
+        Arc::new(state.db_pool.clone()),
+        Arc::new(state.redis_conn.clone()),
+    );
 
     let comparison_result = if let Some(experiment_id) = req.experiment_id {
         // Compare experiment conditions
@@ -352,8 +366,10 @@ pub async fn live(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let analytics_service =
-        AnalyticsService::new(Arc::new(state.db_pool.clone()), Arc::new(state.redis_conn.clone()));
+    let analytics_service = AnalyticsService::new(
+        Arc::new(state.db_pool.clone()),
+        Arc::new(state.redis_conn.clone()),
+    );
 
     let live_metrics = analytics_service
         .get_real_time_metrics()
@@ -385,7 +401,11 @@ async fn get_group_statistics(
         .collect();
 
     // For SQLite compatibility, use IN clause instead of ANY
-    let placeholders = learner_id_bytes.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let placeholders = learner_id_bytes
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
     let query_str = format!(
         "SELECT
             COUNT(DISTINCT s.learner_id) as participant_count,
@@ -397,12 +417,12 @@ async fn get_group_statistics(
          WHERE s.learner_id IN ({})",
         placeholders
     );
-    
+
     let mut query = sqlx::query(&query_str);
     for learner_id_bytes in &learner_id_bytes {
         query = query.bind(&learner_id_bytes[..]);
     }
-    
+
     let mut conn = db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
     let stats = query
         .fetch_one(&mut *conn)
@@ -433,11 +453,13 @@ pub async fn response_time_analysis(
     claims: Extension<Claims>,
     Query(query): Query<LearningCurvesQuery>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let learner_service = LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
-    
+    let learner_service =
+        LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
+
     // Get learner IDs to analyze
     let learner_ids = if let Some(ids_str) = query.learner_ids {
-        ids_str.split(',')
+        ids_str
+            .split(',')
             .filter_map(|s| Uuid::parse_str(s.trim()).ok())
             .collect::<Vec<_>>()
     } else {
@@ -451,14 +473,18 @@ pub async fn response_time_analysis(
     // Collect response time data from database
     for learner_id in &learner_ids {
         let learner_bytes = learner_id.as_bytes().to_vec();
-        let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
-        
+        let mut conn = state
+            .db_pool
+            .acquire()
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
+
         let responses = sqlx::query(
             "SELECT r.response_time_ms, r.task_data, r.correct
              FROM responses r
              JOIN sessions s ON r.session_id = s.id
              WHERE s.learner_id = ?
-             ORDER BY r.timestamp"
+             ORDER BY r.timestamp",
         )
         .bind(&learner_bytes)
         .fetch_all(&mut *conn)
@@ -467,9 +493,10 @@ pub async fn response_time_analysis(
 
         for row in responses {
             let rt = row.get::<i32, _>("response_time_ms") as f64;
-            if rt > 0.0 && rt < 30000.0 { // Filter outliers
+            if rt > 0.0 && rt < 30000.0 {
+                // Filter outliers
                 response_times.push(rt);
-                
+
                 // Extract distance information from task data if available
                 let task_data: String = row.get("task_data");
                 if let Ok(task_json) = serde_json::from_str::<serde_json::Value>(&task_data) {
@@ -489,17 +516,18 @@ pub async fn response_time_analysis(
 
     // Calculate detailed statistics
     let detailed_stats = DetailedStatistics::from_data(&response_times);
-    
+
     // Fit Ex-Gaussian model
     let ex_gaussian = ExGaussianModel::fit(&response_times);
-    
+
     // Strategy detection based on RT-distance correlation
     let strategy = detect_strategy(&distance_data);
 
     // Calculate percentiles for visualization
     let mut sorted_rts = response_times.clone();
     sorted_rts.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let percentiles: Vec<(u8, f64)> = (5..=95).step_by(5)
+    let percentiles: Vec<(u8, f64)> = (5..=95)
+        .step_by(5)
         .map(|p| {
             let idx = ((p as f64 / 100.0) * (sorted_rts.len() - 1) as f64) as usize;
             (p, sorted_rts[idx])
@@ -543,8 +571,9 @@ pub async fn learner_performance_analysis(
     claims: Extension<Claims>,
     axum::extract::Path(learner_id): axum::extract::Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let learner_service = LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
-    
+    let learner_service =
+        LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
+
     // Verify learner exists and get permissions
     let learner = learner_service
         .get_learner(learner_id)
@@ -560,13 +589,17 @@ pub async fn learner_performance_analysis(
 
     // Get comprehensive session data
     let learner_bytes = learner_id.as_bytes().to_vec();
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
-    
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+
     let sessions = sqlx::query(
         "SELECT s.id, s.topology_type, s.start_time, s.end_time
          FROM sessions s
          WHERE s.learner_id = ?
-         ORDER BY s.start_time"
+         ORDER BY s.start_time",
     )
     .bind(&learner_bytes)
     .fetch_all(&mut *conn)
@@ -580,12 +613,12 @@ pub async fn learner_performance_analysis(
 
     for session_row in sessions {
         let session_id_bytes: Vec<u8> = session_row.get("id");
-        
+
         let responses = sqlx::query(
             "SELECT r.response_time_ms, r.correct, r.task_type, r.task_data, r.timestamp
              FROM responses r
              WHERE r.session_id = ?
-             ORDER BY r.timestamp"
+             ORDER BY r.timestamp",
         )
         .bind(&session_id_bytes)
         .fetch_all(&mut *conn)
@@ -594,7 +627,7 @@ pub async fn learner_performance_analysis(
 
         let mut session_rts = Vec::new();
         let mut session_correct = 0;
-        
+
         for (idx, response) in responses.iter().enumerate() {
             let rt = response.get::<i32, _>("response_time_ms") as f64;
             let correct = response.get::<bool, _>("correct");
@@ -613,15 +646,24 @@ pub async fn learner_performance_analysis(
             let running_accuracy = if idx > 0 {
                 (session_correct as f64) / ((idx + 1) as f64)
             } else {
-                if correct { 1.0 } else { 0.0 }
+                if correct {
+                    1.0
+                } else {
+                    0.0
+                }
             };
-            
+
             accuracy_over_time.push((idx, running_accuracy));
 
             // Track task type performance
-            let task_stats = task_type_performance.entry(task_type.clone()).or_insert((0, 0, Vec::new()));
+            let task_stats =
+                task_type_performance
+                    .entry(task_type.clone())
+                    .or_insert((0, 0, Vec::new()));
             task_stats.1 += 1; // total count
-            if correct { task_stats.0 += 1; } // correct count
+            if correct {
+                task_stats.0 += 1;
+            } // correct count
             if rt > 0.0 && rt < 30000.0 {
                 task_stats.2.push(rt); // response times
             }
@@ -632,7 +674,9 @@ pub async fn learner_performance_analysis(
             let session_stats = DetailedStatistics::from_data(&session_rts);
             let accuracy = if responses.len() > 0 {
                 session_correct as f64 / responses.len() as f64
-            } else { 0.0 };
+            } else {
+                0.0
+            };
 
             session_summaries.push(serde_json::json!({
                 "session_id": uuid::Uuid::from_bytes(session_id_bytes.try_into().unwrap_or_default()).to_string(),
@@ -650,26 +694,39 @@ pub async fn learner_performance_analysis(
     // Overall analysis
     let overall_stats = if !all_response_times.is_empty() {
         Some(DetailedStatistics::from_data(&all_response_times))
-    } else { None };
+    } else {
+        None
+    };
 
     let ex_gaussian = if !all_response_times.is_empty() {
         Some(ExGaussianModel::fit(&all_response_times))
-    } else { None };
+    } else {
+        None
+    };
 
     // Task type analysis
     let mut task_analysis = HashMap::new();
     for (task_type, (correct, total, rts)) in task_type_performance {
-        let accuracy = if total > 0 { correct as f64 / total as f64 } else { 0.0 };
+        let accuracy = if total > 0 {
+            correct as f64 / total as f64
+        } else {
+            0.0
+        };
         let rt_stats = if !rts.is_empty() {
             Some(DetailedStatistics::from_data(&rts))
-        } else { None };
+        } else {
+            None
+        };
 
-        task_analysis.insert(task_type, serde_json::json!({
-            "accuracy": accuracy,
-            "total_attempts": total,
-            "correct_responses": correct,
-            "response_time_stats": rt_stats
-        }));
+        task_analysis.insert(
+            task_type,
+            serde_json::json!({
+                "accuracy": accuracy,
+                "total_attempts": total,
+                "correct_responses": correct,
+                "response_time_stats": rt_stats
+            }),
+        );
     }
 
     Ok(Json(serde_json::json!({
@@ -697,20 +754,24 @@ pub async fn population_strategy_analysis(
     Query(query): Query<PopulationQuery>,
 ) -> AppResult<Json<serde_json::Value>> {
     let recent_learners = get_recent_learner_ids(&state.db_pool, 100).await?;
-    
+
     let mut strategy_counts = HashMap::new();
     let mut rt_distance_data = Vec::new();
-    
+
     for learner_id in &recent_learners {
         let learner_bytes = learner_id.as_bytes().to_vec();
-        let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
-        
+        let mut conn = state
+            .db_pool
+            .acquire()
+            .await
+            .map_err(|e| AppError::DatabaseError(e))?;
+
         let responses = sqlx::query(
             "SELECT r.response_time_ms, r.task_data
              FROM responses r
              JOIN sessions s ON r.session_id = s.id
              WHERE s.learner_id = ?
-             AND r.response_time_ms > 0 AND r.response_time_ms < 30000"
+             AND r.response_time_ms > 0 AND r.response_time_ms < 30000",
         )
         .bind(&learner_bytes)
         .fetch_all(&mut *conn)
@@ -721,7 +782,7 @@ pub async fn population_strategy_analysis(
         for row in responses {
             let rt = row.get::<i32, _>("response_time_ms") as f64;
             let task_data: String = row.get("task_data");
-            
+
             if let Ok(task_json) = serde_json::from_str::<serde_json::Value>(&task_data) {
                 let distance = task_json["distance"].as_u64().unwrap_or(1) as f64;
                 learner_data.push((rt, distance));
@@ -729,9 +790,12 @@ pub async fn population_strategy_analysis(
             }
         }
 
-        if learner_data.len() >= 10 { // Minimum data for strategy detection
+        if learner_data.len() >= 10 {
+            // Minimum data for strategy detection
             let strategy = detect_strategy(&learner_data);
-            *strategy_counts.entry(format!("{:?}", strategy)).or_insert(0) += 1;
+            *strategy_counts
+                .entry(format!("{:?}", strategy))
+                .or_insert(0) += 1;
         }
     }
 
@@ -753,8 +817,9 @@ pub async fn adaptive_difficulty_analysis(
     claims: Extension<Claims>,
     axum::extract::Path(learner_id): axum::extract::Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let learner_service = LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
-    
+    let learner_service =
+        LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
+
     // Get learner and topology for Bayesian analysis
     let learner = learner_service
         .get_learner(learner_id)
@@ -777,18 +842,22 @@ pub async fn adaptive_difficulty_analysis(
 
     // Calculate current model uncertainty
     let total_entropy = bayesian_model.total_entropy();
-    
+
     // Get recent performance data for difficulty recommendations
     let learner_bytes = learner_id.as_bytes().to_vec();
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
-    
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+
     let recent_responses = sqlx::query(
         "SELECT r.correct, r.response_time_ms, r.task_data
          FROM responses r
          JOIN sessions s ON r.session_id = s.id
          WHERE s.learner_id = ?
          ORDER BY r.timestamp DESC
-         LIMIT 20"
+         LIMIT 20",
     )
     .bind(&learner_bytes)
     .fetch_all(&mut *conn)
@@ -797,27 +866,33 @@ pub async fn adaptive_difficulty_analysis(
 
     let mut recent_accuracy = 0.0;
     let mut difficulty_performance = HashMap::new();
-    
+
     for row in &recent_responses {
         let correct = row.get::<bool, _>("correct");
-        if correct { recent_accuracy += 1.0; }
+        if correct {
+            recent_accuracy += 1.0;
+        }
 
         let task_data: String = row.get("task_data");
         if let Ok(task_json) = serde_json::from_str::<serde_json::Value>(&task_data) {
             let difficulty = task_json["difficulty"].as_f64().unwrap_or(0.5);
-            let perf_data = difficulty_performance.entry(format!("{:.1}", difficulty)).or_insert((0, 0));
+            let perf_data = difficulty_performance
+                .entry(format!("{:.1}", difficulty))
+                .or_insert((0, 0));
             perf_data.1 += 1; // total
-            if correct { perf_data.0 += 1; } // correct
+            if correct {
+                perf_data.0 += 1;
+            } // correct
         }
     }
-    
+
     recent_accuracy /= recent_responses.len().max(1) as f64;
 
     // Calculate difficulty recommendations
     let recommended_difficulty = if recent_accuracy > 0.8 {
         0.7 // Increase difficulty
     } else if recent_accuracy < 0.6 {
-        0.3 // Decrease difficulty  
+        0.3 // Decrease difficulty
     } else {
         0.5 // Maintain current level
     };
@@ -848,14 +923,14 @@ pub async fn adaptive_difficulty_analysis(
 
 async fn get_recent_learner_ids(db: &crate::db::DbPool, limit: usize) -> AppResult<Vec<Uuid>> {
     let mut conn = db.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
-    
+
     let rows = sqlx::query(
         "SELECT DISTINCT l.id 
          FROM learners l
          JOIN sessions s ON l.id = s.learner_id
          WHERE s.start_time > ?
          ORDER BY s.start_time DESC
-         LIMIT ?"
+         LIMIT ?",
     )
     .bind(chrono::Utc::now() - chrono::Duration::days(30))
     .bind(limit as i64)
@@ -863,7 +938,8 @@ async fn get_recent_learner_ids(db: &crate::db::DbPool, limit: usize) -> AppResu
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
 
-    Ok(rows.into_iter()
+    Ok(rows
+        .into_iter()
         .filter_map(|row| {
             let bytes: Vec<u8> = row.get("id");
             let array: [u8; 16] = bytes.try_into().ok()?;
@@ -878,7 +954,7 @@ fn detect_strategy(rt_distance_data: &[(f64, f64)]) -> StrategyType {
     }
 
     let correlation = calculate_correlation(rt_distance_data);
-    
+
     // Using Cohen's effect size conventions for correlation
     if correlation > 0.7 {
         StrategyType::SerialScan // Strong positive correlation = serial scanning

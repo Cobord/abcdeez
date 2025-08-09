@@ -3,8 +3,7 @@
 
 use graph_learning_core::prelude::*;
 use graph_learning_core::{
-    AdaptiveScheduler, BayesianLearnerModel, ResponseData, 
-    InterventionSystem, InterventionAction
+    AdaptiveScheduler, BayesianLearnerModel, InterventionAction, InterventionSystem, ResponseData,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,7 +27,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test 3: Adaptive scheduling
     println!("\n3. Testing adaptive scheduling...");
-    let mut adaptive_scheduler = AdaptiveScheduler::new_with_eig(learner_model.clone(), topology.clone(), true);
+    let mut adaptive_scheduler =
+        AdaptiveScheduler::new_with_eig(learner_model.clone(), topology.clone(), true);
     let adaptive_task = adaptive_scheduler.select_next_task();
     println!("   ✅ Adaptive task: {:?}", adaptive_task.task_type);
 
@@ -54,7 +54,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test 6: Multi-domain support
     println!("\n6. Testing multi-domain support...");
-    let custom_topology = Topology::new_linear(vec!["1".to_string(), "2".to_string(), "3".to_string(), "4".to_string(), "5".to_string()]);
+    let custom_topology = Topology::new_linear(vec![
+        "1".to_string(),
+        "2".to_string(),
+        "3".to_string(),
+        "4".to_string(),
+        "5".to_string(),
+    ]);
     let mut custom_generator = TaskGenerator::new(custom_topology);
     let custom_task = custom_generator.generate_task(None);
     println!("   ✅ Custom domain task: {:?}", custom_task.task_type);
@@ -67,8 +73,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   ✅ Intervention system for user assistance");
     println!("   ✅ Multi-domain topology support");
     println!("   ✅ Zero network/database dependencies");
-    
+
     println!("\n🔋 Field collection device ready for deployment!");
-    
+
     Ok(())
 }

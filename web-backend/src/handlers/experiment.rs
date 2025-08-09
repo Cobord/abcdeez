@@ -1,4 +1,8 @@
-use axum::{extract::{Path, State}, http::StatusCode, Json};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -8,9 +12,7 @@ use crate::{
     state::AppState,
 };
 
-pub async fn list(
-    State(state): State<Arc<AppState>>,
-) -> AppResult<Json<Vec<Experiment>>> {
+pub async fn list(State(state): State<Arc<AppState>>) -> AppResult<Json<Vec<Experiment>>> {
     // TODO: List experiments
     Ok(Json(vec![]))
 }

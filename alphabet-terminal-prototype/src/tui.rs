@@ -15,10 +15,7 @@ use ratatui::{
     },
     Frame, Terminal,
 };
-use std::{
-    io,
-    time::Instant,
-};
+use std::{io, time::Instant};
 
 use crate::{
     adaptive::AdaptiveScheduler,
@@ -72,24 +69,24 @@ pub struct App {
     scheduler: Option<AdaptiveScheduler>,
     session: Option<TaskSession>,
     current_task: Option<Task>,
-    
+
     // Backend connection
     backend_client: Option<BackendClient>,
     session_token: Option<SessionToken>,
     backend_enabled: bool,
     sync_status: SyncStatus,
-    
+
     // UI State
     input: String,
     messages: Vec<String>,
     selected_menu_item: usize,
-    
+
     // Performance tracking
     trial_accuracies: Vec<f64>,
     trial_rts: Vec<f64>,
     current_streak: usize,
     best_streak: usize,
-    
+
     // Task timing
     task_start_time: Option<Instant>,
     last_response: Option<TaskResponse>,
@@ -113,7 +110,7 @@ impl App {
         } else {
             SyncStatus::Offline
         };
-        
+
         App {
             state: AppState::Welcome,
             config: SessionConfig {
@@ -141,11 +138,11 @@ impl App {
             last_response: None,
         }
     }
-    
+
     fn init_backend() -> Option<BackendClient> {
         // Try config file first
         if let Ok(config) = BackendConfig::from_file("backend.toml")
-            .or_else(|_| BackendConfig::from_file("backend.json")) 
+            .or_else(|_| BackendConfig::from_file("backend.json"))
         {
             if let Ok(client) = BackendClient::new(config) {
                 // Test connection
@@ -154,7 +151,7 @@ impl App {
                 }
             }
         }
-        
+
         // Try environment variables
         if std::env::var("LEARNING_API_URL").is_ok() {
             let config = BackendConfig::from_env();
@@ -164,14 +161,11 @@ impl App {
                 }
             }
         }
-        
+
         None
     }
 
-    pub fn run_app<B: Backend>(
-        &mut self,
-        terminal: &mut Terminal<B>,
-    ) -> Result<()> {
+    pub fn run_app<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
         loop {
             terminal.draw(|f| self.draw(f))?;
 
@@ -190,9 +184,9 @@ impl App {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),  // Header
-                Constraint::Min(10),    // Main content
-                Constraint::Length(3),  // Footer
+                Constraint::Length(3), // Header
+                Constraint::Min(10),   // Main content
+                Constraint::Length(3), // Footer
             ])
             .split(f.size());
 
@@ -223,9 +217,13 @@ impl App {
             .direction(Direction::Horizontal)
             .constraints([Constraint::Min(40), Constraint::Length(20)])
             .split(area);
-        
+
         let header = Paragraph::new("🧠 Adaptive Graph-Coded Learning System")
-            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center)
             .block(
                 Block::default()
@@ -234,7 +232,7 @@ impl App {
                     .border_style(Style::default().fg(Color::Cyan)),
             );
         f.render_widget(header, chunks[0]);
-        
+
         // Sync status indicator
         let (status_text, status_color) = match &self.sync_status {
             SyncStatus::Offline => ("⚪ Offline", Color::Gray),
@@ -242,7 +240,7 @@ impl App {
             SyncStatus::Syncing => ("🔄 Syncing...", Color::Yellow),
             SyncStatus::Error(_) => ("🔴 Error", Color::Red),
         };
-        
+
         let status = Paragraph::new(status_text)
             .style(Style::default().fg(status_color))
             .alignment(Alignment::Center)
@@ -261,7 +259,7 @@ impl App {
             AppState::Welcome => "Press Enter to continue | Q to quit",
             _ => "Navigate with ↑↓ | Enter to select | ESC to go back | H for help",
         };
-        
+
         let footer = Paragraph::new(footer_text)
             .style(Style::default().fg(Color::DarkGray))
             .alignment(Alignment::Center)
@@ -286,9 +284,13 @@ impl App {
             "║   Build Flexible Mental Models       ║",
             "╚═══════════════════════════════════════╝",
         ];
-        
+
         let title_widget = Paragraph::new(title.join("\n"))
-            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center);
         f.render_widget(title_widget, chunks[0]);
 
@@ -305,7 +307,7 @@ impl App {
             "relationships, and patterns. The system adapts to your performance",
             "to optimize your learning efficiency.",
         ];
-        
+
         let desc_widget = Paragraph::new(description.join("\n"))
             .style(Style::default().fg(Color::White))
             .alignment(Alignment::Center)
@@ -336,7 +338,11 @@ impl App {
 
         // Title
         let title = Paragraph::new("Participant Setup")
-            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center);
         f.render_widget(title, chunks[0]);
 
@@ -353,22 +359,28 @@ impl App {
         // Experiment group selection
         let groups = vec![
             ListItem::new("1. Adaptive Training").style(if self.selected_menu_item == 0 {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             }),
             ListItem::new("2. Linear Training").style(if self.selected_menu_item == 1 {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             }),
             ListItem::new("3. Yoked Control").style(if self.selected_menu_item == 2 {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             }),
         ];
-        
+
         let group_list = List::new(groups)
             .block(
                 Block::default()
@@ -397,7 +409,7 @@ impl App {
 
         // Left side - Task display
         self.draw_task_area(f, chunks[0]);
-        
+
         // Right side - Progress and stats
         self.draw_progress_panel(f, chunks[1]);
     }
@@ -406,20 +418,16 @@ impl App {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(5),      // Task content
-                Constraint::Length(3),   // Input field
-                Constraint::Length(2),   // Timer
+                Constraint::Min(5),    // Task content
+                Constraint::Length(3), // Input field
+                Constraint::Length(2), // Timer
             ])
             .split(area);
 
         // Task display
         if let Some(task) = &self.current_task {
-            let task_text = format!(
-                "\nTask Type: {:?}\n\n{}",
-                task.task_type,
-                task.prompt
-            );
-            
+            let task_text = format!("\nTask Type: {:?}\n\n{}", task.task_type, task.prompt);
+
             let task_widget = Paragraph::new(task_text)
                 .style(Style::default().fg(Color::White))
                 .alignment(Alignment::Center)
@@ -458,10 +466,10 @@ impl App {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(6),   // Overall progress
-                Constraint::Length(4),   // Current streak
-                Constraint::Length(8),   // Recent accuracy
-                Constraint::Min(5),      // Recent RTs
+                Constraint::Length(6), // Overall progress
+                Constraint::Length(4), // Current streak
+                Constraint::Length(8), // Recent accuracy
+                Constraint::Min(5),    // Recent RTs
             ])
             .split(area);
 
@@ -488,11 +496,7 @@ impl App {
             format!("Best: {}", self.best_streak),
         ];
         let streak_widget = Paragraph::new(streak_text.join("\n"))
-            .block(
-                Block::default()
-                    .title("Streak")
-                    .borders(Borders::ALL),
-            )
+            .block(Block::default().title("Streak").borders(Borders::ALL))
             .style(Style::default().fg(if self.current_streak > 0 {
                 Color::Green
             } else {
@@ -510,10 +514,10 @@ impl App {
                 .rev()
                 .map(|&a| (a * 100.0) as u64)
                 .collect();
-            
-            let avg_accuracy = self.trial_accuracies.iter().sum::<f64>() 
-                / self.trial_accuracies.len() as f64;
-            
+
+            let avg_accuracy =
+                self.trial_accuracies.iter().sum::<f64>() / self.trial_accuracies.len() as f64;
+
             let sparkline = Sparkline::default()
                 .block(
                     Block::default()
@@ -535,9 +539,9 @@ impl App {
                 .rev()
                 .map(|&rt| rt as u64)
                 .collect();
-            
+
             let avg_rt = self.trial_rts.iter().sum::<f64>() / self.trial_rts.len() as f64;
-            
+
             let rt_sparkline = Sparkline::default()
                 .block(
                     Block::default()
@@ -567,13 +571,13 @@ impl App {
             } else {
                 "✗ INCORRECT"
             };
-            
+
             let result_color = if response.correct {
                 Color::Green
             } else {
                 Color::Red
             };
-            
+
             let result = Paragraph::new(result_text)
                 .style(
                     Style::default()
@@ -594,7 +598,7 @@ impl App {
                 format!("Correct answer: {}", response.task.correct_answer),
                 format!("Response time: {}ms", response.response_time_ms),
             ];
-            
+
             let feedback = Paragraph::new(feedback_text.join("\n"))
                 .style(Style::default().fg(Color::White))
                 .alignment(Alignment::Center)
@@ -613,7 +617,7 @@ impl App {
         if let Some(scheduler) = &self.scheduler {
             let model = scheduler.get_learner_model();
             let metrics = LearnerMetrics::from_model(model);
-            
+
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -625,34 +629,52 @@ impl App {
 
             // Title
             let title = Paragraph::new("Performance Metrics")
-                .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+                .style(
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )
                 .alignment(Alignment::Center);
             f.render_widget(title, chunks[0]);
 
             // Key metrics
             let metrics_text = vec![
-                format!("Bidirectionality Index: {:.3}", metrics.bidirectionality_index),
-                format!("Symbolic Distance Slope: {:.3}", metrics.symbolic_distance_slope),
-                format!("Chunk Boundary Penalty: {:.3}", metrics.chunk_boundary_penalty),
-                format!("Average Memory Strength: {:.2}%", metrics.avg_memory_strength * 100.0),
+                format!(
+                    "Bidirectionality Index: {:.3}",
+                    metrics.bidirectionality_index
+                ),
+                format!(
+                    "Symbolic Distance Slope: {:.3}",
+                    metrics.symbolic_distance_slope
+                ),
+                format!(
+                    "Chunk Boundary Penalty: {:.3}",
+                    metrics.chunk_boundary_penalty
+                ),
+                format!(
+                    "Average Memory Strength: {:.2}%",
+                    metrics.avg_memory_strength * 100.0
+                ),
                 String::new(),
                 format!("Total Trials: {}", self.trial_accuracies.len()),
-                format!("Overall Accuracy: {:.1}%", 
-                    if self.trial_accuracies.is_empty() { 
-                        0.0 
+                format!(
+                    "Overall Accuracy: {:.1}%",
+                    if self.trial_accuracies.is_empty() {
+                        0.0
                     } else {
-                        self.trial_accuracies.iter().sum::<f64>() / self.trial_accuracies.len() as f64 * 100.0
+                        self.trial_accuracies.iter().sum::<f64>()
+                            / self.trial_accuracies.len() as f64
+                            * 100.0
                     }
                 ),
             ];
-            
-            let metrics_widget = Paragraph::new(metrics_text.join("\n"))
-                .block(
-                    Block::default()
-                        .title("Performance Indicators")
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(Color::Cyan)),
-                );
+
+            let metrics_widget = Paragraph::new(metrics_text.join("\n")).block(
+                Block::default()
+                    .title("Performance Indicators")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            );
             f.render_widget(metrics_widget, chunks[1]);
 
             // Operation proficiencies
@@ -662,19 +684,19 @@ impl App {
                 let bar = "█".repeat(bar_length) + &"░".repeat(20 - bar_length);
                 proficiency_text.push(format!("{:15} {} {:.0}%", op, bar, prof * 100.0));
             }
-            
-            let prof_widget = Paragraph::new(proficiency_text.join("\n"))
-                .block(
-                    Block::default()
-                        .title("Operation Proficiencies")
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(Color::Cyan)),
-                );
+
+            let prof_widget = Paragraph::new(proficiency_text.join("\n")).block(
+                Block::default()
+                    .title("Operation Proficiencies")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            );
             f.render_widget(prof_widget, chunks[2]);
         } else {
-            let no_data = Paragraph::new("No training data available.\nComplete a training session first.")
-                .style(Style::default().fg(Color::DarkGray))
-                .alignment(Alignment::Center);
+            let no_data =
+                Paragraph::new("No training data available.\nComplete a training session first.")
+                    .style(Style::default().fg(Color::DarkGray))
+                    .alignment(Alignment::Center);
             f.render_widget(no_data, area);
         }
     }
@@ -691,7 +713,11 @@ impl App {
 
         // Title
         let title = Paragraph::new("Export Data")
-            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center);
         f.render_widget(title, chunks[0]);
 
@@ -703,7 +729,7 @@ impl App {
             ListItem::new("4. Export Model Parameters"),
             ListItem::new("5. Export All Formats"),
         ];
-        
+
         let options = List::new(export_options)
             .block(
                 Block::default()
@@ -720,14 +746,21 @@ impl App {
         f.render_widget(options, chunks[1]);
 
         // Status messages
-        let messages_text = self.messages.iter().rev().take(5).rev().cloned().collect::<Vec<_>>().join("\n");
-        let messages = Paragraph::new(messages_text)
-            .block(
-                Block::default()
-                    .title("Export Status")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Green)),
-            );
+        let messages_text = self
+            .messages
+            .iter()
+            .rev()
+            .take(5)
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        let messages = Paragraph::new(messages_text).block(
+            Block::default()
+                .title("Export Status")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green)),
+        );
         f.render_widget(messages, chunks[2]);
     }
 
@@ -757,29 +790,28 @@ impl App {
             "  E        - Open export menu",
             "  S        - Quick save session",
         ];
-        
-        let help_widget = Paragraph::new(help_text.join("\n"))
-            .block(
-                Block::default()
-                    .title("Help")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Yellow)),
-            );
+
+        let help_widget = Paragraph::new(help_text.join("\n")).block(
+            Block::default()
+                .title("Help")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        );
         f.render_widget(help_widget, area);
     }
 
     fn draw_exit(&self, f: &mut Frame, area: Rect) {
         let popup_area = centered_rect(50, 20, area);
-        
+
         f.render_widget(Clear, popup_area);
-        
+
         let exit_text = vec![
             "",
             "Are you sure you want to exit?",
             "",
             "Press Y to confirm or N to cancel",
         ];
-        
+
         let exit_widget = Paragraph::new(exit_text.join("\n"))
             .style(Style::default().fg(Color::Yellow))
             .alignment(Alignment::Center)
@@ -804,40 +836,51 @@ impl App {
             .split(area);
 
         let title = Paragraph::new("Select Knowledge Domain")
-            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center);
         f.render_widget(title, chunks[0]);
 
         let topology_options = vec![
             ListItem::new("1. Alphabet (A-Z)").style(if self.selected_menu_item == 0 {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             }),
             ListItem::new("2. Days of Week").style(if self.selected_menu_item == 1 {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             }),
             ListItem::new("3. Months of Year").style(if self.selected_menu_item == 2 {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             }),
             ListItem::new("4. Numbers (1-20)").style(if self.selected_menu_item == 3 {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             }),
         ];
 
-        let list = List::new(topology_options)
-            .block(
-                Block::default()
-                    .title("Available Domains")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
-            );
+        let list = List::new(topology_options).block(
+            Block::default()
+                .title("Available Domains")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
         f.render_widget(list, chunks[1]);
 
         let description = match self.selected_menu_item {
@@ -868,7 +911,11 @@ impl App {
             .split(area);
 
         let title = Paragraph::new("Session Configuration")
-            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            .style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
             .alignment(Alignment::Center);
         f.render_widget(title, chunks[0]);
 
@@ -876,7 +923,10 @@ impl App {
         let trials_gauge = LineGauge::default()
             .block(
                 Block::default()
-                    .title(format!("Trials per Session: {}", self.config.trials_per_session))
+                    .title(format!(
+                        "Trials per Session: {}",
+                        self.config.trials_per_session
+                    ))
                     .borders(Borders::ALL),
             )
             .gauge_style(Style::default().fg(Color::Green))
@@ -884,12 +934,11 @@ impl App {
         f.render_widget(trials_gauge, chunks[1]);
 
         // Task mix
-        let task_mix = Paragraph::new(format!("Task Mix: {:?}", self.config.task_mix))
-            .block(
-                Block::default()
-                    .title("Task Selection Strategy")
-                    .borders(Borders::ALL),
-            );
+        let task_mix = Paragraph::new(format!("Task Mix: {:?}", self.config.task_mix)).block(
+            Block::default()
+                .title("Task Selection Strategy")
+                .borders(Borders::ALL),
+        );
         f.render_widget(task_mix, chunks[2]);
 
         // Summary
@@ -899,19 +948,19 @@ impl App {
             format!("Domain: {:?}", self.config.topology.topology_type),
             format!("Trials: {}", self.config.trials_per_session),
         ];
-        
-        let summary_widget = Paragraph::new(summary.join("\n"))
-            .block(
-                Block::default()
-                    .title("Configuration Summary")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
-            );
+
+        let summary_widget = Paragraph::new(summary.join("\n")).block(
+            Block::default()
+                .title("Configuration Summary")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
         f.render_widget(summary_widget, chunks[3]);
 
-        let instructions = Paragraph::new("Use ←/→ to adjust values. Press Enter to start training.")
-            .style(Style::default().fg(Color::DarkGray))
-            .alignment(Alignment::Center);
+        let instructions =
+            Paragraph::new("Use ←/→ to adjust values. Press Enter to start training.")
+                .style(Style::default().fg(Color::DarkGray))
+                .alignment(Alignment::Center);
         f.render_widget(instructions, chunks[4]);
     }
 
@@ -975,12 +1024,11 @@ impl App {
             },
             AppState::ConfigureSession => match key {
                 KeyCode::Left => {
-                    self.config.trials_per_session = 
+                    self.config.trials_per_session =
                         (self.config.trials_per_session.saturating_sub(10)).max(10);
                 }
                 KeyCode::Right => {
-                    self.config.trials_per_session = 
-                        (self.config.trials_per_session + 10).min(200);
+                    self.config.trials_per_session = (self.config.trials_per_session + 10).min(200);
                 }
                 KeyCode::Enter => {
                     self.start_training();
@@ -1062,35 +1110,38 @@ impl App {
                     self.session_token = Some(token);
                     self.sync_status = SyncStatus::Connected;
                     self.messages.push("✓ Connected to backend".to_string());
-                    
+
                     // Start session
                     if let Some(token) = &self.session_token {
                         if let Err(e) = client.start_session(token) {
-                            self.messages.push(format!("Warning: Failed to start remote session: {}", e));
+                            self.messages
+                                .push(format!("Warning: Failed to start remote session: {}", e));
                         }
                     }
                 }
                 Err(e) => {
                     self.sync_status = SyncStatus::Error(e.to_string());
-                    self.messages.push(format!("⚠ Backend registration failed: {}", e));
+                    self.messages
+                        .push(format!("⚠ Backend registration failed: {}", e));
                     self.messages.push("Continuing in offline mode".to_string());
                 }
             }
         }
-        
-        let learner_model = LearnerModel::new(
-            self.config.participant_id.clone(),
-            &self.config.topology,
-        );
-        
-        self.scheduler = Some(AdaptiveScheduler::new(learner_model, self.config.topology.clone()));
+
+        let learner_model =
+            LearnerModel::new(self.config.participant_id.clone(), &self.config.topology);
+
+        self.scheduler = Some(AdaptiveScheduler::new(
+            learner_model,
+            self.config.topology.clone(),
+        ));
         self.session = Some(TaskSession::new(self.config.topology.clone()));
-        
+
         self.trial_accuracies.clear();
         self.trial_rts.clear();
         self.current_streak = 0;
         self.best_streak = 0;
-        
+
         self.next_task();
     }
 
@@ -1107,7 +1158,7 @@ impl App {
         if let (Some(task), Some(start_time)) = (&self.current_task, self.task_start_time) {
             let rt_ms = start_time.elapsed().as_millis() as u128;
             let correct = self.input.trim() == task.correct_answer;
-            
+
             let response = TaskResponse {
                 task: task.clone(),
                 user_answer: self.input.trim().to_string(),
@@ -1115,32 +1166,32 @@ impl App {
                 response_time_ms: rt_ms,
                 timestamp: chrono::Utc::now(),
             };
-            
+
             // Update metrics
             self.trial_accuracies.push(if correct { 1.0 } else { 0.0 });
             self.trial_rts.push(rt_ms as f64);
-            
+
             if correct {
                 self.current_streak += 1;
                 self.best_streak = self.best_streak.max(self.current_streak);
             } else {
                 self.current_streak = 0;
             }
-            
+
             // Update model
             if let Some(scheduler) = &mut self.scheduler {
                 scheduler.update_model(&response.task, response.correct, response.response_time_ms);
             }
-            
+
             // Store session
             if let Some(session) = &mut self.session {
                 session.history.push(response.clone());
             }
-            
+
             // Send to backend
             if let Some(client) = &mut self.backend_client {
                 client.buffer_response(response.clone());
-                
+
                 // Check if we should sync
                 if client.should_sync() {
                     self.sync_status = SyncStatus::Syncing;
@@ -1154,14 +1205,14 @@ impl App {
                         }
                     }
                 }
-                
+
                 // Send metrics update
                 if let Some(scheduler) = &self.scheduler {
                     let metrics = LearnerMetrics::from_model(scheduler.get_learner_model());
                     let _ = client.send_metrics(&self.config.participant_id, &metrics);
                 }
             }
-            
+
             self.last_response = Some(response);
         }
     }
@@ -1172,15 +1223,16 @@ impl App {
             self.trial_accuracies.iter().sum::<f64>() / self.trial_accuracies.len() as f64 * 100.0,
             self.trial_rts.iter().sum::<f64>() / self.trial_rts.len() as f64
         ));
-        
+
         // Final sync with backend
         if let Some(client) = &mut self.backend_client {
             // Sync any remaining responses
             self.sync_status = SyncStatus::Syncing;
             if let Err(e) = client.sync_responses() {
-                self.messages.push(format!("Warning: Final sync failed: {}", e));
+                self.messages
+                    .push(format!("Warning: Final sync failed: {}", e));
             }
-            
+
             // Upload complete session data
             if let (Some(scheduler), Some(session)) = (&self.scheduler, &self.session) {
                 // Create a new TaskSession with just the history
@@ -1195,12 +1247,14 @@ impl App {
                     vec![export_session],
                     Some(format!("{:?}_experiment", self.config.group)),
                 );
-                
+
                 if let Err(e) = client.upload_session(&export) {
-                    self.messages.push(format!("Warning: Session upload failed: {}", e));
+                    self.messages
+                        .push(format!("Warning: Session upload failed: {}", e));
                 } else {
                     self.sync_status = SyncStatus::Connected;
-                    self.messages.push("✓ Session data uploaded to backend".to_string());
+                    self.messages
+                        .push("✓ Session data uploaded to backend".to_string());
                 }
             }
         }
@@ -1220,17 +1274,18 @@ impl App {
                 vec![export_session],
                 Some(format!("{:?}_experiment", self.config.group)),
             );
-            
+
             let path = std::path::Path::new("data").join(format!(
                 "{}_{}_responses.csv",
                 self.config.participant_id,
                 Local::now().format("%Y%m%d_%H%M%S")
             ));
-            
+
             std::fs::create_dir_all("data")?;
             export.save_csv(&path)?;
-            
-            self.messages.push(format!("Exported CSV to: {}", path.display()));
+
+            self.messages
+                .push(format!("Exported CSV to: {}", path.display()));
         }
         Ok(())
     }
@@ -1249,17 +1304,18 @@ impl App {
                 vec![export_session],
                 Some(format!("{:?}_experiment", self.config.group)),
             );
-            
+
             let path = std::path::Path::new("data").join(format!(
                 "{}_{}_full.json",
                 self.config.participant_id,
                 Local::now().format("%Y%m%d_%H%M%S")
             ));
-            
+
             std::fs::create_dir_all("data")?;
             export.save_to_file(&path)?;
-            
-            self.messages.push(format!("Exported JSON to: {}", path.display()));
+
+            self.messages
+                .push(format!("Exported JSON to: {}", path.display()));
         }
         Ok(())
     }
@@ -1278,16 +1334,17 @@ impl App {
                 vec![export_session],
                 Some(format!("{:?}_experiment", self.config.group)),
             );
-            
+
             let base_path = std::path::Path::new("data").join(format!(
                 "{}_{}",
                 self.config.participant_id,
                 Local::now().format("%Y%m%d_%H%M%S")
             ));
-            
+
             export.export_all_formats(&base_path)?;
-            
-            self.messages.push(format!("Exported all formats to: {}", base_path.display()));
+
+            self.messages
+                .push(format!("Exported all formats to: {}", base_path.display()));
         }
         Ok(())
     }

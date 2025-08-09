@@ -1,5 +1,5 @@
 use xilem::{
-    view::{button, flex, label, prose, Axis},
+    view::{button, flex, label, prose, Axis, FlexExt},
     Color, TextAlignment, WidgetView,
 };
 
@@ -21,11 +21,8 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             "🎯 Current Session",
             flex((
                 flex((
-                    label(format!(
-                        "Domain: {}",
-                        data.selected_domain.display_name()
-                    ))
-                    .alignment(TextAlignment::Start),
+                    label(format!("Domain: {}", data.selected_domain.display_name()))
+                        .alignment(TextAlignment::Start),
                     label(format!(
                         "Duration: {}",
                         crate::visualizations::format_duration(duration)
@@ -48,12 +45,18 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             ))
             .direction(Axis::Vertical),
         )
+        .into_any_flex()
     } else {
         card(
             "💤 No Active Session",
-            prose("Start a new session to begin tracking your progress")
-                .alignment(TextAlignment::Middle),
+            flex((
+                prose("Start a new session to begin tracking your progress")
+                    .alignment(TextAlignment::Middle),
+                label(""),
+            ))
+            .direction(Axis::Vertical),
         )
+        .into_any_flex()
     };
 
     // Enhanced overall metrics with visual indicators
@@ -87,7 +90,10 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 metric_display(
                     "Avg Time",
                     if data.current_metrics.average_response_time_ms >= 1000.0 {
-                        format!("{:.1}s", data.current_metrics.average_response_time_ms / 1000.0)
+                        format!(
+                            "{:.1}s",
+                            data.current_metrics.average_response_time_ms / 1000.0
+                        )
                     } else {
                         format!("{:.0}ms", data.current_metrics.average_response_time_ms)
                     },
@@ -266,7 +272,11 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             .take(10)
             .enumerate()
             .map(|(i, response)| {
-                let status = if response.correct { "Correct" } else { "Incorrect" };
+                let status = if response.correct {
+                    "Correct"
+                } else {
+                    "Incorrect"
+                };
                 let color = if response.correct {
                     Color::from_rgb8(0, 200, 0)
                 } else {
@@ -416,6 +426,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 ))
                 .direction(Axis::Vertical),
             )
+            .into_any_flex()
         } else {
             card(
                 "📈 Performance Visualizations",
@@ -437,7 +448,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     .direction(Axis::Vertical),
                 ))
                 .direction(Axis::Vertical),
-            )
+            ).into_any_flex()
         }
     };
 

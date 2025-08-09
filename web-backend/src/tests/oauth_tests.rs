@@ -3,16 +3,19 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use chrono::Utc;
-use jsonwebtoken::{Algorithm, encode, EncodingKey, Header};
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::config::Config;
-use crate::models::{AuthProvider, User};
+use crate::models::User;
+use crate::services::oauth_service::OAuthProvider;
 use crate::services::{
     apple_auth_service::{AppleAuthService, AppleIdToken},
     oauth_service::{OAuthAuthRequest, OAuthService, OAuthUserProfile},
 };
+use std::sync::Arc;
+use uuid::Uuid;
 
 // Test data structures
 #[derive(Debug, Serialize, Deserialize)]
@@ -68,17 +71,38 @@ impl MockHttpClient {
 // Test configuration
 fn create_test_config() -> Config {
     Config {
-        database_url: ":memory:".to_string(),
-        jwt_secret: "test-secret-key-for-oauth-testing-only".to_string(),
+        database_url: "sqlite://:memory:".to_string(),
+        redis_url: "redis://127.0.0.1:6379".to_string(),
         port: 8080,
+        jwt_secret: "test-secret-key-for-oauth-testing-only-____".to_string(),
+        jwt_expiration_hours: 24,
+        refresh_token_expiration_days: 30,
+        environment: crate::config::Environment::Development,
+        log_level: "debug".to_string(),
+        cors_origin: "*".to_string(),
+        rate_limit_requests: 100,
+        rate_limit_window_seconds: 60,
+        max_failed_login_attempts: 5,
+        login_lockout_duration_minutes: 15,
+        session_timeout_hours: 24,
+        require_strong_passwords: false,
+        metrics_enabled: false,
+        tracing_endpoint: None,
+        health_check_interval_seconds: 30,
+        performance_monitoring_enabled: false,
         apple_client_id: "com.example.testapp".to_string(),
-        apple_team_id: "TEST123456".to_string(),
-        apple_key_id: "TESTKEY123".to_string(),
+        apple_team_id: "TEST1234567".to_string(),
+        apple_key_id: "TESTKEY1234".to_string(),
         apple_private_key_path: "/tmp/test_key.p8".to_string(),
         apple_redirect_uri: "https://test.example.com/auth/callback".to_string(),
         github_client_id: "test_github_client_id".to_string(),
         github_client_secret: "test_github_secret".to_string(),
         github_redirect_uri: "https://test.example.com/auth/github/callback".to_string(),
+        tls_domain: None,
+        tls_use_letsencrypt: false,
+        tls_port: 443,
+        admin_email: Some("admin@example.com".to_string()),
+        server_name: "localhost".to_string(),
     }
 }
 
@@ -86,7 +110,7 @@ fn create_test_config() -> Config {
 fn create_test_apple_jwt() -> Result<String> {
     let header = Header::new(Algorithm::RS256);
     let now = Utc::now().timestamp();
-    
+
     let claims = TestAppleIdToken {
         iss: "https://appleid.apple.com".to_string(),
         aud: "com.example.testapp".to_string(),
@@ -123,12 +147,12 @@ mod tests {
     #[tokio::test]
     async fn test_apple_jwt_token_validation() {
         let config = create_test_config();
-        let mut apple_service = AppleAuthService::new(config.clone());
-        
+        let mut apple_service = AppleAuthService::new(Arc::new(config.clone()));
+
         // Test JWT creation and basic validation
         let test_jwt = create_test_apple_jwt().expect("Failed to create test JWT");
         assert!(!test_jwt.is_empty());
-        
+
         // Verify JWT structure (should have 3 parts separated by dots)
         let parts: Vec<&str> = test_jwt.split('.').collect();
         assert_eq!(parts.len(), 3);
@@ -138,16 +162,15 @@ mod tests {
     fn test_apple_jwks_parsing() {
         let jwks = create_test_apple_jwks();
         let json = serde_json::to_string(&jwks).expect("Failed to serialize JWKS");
-        
-        let parsed: TestAppleJwks = serde_json::from_str(&json)
-            .expect("Failed to parse JWKS");
-        
+
+        let parsed: TestAppleJwks = serde_json::from_str(&json).expect("Failed to parse JWKS");
+
         assert_eq!(parsed.keys.len(), 1);
         assert_eq!(parsed.keys[0].kid, "TESTKEY123");
         assert_eq!(parsed.keys[0].alg, "RS256");
     }
 
-    #[test] 
+    #[test]
     fn test_oauth_auth_request_validation() {
         // Test valid Apple Sign In request
         let apple_request = OAuthAuthRequest {
@@ -183,33 +206,38 @@ mod tests {
     #[test]
     fn test_oauth_user_profile_creation() {
         let profile = OAuthUserProfile {
+            provider: OAuthProvider::Apple,
             provider_user_id: "apple_12345".to_string(),
-            provider: AuthProvider::Apple,
             username: "john_doe".to_string(),
-            email: "john@privaterelay.appleid.com".to_string(),
             display_name: Some("John Doe".to_string()),
-            is_private_email: Some(true),
+            email: Some("john@privaterelay.appleid.com".to_string()),
+            email_verified: true,
+            is_private_email: true,
+            avatar_url: None,
+            profile_url: None,
+            raw_profile: serde_json::json!({}),
         };
 
-        assert_eq!(profile.provider, AuthProvider::Apple);
-        assert!(profile.is_private_email.unwrap());
-        assert!(profile.email.contains("privaterelay"));
+        assert_eq!(profile.provider, OAuthProvider::Apple);
+        assert!(profile.is_private_email);
+        assert!(profile.email.as_ref().unwrap().contains("privaterelay"));
     }
 
     #[test]
     fn test_user_model_oauth_fields() {
         let user = User {
-            id: "test_user_123".to_string(),
+            id: Uuid::new_v4(),
             username: "test_user".to_string(),
             email: "test@example.com".to_string(),
-            password_hash: "".to_string(),
+            password_hash: Some("".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            metadata: None,
             apple_user_id: Some("apple_12345".to_string()),
             github_user_id: None,
             oauth_provider_id: None,
             auth_provider: "apple".to_string(),
             is_private_email: Some(true),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
         };
 
         assert_eq!(user.auth_provider, "apple");
@@ -226,7 +254,7 @@ mod tests {
 
         assert!(!valid_state.is_empty());
         assert!(valid_state.len() > 10);
-        
+
         assert!(invalid_state.is_empty());
     }
 
@@ -237,11 +265,7 @@ mod tests {
             "xyz789@privaterelay.appleid.com",
         ];
 
-        let regular_emails = vec![
-            "user@gmail.com",
-            "test@company.com",
-            "someone@example.com",
-        ];
+        let regular_emails = vec!["user@gmail.com", "test@company.com", "someone@example.com"];
 
         for email in private_emails {
             assert!(email.contains("privaterelay.appleid.com"));
@@ -255,7 +279,7 @@ mod tests {
     #[test]
     fn test_jwt_expiration_validation() {
         let now = Utc::now().timestamp();
-        
+
         // Test expired token
         let expired_token = TestAppleIdToken {
             iss: "https://appleid.apple.com".to_string(),
@@ -285,14 +309,14 @@ mod tests {
 
     #[test]
     fn test_oauth_provider_parsing() {
-        let apple_provider: AuthProvider = "apple".parse().unwrap();
-        let github_provider: AuthProvider = "github".parse().unwrap();
+        let apple_provider: OAuthProvider = "apple".parse().unwrap();
+        let github_provider: OAuthProvider = "github".parse().unwrap();
 
-        assert_eq!(apple_provider, AuthProvider::Apple);
-        assert_eq!(github_provider, AuthProvider::GitHub);
+        assert_eq!(apple_provider, OAuthProvider::Apple);
+        assert_eq!(github_provider, OAuthProvider::GitHub);
 
         // Test invalid provider
-        let invalid_result: Result<AuthProvider, _> = "invalid".parse();
+        let invalid_result: Result<OAuthProvider, _> = "invalid".parse();
         assert!(invalid_result.is_err());
     }
 
@@ -342,13 +366,15 @@ mod tests {
     #[test]
     fn test_github_oauth_flow_parameters() {
         let config = create_test_config();
-        
+
         // Test authorization URL parameters
+        let scope = "user:email".to_string();
+        let state = "test_state_123".to_string();
         let auth_params = vec![
             ("client_id", &config.github_client_id),
             ("redirect_uri", &config.github_redirect_uri),
-            ("scope", &"user:email".to_string()),
-            ("state", &"test_state_123".to_string()),
+            ("scope", &scope),
+            ("state", &state),
         ];
 
         for (key, value) in auth_params {

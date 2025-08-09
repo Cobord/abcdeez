@@ -11,7 +11,10 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
-    services::{audit::{AuditService, AuditContext}, AnalyticsService, LearnerService},
+    services::{
+        audit::{AuditContext, AuditService},
+        AnalyticsService, LearnerService,
+    },
     state::AppState,
 };
 
@@ -557,8 +560,12 @@ pub async fn audit_report(
     Query(params): Query<AuditQuery>,
 ) -> AppResult<Json<serde_json::Value>> {
     // Generate a comprehensive audit report with security analysis
-    let mut conn = state.db_pool.acquire().await.map_err(|e| AppError::DatabaseError(e))?;
-    
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+
     // Security events summary
     let security_events: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM audit_log WHERE action = 'security_event' AND timestamp >= datetime('now', '-24 hours')"
@@ -566,7 +573,7 @@ pub async fn audit_report(
     .fetch_one(&mut *conn)
     .await
     .unwrap_or(0);
-    
+
     // Failed login attempts
     let failed_logins: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM audit_log WHERE resource_type = 'auth' AND changes LIKE '%invalid_token%' AND timestamp >= datetime('now', '-24 hours')"
@@ -574,7 +581,7 @@ pub async fn audit_report(
     .fetch_one(&mut *conn)
     .await
     .unwrap_or(0);
-    
+
     // Data access patterns
     let data_exports: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM audit_log WHERE action = 'data_access' AND changes LIKE '%export%' AND timestamp >= datetime('now', '-7 days')"
@@ -582,7 +589,7 @@ pub async fn audit_report(
     .fetch_one(&mut *conn)
     .await
     .unwrap_or(0);
-    
+
     // Admin activity
     let admin_actions: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM audit_log WHERE resource_type = 'admin' AND timestamp >= datetime('now', '-7 days')"
@@ -590,7 +597,7 @@ pub async fn audit_report(
     .fetch_one(&mut *conn)
     .await
     .unwrap_or(0);
-    
+
     // Top active users
     let top_users = sqlx::query(
         "SELECT user_id, COUNT(*) as action_count 
@@ -598,12 +605,12 @@ pub async fn audit_report(
          WHERE user_id IS NOT NULL AND timestamp >= datetime('now', '-7 days')
          GROUP BY user_id
          ORDER BY action_count DESC
-         LIMIT 10"
+         LIMIT 10",
     )
     .fetch_all(&mut *conn)
     .await
     .map_err(|e| AppError::DatabaseError(e))?;
-    
+
     let user_activity: Vec<serde_json::Value> = top_users
         .into_iter()
         .map(|row| {
@@ -614,7 +621,7 @@ pub async fn audit_report(
             })
         })
         .collect();
-    
+
     let report = serde_json::json!({
         "generated_at": chrono::Utc::now(),
         "timeframe": "last_7_days",
@@ -631,7 +638,7 @@ pub async fn audit_report(
             "encryption": "enabled"
         }
     });
-    
+
     // Log the audit report generation
     AuditService::log_event(
         &state.db_pool,
@@ -648,7 +655,7 @@ pub async fn audit_report(
     )
     .await
     .ok();
-    
+
     Ok(Json(report))
 }
 
@@ -658,7 +665,10 @@ pub async fn trigger_oauth_validation(
     claims: Extension<Claims>,
 ) -> AppResult<Json<serde_json::Value>> {
     // Use the BatchJobService to schedule the job
-    let job_id = state.batch_job_service.schedule_oauth_validation().await
+    let job_id = state
+        .batch_job_service
+        .schedule_oauth_validation()
+        .await
         .map_err(|_| AppError::InternalServerError)?;
 
     // Log the action

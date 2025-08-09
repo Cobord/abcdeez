@@ -1,12 +1,12 @@
 use crate::learner::LearnerModel;
-use crate::tasks::{TaskResponse, TaskSession};
 use crate::statistics::StrategyType;
-use serde::{Serialize, Deserialize};
+use crate::tasks::{TaskResponse, TaskSession};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LearnerDataExport {
@@ -97,36 +97,40 @@ impl LearnerDataExport {
     ) -> Self {
         let learner_id = model.learner_id.clone();
         let export_timestamp = Utc::now();
-        
+
         // Convert sessions
-        let session_data: Vec<SessionData> = sessions.iter().map(|session| {
-            let responses = session.history.clone();
-            let summary = Self::calculate_session_summary(&responses);
-            
-            SessionData {
-                session_id: format!("session_{}", uuid::Uuid::new_v4()),
-                start_time: responses.first()
-                    .map(|r| r.timestamp)
-                    .unwrap_or_else(Utc::now),
-                end_time: responses.last().map(|r| r.timestamp),
-                topology_type: format!("{:?}", session.generator.topology.topology_type),
-                responses,
-                summary,
-            }
-        }).collect();
-        
+        let session_data: Vec<SessionData> = sessions
+            .iter()
+            .map(|session| {
+                let responses = session.history.clone();
+                let summary = Self::calculate_session_summary(&responses);
+
+                SessionData {
+                    session_id: format!("session_{}", uuid::Uuid::new_v4()),
+                    start_time: responses
+                        .first()
+                        .map(|r| r.timestamp)
+                        .unwrap_or_else(Utc::now),
+                    end_time: responses.last().map(|r| r.timestamp),
+                    topology_type: format!("{:?}", session.generator.topology.topology_type),
+                    responses,
+                    summary,
+                }
+            })
+            .collect();
+
         // Calculate performance trajectories
         let mut performance_trajectories = Vec::new();
         let mut running_correct = 0;
         let mut running_total = 0;
-        
+
         for session in &session_data {
             for (_i, response) in session.responses.iter().enumerate() {
                 running_total += 1;
                 if response.correct {
                     running_correct += 1;
                 }
-                
+
                 performance_trajectories.push(PerformancePoint {
                     trial_number: running_total,
                     timestamp: response.timestamp,
@@ -137,26 +141,39 @@ impl LearnerDataExport {
                 });
             }
         }
-        
+
         // Analyze errors
         let error_patterns = Self::analyze_errors(&session_data);
-        
+
         // Create model snapshot
         let model_snapshot = ModelSnapshot {
             timestamp: export_timestamp,
-            node_embeddings: model.node_embeddings.iter()
-                .map(|(k, v)| (k.clone(), NodeEmbeddingExport {
-                    position: v.position,
-                    uncertainty: v.uncertainty,
-                }))
+            node_embeddings: model
+                .node_embeddings
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        NodeEmbeddingExport {
+                            position: v.position,
+                            uncertainty: v.uncertainty,
+                        },
+                    )
+                })
                 .collect(),
-            operation_proficiencies: model.operation_proficiencies.iter()
+            operation_proficiencies: model
+                .operation_proficiencies
+                .iter()
                 .map(|(k, v)| (k.clone(), sigmoid(v.theta)))
                 .collect(),
-            memory_strengths: model.memory_strengths.iter()
+            memory_strengths: model
+                .memory_strengths
+                .iter()
                 .map(|(k, v)| (k.clone(), v.strength))
                 .collect(),
-            chunk_boundaries: model.chunk_boundaries.iter()
+            chunk_boundaries: model
+                .chunk_boundaries
+                .iter()
                 .map(|b| ChunkBoundaryExport {
                     position: b.position,
                     strength: b.strength,
@@ -164,7 +181,7 @@ impl LearnerDataExport {
                 .collect(),
             total_practice_time_seconds: model.total_practice_time.as_secs(),
         };
-        
+
         let metadata = ExportMetadata {
             export_version: "1.0.0".to_string(),
             software_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -172,7 +189,7 @@ impl LearnerDataExport {
             experiment_id,
             notes: None,
         };
-        
+
         LearnerDataExport {
             learner_id,
             export_timestamp,
@@ -183,7 +200,7 @@ impl LearnerDataExport {
             metadata,
         }
     }
-    
+
     fn calculate_session_summary(responses: &[TaskResponse]) -> SessionSummary {
         let total_tasks = responses.len();
         let correct_count = responses.iter().filter(|r| r.correct).count();
@@ -192,17 +209,18 @@ impl LearnerDataExport {
         } else {
             0.0
         };
-        
-        let rts: Vec<f64> = responses.iter()
+
+        let rts: Vec<f64> = responses
+            .iter()
             .map(|r| r.response_time_ms as f64)
             .collect();
-        
+
         let mean_rt_ms = if !rts.is_empty() {
             rts.iter().sum::<f64>() / rts.len() as f64
         } else {
             0.0
         };
-        
+
         let median_rt_ms = if !rts.is_empty() {
             let mut sorted_rts = rts.clone();
             sorted_rts.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -210,10 +228,10 @@ impl LearnerDataExport {
         } else {
             0.0
         };
-        
+
         // Detect strategies based on response patterns
         let strategy_detected = Self::detect_strategy(responses);
-        
+
         SessionSummary {
             total_tasks,
             correct_count,
@@ -223,19 +241,19 @@ impl LearnerDataExport {
             strategy_detected,
         }
     }
-    
+
     fn detect_strategy(responses: &[TaskResponse]) -> Option<crate::statistics::StrategyType> {
         if responses.is_empty() {
             return None;
         }
-        
+
         // Collect response times and distances for correlation analysis
         let mut rts = Vec::new();
         let mut distances = Vec::new();
-        
+
         for response in responses {
             rts.push(response.response_time_ms as f64);
-            
+
             // Extract distance information from task type
             let distance = match &response.task.task_type {
                 crate::tasks::TaskType::KJump { k, .. } => *k as usize,
@@ -244,22 +262,24 @@ impl LearnerDataExport {
             };
             distances.push(distance);
         }
-        
+
         // Use the existing strategy analysis logic
         let correlation = if rts.len() >= 2 && distances.len() >= 2 {
             // Calculate correlation between RT and distance
             let n = rts.len() as f64;
             let sum_x: f64 = distances.iter().map(|&d| d as f64).sum();
             let sum_y: f64 = rts.iter().sum();
-            let sum_xy: f64 = distances.iter().zip(rts.iter())
+            let sum_xy: f64 = distances
+                .iter()
+                .zip(rts.iter())
                 .map(|(d, rt)| *d as f64 * rt)
                 .sum();
             let sum_x2: f64 = distances.iter().map(|&d| (d * d) as f64).sum();
             let sum_y2: f64 = rts.iter().map(|rt| rt * rt).sum();
-            
+
             let numerator = n * sum_xy - sum_x * sum_y;
             let denominator = ((n * sum_x2 - sum_x * sum_x) * (n * sum_y2 - sum_y * sum_y)).sqrt();
-            
+
             if denominator > 0.0 {
                 numerator / denominator
             } else {
@@ -268,7 +288,7 @@ impl LearnerDataExport {
         } else {
             0.0
         };
-        
+
         // Classify strategy based on correlation
         // Using Cohen's effect size conventions:
         // r > 0.7: Strong correlation (r² > 0.49) - serial scanning
@@ -281,65 +301,72 @@ impl LearnerDataExport {
             Some(crate::statistics::StrategyType::Hybrid)
         }
     }
-    
+
     fn analyze_errors(sessions: &[SessionData]) -> ErrorAnalysis {
         let mut total_errors = 0;
         let mut total_tasks = 0;
         let mut confusion_counts: HashMap<(String, String), usize> = HashMap::new();
         let mut error_by_task_type: HashMap<String, (usize, usize)> = HashMap::new();
         let mut error_by_difficulty: HashMap<String, Vec<bool>> = HashMap::new();
-        
+
         for session in sessions {
             for response in &session.responses {
                 total_tasks += 1;
-                
+
                 let task_type = format!("{:?}", response.task.task_type);
                 let difficulty_bucket = format!("{:.1}", response.task.difficulty);
-                
-                error_by_task_type.entry(task_type.clone())
+
+                error_by_task_type
+                    .entry(task_type.clone())
                     .or_insert((0, 0))
                     .1 += 1;
-                
-                error_by_difficulty.entry(difficulty_bucket)
+
+                error_by_difficulty
+                    .entry(difficulty_bucket)
                     .or_insert_with(Vec::new)
                     .push(response.correct);
-                
+
                 if !response.correct {
                     total_errors += 1;
-                    
-                    error_by_task_type.entry(task_type)
-                        .or_insert((0, 0))
-                        .0 += 1;
-                    
+
+                    error_by_task_type.entry(task_type).or_insert((0, 0)).0 += 1;
+
                     let confusion = (
                         response.task.correct_answer.clone(),
-                        response.user_answer.clone()
+                        response.user_answer.clone(),
                     );
                     *confusion_counts.entry(confusion).or_insert(0) += 1;
                 }
             }
         }
-        
+
         let error_rate = if total_tasks > 0 {
             total_errors as f64 / total_tasks as f64
         } else {
             0.0
         };
-        
+
         let mut common_confusions: Vec<(String, String, usize)> = confusion_counts
             .into_iter()
             .map(|((expected, actual), count)| (expected, actual, count))
             .collect();
         common_confusions.sort_by_key(|c| std::cmp::Reverse(c.2));
         common_confusions.truncate(10);
-        
+
         let error_by_task_type_rates = error_by_task_type
             .into_iter()
             .map(|(k, (errors, total))| {
-                (k, if total > 0 { errors as f64 / total as f64 } else { 0.0 })
+                (
+                    k,
+                    if total > 0 {
+                        errors as f64 / total as f64
+                    } else {
+                        0.0
+                    },
+                )
             })
             .collect();
-        
+
         let error_by_difficulty_rates: Vec<(f64, f64)> = error_by_difficulty
             .into_iter()
             .map(|(bucket, results)| {
@@ -352,7 +379,7 @@ impl LearnerDataExport {
                 (bucket.parse::<f64>().unwrap_or(0.0), rate)
             })
             .collect();
-        
+
         ErrorAnalysis {
             total_errors,
             error_rate,
@@ -361,27 +388,27 @@ impl LearnerDataExport {
             error_by_difficulty: error_by_difficulty_rates,
         }
     }
-    
+
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
     }
-    
+
     pub fn to_csv(&self) -> String {
         let mut csv = String::new();
-        
+
         // Enhanced header with all needed columns for R analysis
         csv.push_str("learner_id,session_id,trial_number,timestamp,group,phase,task_type,task_json,correct,rt_ms,user_answer,correct_answer,difficulty\n");
-        
+
         // Data rows with complete information
         let mut global_trial = 0;
         for session in &self.sessions {
             for response in session.responses.iter() {
                 global_trial += 1;
-                
+
                 // Serialize task details as JSON for flexible parsing in R
                 let task_json = serde_json::to_string(&response.task.task_type)
                     .unwrap_or_else(|_| "{}".to_string());
-                
+
                 // Determine experimental phase based on trial number
                 let phase = if global_trial <= 500 {
                     "training"
@@ -390,16 +417,23 @@ impl LearnerDataExport {
                 } else {
                     "transfer"
                 };
-                
+
                 // Infer group from metadata (would be set during experiment)
-                let group = self.metadata.experiment_id.as_ref()
+                let group = self
+                    .metadata
+                    .experiment_id
+                    .as_ref()
                     .map(|id| {
-                        if id.contains("adaptive") { "Adaptive" }
-                        else if id.contains("linear") { "Linear" }
-                        else { "Yoked" }
+                        if id.contains("adaptive") {
+                            "Adaptive"
+                        } else if id.contains("linear") {
+                            "Linear"
+                        } else {
+                            "Yoked"
+                        }
                     })
                     .unwrap_or("Unknown");
-                
+
                 csv.push_str(&format!(
                     "{},{},{},{},{},{},{:?},\"{}\",{},{},{},{},{}\n",
                     self.learner_id,
@@ -418,84 +452,96 @@ impl LearnerDataExport {
                 ));
             }
         }
-        
+
         csv
     }
-    
+
     pub fn save_to_file(&self, path: &Path) -> std::io::Result<()> {
-        let json = self.to_json()
+        let json = self
+            .to_json()
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        
+
         let mut file = File::create(path)?;
         file.write_all(json.as_bytes())?;
-        
+
         Ok(())
     }
-    
+
     pub fn save_csv(&self, path: &Path) -> std::io::Result<()> {
         let csv = self.to_csv();
         let mut file = File::create(path)?;
         file.write_all(csv.as_bytes())?;
         Ok(())
     }
-    
+
     pub fn export_all_formats(&self, base_path: &Path) -> std::io::Result<()> {
         // Create directory if it doesn't exist
         std::fs::create_dir_all(base_path)?;
-        
+
         // Export JSON format
         let json_path = base_path.join(format!("{}_full.json", self.learner_id));
         self.save_to_file(&json_path)?;
-        
+
         // Export CSV format
         let csv_path = base_path.join(format!("{}_responses.csv", self.learner_id));
         self.save_csv(&csv_path)?;
-        
+
         // Export session summaries CSV
         let sessions_path = base_path.join(format!("{}_sessions.csv", self.learner_id));
         self.save_sessions_csv(&sessions_path)?;
-        
+
         // Export model parameters CSV
         let params_path = base_path.join(format!("{}_parameters.csv", self.learner_id));
         self.save_parameters_csv(&params_path)?;
-        
+
         Ok(())
     }
-    
+
     fn save_sessions_csv(&self, path: &Path) -> std::io::Result<()> {
         let mut csv = String::new();
         csv.push_str("learner_id,session_id,session_number,start_time,end_time,duration_minutes,n_trials,accuracy,mean_rt_ms,median_rt_ms,strategy_detected\n");
-        
+
         for (i, session) in self.sessions.iter().enumerate() {
-            let duration_minutes = session.end_time
+            let duration_minutes = session
+                .end_time
                 .map(|end| (end - session.start_time).num_minutes() as f64)
                 .unwrap_or(0.0);
-            
+
             csv.push_str(&format!(
                 "{},{},{},{},{},{:.1},{},{:.3},{:.1},{:.1},{:?}\n",
                 self.learner_id,
                 session.session_id,
                 i + 1,
                 session.start_time.to_rfc3339(),
-                session.end_time.map(|t| t.to_rfc3339()).unwrap_or_else(|| "NA".to_string()),
+                session
+                    .end_time
+                    .map(|t| t.to_rfc3339())
+                    .unwrap_or_else(|| "NA".to_string()),
                 duration_minutes,
                 session.summary.total_tasks,
                 session.summary.accuracy,
                 session.summary.mean_rt_ms,
                 session.summary.median_rt_ms,
-                session.summary.strategy_detected.as_ref().map(|s| format!("{:?}", s)).unwrap_or_else(|| "NA".to_string())
+                session
+                    .summary
+                    .strategy_detected
+                    .as_ref()
+                    .map(|s| format!("{:?}", s))
+                    .unwrap_or_else(|| "NA".to_string())
             ));
         }
-        
+
         let mut file = File::create(path)?;
         file.write_all(csv.as_bytes())?;
         Ok(())
     }
-    
+
     fn save_parameters_csv(&self, path: &Path) -> std::io::Result<()> {
         let mut csv = String::new();
-        csv.push_str("learner_id,timestamp,trial_number,parameter_type,parameter_name,value,uncertainty\n");
-        
+        csv.push_str(
+            "learner_id,timestamp,trial_number,parameter_type,parameter_name,value,uncertainty\n",
+        );
+
         // Export node embeddings
         for (node, embedding) in &self.model_parameters.node_embeddings {
             csv.push_str(&format!(
@@ -508,7 +554,7 @@ impl LearnerDataExport {
                 embedding.uncertainty
             ));
         }
-        
+
         // Export operation proficiencies
         for (op, proficiency) in &self.model_parameters.operation_proficiencies {
             csv.push_str(&format!(
@@ -520,7 +566,7 @@ impl LearnerDataExport {
                 proficiency
             ));
         }
-        
+
         // Export memory strengths
         for (item, strength) in &self.model_parameters.memory_strengths {
             csv.push_str(&format!(
@@ -532,7 +578,7 @@ impl LearnerDataExport {
                 strength
             ));
         }
-        
+
         // Export chunk boundaries
         for boundary in &self.model_parameters.chunk_boundaries {
             csv.push_str(&format!(
@@ -544,7 +590,7 @@ impl LearnerDataExport {
                 boundary.strength
             ));
         }
-        
+
         let mut file = File::create(path)?;
         file.write_all(csv.as_bytes())?;
         Ok(())
@@ -561,30 +607,30 @@ impl PopulationAnalyzer {
     pub fn new(learners: Vec<LearnerDataExport>) -> Self {
         PopulationAnalyzer { learners }
     }
-    
+
     pub fn export_population_data(&self, base_path: &Path) -> std::io::Result<()> {
         // Create output directory structure
         std::fs::create_dir_all(base_path)?;
-        
+
         // Combine all responses into single CSV
         self.export_combined_responses(&base_path.join("responses.csv"))?;
-        
+
         // Export participant metadata
         self.export_participants(&base_path.join("participants.csv"))?;
-        
+
         // Export all sessions
         self.export_all_sessions(&base_path.join("sessions.csv"))?;
-        
+
         // Export all model parameters
         self.export_all_parameters(&base_path.join("model_parameters.csv"))?;
-        
+
         Ok(())
     }
-    
+
     fn export_combined_responses(&self, path: &Path) -> std::io::Result<()> {
         let mut csv = String::new();
         csv.push_str("learner_id,session_id,trial_number,timestamp,group,phase,task_type,task_json,correct,rt_ms,user_answer,correct_answer,difficulty\n");
-        
+
         for learner in &self.learners {
             let learner_csv = learner.to_csv();
             // Skip header line for subsequent learners
@@ -596,58 +642,71 @@ impl PopulationAnalyzer {
                 }
             }
         }
-        
+
         let mut file = File::create(path)?;
         file.write_all(csv.as_bytes())?;
         Ok(())
     }
-    
+
     fn export_participants(&self, path: &Path) -> std::io::Result<()> {
         let mut csv = String::new();
         csv.push_str("learner_id,group,age,gender,start_date,end_date,n_sessions,total_trials,overall_accuracy,mean_rt,completed\n");
-        
+
         for learner in &self.learners {
-            let total_trials: usize = learner.sessions.iter()
-                .map(|s| s.summary.total_tasks)
-                .sum();
-            
-            let total_correct: usize = learner.sessions.iter()
+            let total_trials: usize = learner.sessions.iter().map(|s| s.summary.total_tasks).sum();
+
+            let total_correct: usize = learner
+                .sessions
+                .iter()
                 .map(|s| s.summary.correct_count)
                 .sum();
-            
+
             let overall_accuracy = if total_trials > 0 {
                 total_correct as f64 / total_trials as f64
             } else {
                 0.0
             };
-            
+
             let mean_rt = if !learner.sessions.is_empty() {
-                let total_rt: f64 = learner.sessions.iter()
+                let total_rt: f64 = learner
+                    .sessions
+                    .iter()
                     .map(|s| s.summary.mean_rt_ms * s.summary.total_tasks as f64)
                     .sum();
                 total_rt / total_trials as f64
             } else {
                 0.0
             };
-            
-            let start_date = learner.sessions.first()
+
+            let start_date = learner
+                .sessions
+                .first()
                 .map(|s| s.start_time.date_naive().to_string())
                 .unwrap_or_else(|| "NA".to_string());
-            
-            let end_date = learner.sessions.last()
+
+            let end_date = learner
+                .sessions
+                .last()
                 .and_then(|s| s.end_time)
                 .map(|t| t.date_naive().to_string())
                 .unwrap_or_else(|| "NA".to_string());
-            
+
             // Infer group from metadata
-            let group = learner.metadata.experiment_id.as_ref()
+            let group = learner
+                .metadata
+                .experiment_id
+                .as_ref()
                 .map(|id| {
-                    if id.contains("adaptive") { "Adaptive" }
-                    else if id.contains("linear") { "Linear" }
-                    else { "Yoked" }
+                    if id.contains("adaptive") {
+                        "Adaptive"
+                    } else if id.contains("linear") {
+                        "Linear"
+                    } else {
+                        "Yoked"
+                    }
                 })
                 .unwrap_or("Unknown");
-            
+
             csv.push_str(&format!(
                 "{},{},NA,NA,{},{},{},{},{:.3},{:.1},true\n",
                 learner.learner_id,
@@ -660,51 +719,62 @@ impl PopulationAnalyzer {
                 mean_rt
             ));
         }
-        
+
         let mut file = File::create(path)?;
         file.write_all(csv.as_bytes())?;
         Ok(())
     }
-    
+
     fn export_all_sessions(&self, path: &Path) -> std::io::Result<()> {
         let mut csv = String::new();
         csv.push_str("learner_id,session_id,session_number,start_time,end_time,duration_minutes,n_trials,accuracy,mean_rt_ms,median_rt_ms,strategy_detected\n");
-        
+
         for learner in &self.learners {
             for (i, session) in learner.sessions.iter().enumerate() {
-                let duration_minutes = session.end_time
+                let duration_minutes = session
+                    .end_time
                     .map(|end| (end - session.start_time).num_minutes() as f64)
                     .unwrap_or(0.0);
-                
+
                 csv.push_str(&format!(
                     "{},{},{},{},{},{:.1},{},{:.3},{:.1},{:.1},{:?}\n",
                     learner.learner_id,
                     session.session_id,
                     i + 1,
                     session.start_time.to_rfc3339(),
-                    session.end_time.map(|t| t.to_rfc3339()).unwrap_or_else(|| "NA".to_string()),
+                    session
+                        .end_time
+                        .map(|t| t.to_rfc3339())
+                        .unwrap_or_else(|| "NA".to_string()),
                     duration_minutes,
                     session.summary.total_tasks,
                     session.summary.accuracy,
                     session.summary.mean_rt_ms,
                     session.summary.median_rt_ms,
-                    session.summary.strategy_detected.as_ref().map(|s| format!("{:?}", s)).unwrap_or_else(|| "NA".to_string())
+                    session
+                        .summary
+                        .strategy_detected
+                        .as_ref()
+                        .map(|s| format!("{:?}", s))
+                        .unwrap_or_else(|| "NA".to_string())
                 ));
             }
         }
-        
+
         let mut file = File::create(path)?;
         file.write_all(csv.as_bytes())?;
         Ok(())
     }
-    
+
     fn export_all_parameters(&self, path: &Path) -> std::io::Result<()> {
         let mut csv = String::new();
-        csv.push_str("learner_id,timestamp,trial_number,parameter_type,parameter_name,value,uncertainty\n");
-        
+        csv.push_str(
+            "learner_id,timestamp,trial_number,parameter_type,parameter_name,value,uncertainty\n",
+        );
+
         for learner in &self.learners {
             let trial_count = learner.performance_trajectories.len();
-            
+
             // Export node embeddings
             for (node, embedding) in &learner.model_parameters.node_embeddings {
                 csv.push_str(&format!(
@@ -717,7 +787,7 @@ impl PopulationAnalyzer {
                     embedding.uncertainty
                 ));
             }
-            
+
             // Export operation proficiencies
             for (op, proficiency) in &learner.model_parameters.operation_proficiencies {
                 csv.push_str(&format!(
@@ -729,7 +799,7 @@ impl PopulationAnalyzer {
                     proficiency
                 ));
             }
-            
+
             // Export memory strengths
             for (item, strength) in &learner.model_parameters.memory_strengths {
                 csv.push_str(&format!(
@@ -741,7 +811,7 @@ impl PopulationAnalyzer {
                     strength
                 ));
             }
-            
+
             // Export chunk boundaries
             for boundary in &learner.model_parameters.chunk_boundaries {
                 csv.push_str(&format!(
@@ -754,24 +824,24 @@ impl PopulationAnalyzer {
                 ));
             }
         }
-        
+
         let mut file = File::create(path)?;
         file.write_all(csv.as_bytes())?;
         Ok(())
     }
-    
+
     pub fn find_population_bottlenecks(&self) -> Vec<(String, String, f64)> {
         let mut transition_errors: HashMap<(String, String), (usize, usize)> = HashMap::new();
-        
+
         for learner in &self.learners {
             for session in &learner.sessions {
                 for window in session.responses.windows(2) {
                     if let [prev, curr] = window {
                         let transition = (
                             format!("{:?}", prev.task.task_type),
-                            format!("{:?}", curr.task.task_type)
+                            format!("{:?}", curr.task.task_type),
                         );
-                        
+
                         let entry = transition_errors.entry(transition).or_insert((0, 0));
                         entry.1 += 1; // total
                         if !curr.correct {
@@ -781,97 +851,95 @@ impl PopulationAnalyzer {
                 }
             }
         }
-        
+
         let mut bottlenecks: Vec<(String, String, f64)> = transition_errors
             .into_iter()
             .filter(|(_, (_, total))| *total >= 10) // Minimum sample size
-            .map(|((from, to), (errors, total))| {
-                (from, to, errors as f64 / total as f64)
-            })
+            .map(|((from, to), (errors, total))| (from, to, errors as f64 / total as f64))
             .collect();
-        
+
         bottlenecks.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap());
         bottlenecks.truncate(20);
-        
+
         bottlenecks
     }
-    
+
     pub fn compute_item_difficulties(&self) -> HashMap<String, DifficultyNorm> {
         let mut item_performance: HashMap<String, Vec<bool>> = HashMap::new();
-        
+
         for learner in &self.learners {
             for session in &learner.sessions {
                 for response in &session.responses {
                     let item_key = format!("{:?}", response.task.task_type);
-                    item_performance.entry(item_key)
+                    item_performance
+                        .entry(item_key)
                         .or_insert_with(Vec::new)
                         .push(response.correct);
                 }
             }
         }
-        
+
         item_performance
             .into_iter()
             .map(|(item, results)| {
-                let success_rate = results.iter().filter(|&&c| c).count() as f64 
-                    / results.len() as f64;
-                
+                let success_rate =
+                    results.iter().filter(|&&c| c).count() as f64 / results.len() as f64;
+
                 let norm = DifficultyNorm {
                     item_id: item.clone(),
                     empirical_difficulty: 1.0 - success_rate,
                     sample_size: results.len(),
                     confidence_interval: Self::calculate_ci(success_rate, results.len()),
                 };
-                
+
                 (item, norm)
             })
             .collect()
     }
-    
+
     fn calculate_ci(p: f64, n: usize) -> (f64, f64) {
         // Wilson score interval
         let z = 1.96; // 95% confidence
         let n_f = n as f64;
-        
+
         let denominator = 1.0 + z * z / n_f;
         let center = (p + z * z / (2.0 * n_f)) / denominator;
         let spread = z * (p * (1.0 - p) / n_f + z * z / (4.0 * n_f * n_f)).sqrt() / denominator;
-        
-        (
-            (center - spread).max(0.0),
-            (center + spread).min(1.0)
-        )
+
+        ((center - spread).max(0.0), (center + spread).min(1.0))
     }
-    
+
     pub fn cluster_by_strategy(&self) -> HashMap<StrategyType, Vec<String>> {
         let mut clusters: HashMap<StrategyType, Vec<String>> = HashMap::new();
-        
+
         // Simplified strategy detection based on RT patterns
         for learner in &self.learners {
             let mut rt_by_distance: HashMap<usize, Vec<f64>> = HashMap::new();
-            
+
             for session in &learner.sessions {
                 for response in &session.responses {
                     // Estimate distance from task (simplified)
                     let distance = (response.task.difficulty * 10.0) as usize;
-                    rt_by_distance.entry(distance)
+                    rt_by_distance
+                        .entry(distance)
                         .or_insert_with(Vec::new)
                         .push(response.response_time_ms as f64);
                 }
             }
-            
+
             // Calculate RT slope
             let distances: Vec<f64> = rt_by_distance.keys().map(|&d| d as f64).collect();
-            let mean_rts: Vec<f64> = rt_by_distance.values()
+            let mean_rts: Vec<f64> = rt_by_distance
+                .values()
                 .map(|rts| rts.iter().sum::<f64>() / rts.len() as f64)
                 .collect();
-            
+
             let slope = if distances.len() >= 2 {
                 Self::calculate_slope(&distances, &mean_rts)
             } else {
                 0.0
             };
-            
+
             let strategy = if slope > 100.0 {
                 StrategyType::SerialScan
             } else if slope < 50.0 {
@@ -879,29 +947,32 @@ impl PopulationAnalyzer {
             } else {
                 StrategyType::Mixed(50)
             };
-            
-            clusters.entry(strategy)
+
+            clusters
+                .entry(strategy)
                 .or_insert_with(Vec::new)
                 .push(learner.learner_id.clone());
         }
-        
+
         clusters
     }
-    
+
     fn calculate_slope(x: &[f64], y: &[f64]) -> f64 {
         let n = x.len().min(y.len()) as f64;
         if n < 2.0 {
             return 0.0;
         }
-        
+
         let sum_x: f64 = x.iter().take(n as usize).sum();
         let sum_y: f64 = y.iter().take(n as usize).sum();
-        let sum_xy: f64 = x.iter().zip(y.iter())
+        let sum_xy: f64 = x
+            .iter()
+            .zip(y.iter())
             .take(n as usize)
             .map(|(a, b)| a * b)
             .sum();
         let sum_x2: f64 = x.iter().take(n as usize).map(|a| a * a).sum();
-        
+
         (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x)
     }
 }
@@ -928,23 +999,21 @@ impl SessionExporter {
     pub fn new() -> Self {
         SessionExporter
     }
-    
+
     pub fn export_to_csv(&self, responses: &[TaskResponse]) -> Result<String, std::io::Error> {
         let mut csv = String::new();
         csv.push_str("task_id,response_time_ms,correct,user_answer\n");
-        
+
         for (i, response) in responses.iter().enumerate() {
-            csv.push_str(&format!("{},{},{},{}\n", 
-                i, 
-                response.response_time_ms,
-                response.correct,
-                response.user_answer
+            csv.push_str(&format!(
+                "{},{},{},{}\n",
+                i, response.response_time_ms, response.correct, response.user_answer
             ));
         }
-        
+
         Ok(csv)
     }
-    
+
     pub fn generate_summary(&self, responses: &[TaskResponse]) -> String {
         let total = responses.len();
         let correct = responses.iter().filter(|r| r.correct).count();
@@ -953,8 +1022,10 @@ impl SessionExporter {
         } else {
             0.0
         };
-        
-        format!("Total responses: {}\nCorrect: {}\nOverall accuracy: {:.2}%", 
-                total, correct, accuracy)
+
+        format!(
+            "Total responses: {}\nCorrect: {}\nOverall accuracy: {:.2}%",
+            total, correct, accuracy
+        )
     }
 }

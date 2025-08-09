@@ -10,8 +10,9 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::models::learner::Learner;
 use graph_learning_core::{
-    tasks::TaskResponse as CoreTaskResponse, LearnerMetrics, LearnerModel as CoreLearnerModel,
-    Topology, LearnerDataExport, export::SessionData, BayesianLearnerModel, bayesian::ResponseData,
+    bayesian::ResponseData, export::SessionData, tasks::TaskResponse as CoreTaskResponse,
+    BayesianLearnerModel, LearnerDataExport, LearnerMetrics, LearnerModel as CoreLearnerModel,
+    Topology,
 };
 
 #[derive(Clone)]
@@ -122,26 +123,29 @@ impl LearnerService {
         let mut learner = self.get_learner(learner_id).await?;
 
         // Create/update Bayesian model for more sophisticated learning
-        let mut bayesian_model = self.get_or_create_bayesian_model(learner_id, topology).await?;
-        
+        let mut bayesian_model = self
+            .get_or_create_bayesian_model(learner_id, topology)
+            .await?;
+
         // Convert response to ResponseData format for Bayesian update
         let response_data = ResponseData {
             task: response.task.clone(),
             correct: response.correct,
             response_time: response.response_time_ms as f64,
         };
-        
+
         // Update Bayesian model with response (this is the key enhancement)
         bayesian_model.update_with_response(response_data);
-        
+
         // Save the updated Bayesian model
-        self.save_bayesian_model(learner_id, &bayesian_model).await?;
+        self.save_bayesian_model(learner_id, &bayesian_model)
+            .await?;
 
         // Also update the traditional learning model
         learner
             .learning_model
             .update_memory_strength(&response.task.correct_answer, response.correct);
-            
+
         // Update operation proficiency with more sophisticated logic
         learner
             .learning_model
@@ -151,7 +155,7 @@ impl LearnerService {
         let learner_bytes = learner_id.as_bytes().to_vec();
         let learning_model_json = serde_json::to_string(&learner.learning_model)?;
         let now = Utc::now();
-        
+
         // Add response time to total practice time (convert from ms to seconds)
         let additional_practice_time = response.response_time_ms as u64 / 1000;
         learner.total_practice_time_seconds += additional_practice_time as i64;
@@ -169,10 +173,12 @@ impl LearnerService {
 
         // Cache both models
         let cache_key = format!("learner_model:{}", learner_id);
-        self.cache_learner_model(&cache_key, &learner.learning_model).await?;
-        
+        self.cache_learner_model(&cache_key, &learner.learning_model)
+            .await?;
+
         let bayesian_cache_key = format!("bayesian_model:{}", learner_id);
-        self.cache_bayesian_model(&bayesian_cache_key, &bayesian_model).await?;
+        self.cache_bayesian_model(&bayesian_cache_key, &bayesian_model)
+            .await?;
 
         Ok(())
     }
@@ -184,9 +190,9 @@ impl LearnerService {
 
     /// Get the Bayesian model for a learner, creating one if it doesn't exist
     pub async fn get_or_create_bayesian_model(
-        &self, 
-        learner_id: Uuid, 
-        topology: &Topology
+        &self,
+        learner_id: Uuid,
+        topology: &Topology,
     ) -> Result<BayesianLearnerModel> {
         // Try to load from cache first
         let cache_key = format!("bayesian_model:{}", learner_id);
@@ -203,23 +209,28 @@ impl LearnerService {
 
         // Create new Bayesian model if none exists
         let model = BayesianLearnerModel::new(topology);
-        
+
         // Save to database and cache
         self.save_bayesian_model(learner_id, &model).await?;
         self.cache_bayesian_model(&cache_key, &model).await?;
-        
+
         Ok(model)
     }
 
     /// Get Bayesian model for Enhanced Information Gain calculations
-    pub async fn get_bayesian_model(&self, learner_id: Uuid, topology: &Topology) -> Result<BayesianLearnerModel> {
-        self.get_or_create_bayesian_model(learner_id, topology).await
+    pub async fn get_bayesian_model(
+        &self,
+        learner_id: Uuid,
+        topology: &Topology,
+    ) -> Result<BayesianLearnerModel> {
+        self.get_or_create_bayesian_model(learner_id, topology)
+            .await
     }
 
     /// Load Bayesian model from database
     async fn load_bayesian_model_from_db(&self, learner_id: Uuid) -> Result<BayesianLearnerModel> {
         let learner_id_bytes = learner_id.as_bytes();
-        
+
         let mut conn = self.db.acquire().await?;
         let result = sqlx::query(
             "SELECT model_data FROM bayesian_models WHERE learner_id = ? ORDER BY created_at DESC LIMIT 1"
@@ -227,7 +238,7 @@ impl LearnerService {
         .bind(&learner_id_bytes[..])
         .fetch_optional(&mut *conn)
         .await?;
-        
+
         if let Some(row) = result {
             let model_data: String = row.try_get("model_data")?;
             let model: BayesianLearnerModel = serde_json::from_str(&model_data)
@@ -239,20 +250,24 @@ impl LearnerService {
     }
 
     /// Save Bayesian model to database
-    async fn save_bayesian_model(&self, learner_id: Uuid, model: &BayesianLearnerModel) -> Result<()> {
+    async fn save_bayesian_model(
+        &self,
+        learner_id: Uuid,
+        model: &BayesianLearnerModel,
+    ) -> Result<()> {
         let learner_id_bytes = learner_id.as_bytes();
         let model_data = serde_json::to_string(model)
             .map_err(|e| anyhow::anyhow!("Failed to serialize Bayesian model: {}", e))?;
-        
+
         let mut conn = self.db.acquire().await?;
-        
+
         // Insert new model (keeping history for analysis)
         let model_id = uuid::Uuid::new_v4();
         let model_id_bytes = model_id.as_bytes();
-        
+
         sqlx::query(
             "INSERT INTO bayesian_models (id, learner_id, model_data, created_at, updated_at) 
-             VALUES (?, ?, ?, ?, ?)"
+             VALUES (?, ?, ?, ?, ?)",
         )
         .bind(&model_id_bytes[..])
         .bind(&learner_id_bytes[..])
@@ -261,18 +276,23 @@ impl LearnerService {
         .bind(chrono::Utc::now())
         .execute(&mut *conn)
         .await?;
-        
+
         tracing::info!("Saved Bayesian model for learner {}", learner_id);
         Ok(())
     }
 
     /// Cache and persist Bayesian model
-    async fn cache_bayesian_model(&self, cache_key: &str, model: &BayesianLearnerModel) -> Result<()> {
+    async fn cache_bayesian_model(
+        &self,
+        cache_key: &str,
+        model: &BayesianLearnerModel,
+    ) -> Result<()> {
         // Extract learner ID from cache key
-        let learner_id_str = cache_key.strip_prefix("bayesian_model:")
+        let learner_id_str = cache_key
+            .strip_prefix("bayesian_model:")
             .ok_or_else(|| anyhow::anyhow!("Invalid cache key format"))?;
         let learner_id = uuid::Uuid::parse_str(learner_id_str)?;
-        
+
         // Save to database for persistence
         self.save_bayesian_model(learner_id, model).await?;
         // The model will be regenerated as needed
@@ -282,10 +302,11 @@ impl LearnerService {
     /// Get cached Bayesian model from database
     async fn get_cached_bayesian_model(&self, cache_key: &str) -> Result<BayesianLearnerModel> {
         // Extract learner ID from cache key
-        let learner_id_str = cache_key.strip_prefix("bayesian_model:")
+        let learner_id_str = cache_key
+            .strip_prefix("bayesian_model:")
             .ok_or_else(|| anyhow::anyhow!("Invalid cache key format"))?;
         let learner_id = uuid::Uuid::parse_str(learner_id_str)?;
-        
+
         // Try to load from database
         self.load_bayesian_model_from_db(learner_id).await
     }
@@ -334,8 +355,9 @@ impl LearnerService {
             .into_iter()
             .map(|row| {
                 let bytes: Vec<u8> = row.get::<Vec<u8>, _>("id");
-                let session_id_str = Uuid::from_bytes(bytes.try_into().unwrap_or_default()).to_string();
-                
+                let session_id_str =
+                    Uuid::from_bytes(bytes.try_into().unwrap_or_default()).to_string();
+
                 serde_json::json!({
                     "id": session_id_str,
                     "topology_type": row.get::<String, _>("topology_type"),
@@ -381,17 +403,21 @@ impl LearnerService {
     }
 
     /// Export complete learner data using core LearnerDataExport functionality
-    pub async fn export_learner_data(&self, learner_id: Uuid, experiment_id: Option<String>) -> Result<LearnerDataExport> {
+    pub async fn export_learner_data(
+        &self,
+        learner_id: Uuid,
+        experiment_id: Option<String>,
+    ) -> Result<LearnerDataExport> {
         // Get the learner and their model
         let learner = self.get_learner(learner_id).await?;
 
         // Get sessions data from database
         let learner_bytes = learner_id.as_bytes().to_vec();
         let mut conn = self.db.acquire().await?;
-        
+
         let session_rows = sqlx::query(
             "SELECT id, topology_type, topology_data, start_time, end_time, status, summary
-             FROM sessions WHERE learner_id = ? ORDER BY start_time"
+             FROM sessions WHERE learner_id = ? ORDER BY start_time",
         )
         .bind(&learner_bytes)
         .fetch_all(&mut *conn)
@@ -401,11 +427,13 @@ impl LearnerService {
         let mut sessions = Vec::new();
         for row in session_rows {
             let session_id_bytes: Vec<u8> = row.get("id");
-            let session_id = Uuid::from_bytes(session_id_bytes.clone().try_into().unwrap_or_default()).to_string();
-            
+            let session_id =
+                Uuid::from_bytes(session_id_bytes.clone().try_into().unwrap_or_default())
+                    .to_string();
+
             // Get responses for this session
             let responses = self.get_session_responses(&session_id_bytes).await?;
-            
+
             let topology_type: String = row.get("topology_type");
             let start_time: DateTime<Utc> = row.get("start_time");
             let end_time: Option<DateTime<Utc>> = row.get("end_time");
@@ -424,18 +452,23 @@ impl LearnerService {
         // Use core functionality to create the complete export
         // Note: We'll need to adapt this since we don't have TaskSession directly
         // For now, create a simplified version that matches our database structure
-        let export = self.create_export_from_data(
-            learner.learning_model, 
-            learner_id.to_string(), 
-            sessions, 
-            experiment_id
-        ).await?;
+        let export = self
+            .create_export_from_data(
+                learner.learning_model,
+                learner_id.to_string(),
+                sessions,
+                experiment_id,
+            )
+            .await?;
 
         Ok(export)
     }
 
     /// Get responses for a session
-    async fn get_session_responses(&self, session_id_bytes: &[u8]) -> Result<Vec<CoreTaskResponse>> {
+    async fn get_session_responses(
+        &self,
+        session_id_bytes: &[u8],
+    ) -> Result<Vec<CoreTaskResponse>> {
         let mut conn = self.db.acquire().await?;
         let response_rows = sqlx::query(
             "SELECT task_type, task_data, correct_answer, user_answer, correct, response_time_ms, timestamp
@@ -456,8 +489,10 @@ impl LearnerService {
             let timestamp: DateTime<Utc> = row.get("timestamp");
 
             // Reconstruct task from stored data
-            let task = self.reconstruct_task_from_data(&task_type, &task_data, &correct_answer).await?;
-            
+            let task = self
+                .reconstruct_task_from_data(&task_type, &task_data, &correct_answer)
+                .await?;
+
             responses.push(CoreTaskResponse {
                 task,
                 user_answer,
@@ -471,7 +506,10 @@ impl LearnerService {
     }
 
     /// Calculate session summary from responses
-    async fn calculate_session_summary(&self, responses: &[CoreTaskResponse]) -> Result<graph_learning_core::export::SessionSummary> {
+    async fn calculate_session_summary(
+        &self,
+        responses: &[CoreTaskResponse],
+    ) -> Result<graph_learning_core::export::SessionSummary> {
         let total_tasks = responses.len();
         let correct_count = responses.iter().filter(|r| r.correct).count();
         let accuracy = if total_tasks > 0 {
@@ -480,7 +518,8 @@ impl LearnerService {
             0.0
         };
 
-        let rts: Vec<f64> = responses.iter()
+        let rts: Vec<f64> = responses
+            .iter()
             .map(|r| r.response_time_ms as f64)
             .collect();
 
@@ -509,10 +548,15 @@ impl LearnerService {
     }
 
     /// Reconstruct task from stored database data
-    async fn reconstruct_task_from_data(&self, task_type: &str, task_data: &str, correct_answer: &str) -> Result<graph_learning_core::Task> {
+    async fn reconstruct_task_from_data(
+        &self,
+        task_type: &str,
+        task_data: &str,
+        correct_answer: &str,
+    ) -> Result<graph_learning_core::Task> {
         // Parse the task data JSON to reconstruct the original task
         let task_json: serde_json::Value = serde_json::from_str(task_data)?;
-        
+
         let task_type_enum = match task_type {
             "Successor" => {
                 let item = task_json["item"].as_str().unwrap_or("A").to_string();
@@ -536,17 +580,26 @@ impl LearnerService {
                 let start = task_json["start"].as_str().unwrap_or("A").to_string();
                 let count = task_json["count"].as_u64().unwrap_or(3) as usize;
                 let reverse = task_json["reverse"].as_bool().unwrap_or(false);
-                graph_learning_core::TaskType::Segment { start, count, reverse }
+                graph_learning_core::TaskType::Segment {
+                    start,
+                    count,
+                    reverse,
+                }
             }
-            _ => {
-                graph_learning_core::TaskType::Successor { item: "A".to_string() }
-            }
+            _ => graph_learning_core::TaskType::Successor {
+                item: "A".to_string(),
+            },
         };
 
         let difficulty = task_json["difficulty"].as_f64().unwrap_or(0.5);
         let prompt = task_json["prompt"].as_str().unwrap_or("").to_string();
-        let options = task_json["options"].as_array()
-            .map(|arr| arr.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect())
+        let options = task_json["options"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .map(|v| v.as_str().unwrap_or("").to_string())
+                    .collect()
+            })
             .unwrap_or_else(Vec::new);
 
         Ok(graph_learning_core::Task {
@@ -556,11 +609,21 @@ impl LearnerService {
             options,
             difficulty,
             operation: match &task_type_enum {
-                graph_learning_core::TaskType::Successor { .. } => graph_learning_core::OperationType::Successor,
-                graph_learning_core::TaskType::Predecessor { .. } => graph_learning_core::OperationType::Predecessor,
-                graph_learning_core::TaskType::PairwiseOrder { .. } => graph_learning_core::OperationType::PairwiseOrder,
-                graph_learning_core::TaskType::KJump { k, .. } => graph_learning_core::OperationType::KJump(*k),
-                graph_learning_core::TaskType::Segment { count, reverse, .. } => graph_learning_core::OperationType::Segment(*count, *reverse),
+                graph_learning_core::TaskType::Successor { .. } => {
+                    graph_learning_core::OperationType::Successor
+                }
+                graph_learning_core::TaskType::Predecessor { .. } => {
+                    graph_learning_core::OperationType::Predecessor
+                }
+                graph_learning_core::TaskType::PairwiseOrder { .. } => {
+                    graph_learning_core::OperationType::PairwiseOrder
+                }
+                graph_learning_core::TaskType::KJump { k, .. } => {
+                    graph_learning_core::OperationType::KJump(*k)
+                }
+                graph_learning_core::TaskType::Segment { count, reverse, .. } => {
+                    graph_learning_core::OperationType::Segment(*count, *reverse)
+                }
                 _ => graph_learning_core::OperationType::Successor,
             },
         })
@@ -575,19 +638,19 @@ impl LearnerService {
         experiment_id: Option<String>,
     ) -> Result<LearnerDataExport> {
         let export_timestamp = Utc::now();
-        
+
         // Calculate performance trajectories
         let mut performance_trajectories = Vec::new();
         let mut running_correct = 0;
         let mut running_total = 0;
-        
+
         for session in &sessions {
             for response in &session.responses {
                 running_total += 1;
                 if response.correct {
                     running_correct += 1;
                 }
-                
+
                 performance_trajectories.push(graph_learning_core::export::PerformancePoint {
                     trial_number: running_total,
                     timestamp: response.timestamp,
@@ -605,19 +668,32 @@ impl LearnerService {
         // Create model snapshot
         let model_snapshot = graph_learning_core::export::ModelSnapshot {
             timestamp: export_timestamp,
-            node_embeddings: model.node_embeddings.iter()
-                .map(|(k, v)| (k.clone(), graph_learning_core::export::NodeEmbeddingExport {
-                    position: v.position,
-                    uncertainty: v.uncertainty,
-                }))
+            node_embeddings: model
+                .node_embeddings
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        graph_learning_core::export::NodeEmbeddingExport {
+                            position: v.position,
+                            uncertainty: v.uncertainty,
+                        },
+                    )
+                })
                 .collect(),
-            operation_proficiencies: model.operation_proficiencies.iter()
+            operation_proficiencies: model
+                .operation_proficiencies
+                .iter()
                 .map(|(k, v)| (k.clone(), 1.0 / (1.0 + (-v.theta).exp()))) // sigmoid
                 .collect(),
-            memory_strengths: model.memory_strengths.iter()
+            memory_strengths: model
+                .memory_strengths
+                .iter()
                 .map(|(k, v)| (k.clone(), v.strength))
                 .collect(),
-            chunk_boundaries: model.chunk_boundaries.iter()
+            chunk_boundaries: model
+                .chunk_boundaries
+                .iter()
                 .map(|b| graph_learning_core::export::ChunkBoundaryExport {
                     position: b.position,
                     strength: b.strength,
@@ -646,64 +722,77 @@ impl LearnerService {
     }
 
     /// Analyze errors across sessions  
-    async fn analyze_errors(&self, sessions: &[SessionData]) -> Result<graph_learning_core::export::ErrorAnalysis> {
+    async fn analyze_errors(
+        &self,
+        sessions: &[SessionData],
+    ) -> Result<graph_learning_core::export::ErrorAnalysis> {
         let mut total_errors = 0;
         let mut total_tasks = 0;
-        let mut confusion_counts: std::collections::HashMap<(String, String), usize> = std::collections::HashMap::new();
-        let mut error_by_task_type: std::collections::HashMap<String, (usize, usize)> = std::collections::HashMap::new();
-        let mut error_by_difficulty: std::collections::HashMap<String, Vec<bool>> = std::collections::HashMap::new();
-        
+        let mut confusion_counts: std::collections::HashMap<(String, String), usize> =
+            std::collections::HashMap::new();
+        let mut error_by_task_type: std::collections::HashMap<String, (usize, usize)> =
+            std::collections::HashMap::new();
+        let mut error_by_difficulty: std::collections::HashMap<String, Vec<bool>> =
+            std::collections::HashMap::new();
+
         for session in sessions {
             for response in &session.responses {
                 total_tasks += 1;
-                
+
                 let task_type = format!("{:?}", response.task.task_type);
                 let difficulty_bucket = format!("{:.1}", response.task.difficulty);
-                
-                error_by_task_type.entry(task_type.clone())
+
+                error_by_task_type
+                    .entry(task_type.clone())
                     .or_insert((0, 0))
                     .1 += 1;
-                
-                error_by_difficulty.entry(difficulty_bucket)
+
+                error_by_difficulty
+                    .entry(difficulty_bucket)
                     .or_insert_with(Vec::new)
                     .push(response.correct);
-                
+
                 if !response.correct {
                     total_errors += 1;
-                    
-                    error_by_task_type.entry(task_type)
-                        .or_insert((0, 0))
-                        .0 += 1;
-                    
+
+                    error_by_task_type.entry(task_type).or_insert((0, 0)).0 += 1;
+
                     let confusion = (
                         response.task.correct_answer.clone(),
-                        response.user_answer.clone()
+                        response.user_answer.clone(),
                     );
                     *confusion_counts.entry(confusion).or_insert(0) += 1;
                 }
             }
         }
-        
+
         let error_rate = if total_tasks > 0 {
             total_errors as f64 / total_tasks as f64
         } else {
             0.0
         };
-        
+
         let mut common_confusions: Vec<(String, String, usize)> = confusion_counts
             .into_iter()
             .map(|((expected, actual), count)| (expected, actual, count))
             .collect();
         common_confusions.sort_by_key(|c| std::cmp::Reverse(c.2));
         common_confusions.truncate(10);
-        
+
         let error_by_task_type_rates = error_by_task_type
             .into_iter()
             .map(|(k, (errors, total))| {
-                (k, if total > 0 { errors as f64 / total as f64 } else { 0.0 })
+                (
+                    k,
+                    if total > 0 {
+                        errors as f64 / total as f64
+                    } else {
+                        0.0
+                    },
+                )
             })
             .collect();
-        
+
         let error_by_difficulty_rates: Vec<(f64, f64)> = error_by_difficulty
             .into_iter()
             .map(|(bucket, results)| {
@@ -716,7 +805,7 @@ impl LearnerService {
                 (bucket.parse::<f64>().unwrap_or(0.0), rate)
             })
             .collect();
-        
+
         Ok(graph_learning_core::export::ErrorAnalysis {
             total_errors,
             error_rate,

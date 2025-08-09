@@ -1,9 +1,9 @@
-use crate::topology::Topology;
-use crate::tasks::{Task, TaskType};
 use crate::learner::OperationType;
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
+use crate::tasks::{Task, TaskType};
+use crate::topology::Topology;
 use rand::seq::SliceRandom;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Represents a discovered macro (sequence pattern) that can be reused
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,10 +26,10 @@ pub enum MacroContext {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AbstractionLevel {
-    Concrete,     // Specific items (A, B, C)
-    Relative,     // Relative positions (+1, +2)
-    Structural,   // Graph structure (successor, predecessor)
-    Functional,   // Functional role (vowel-consonant-vowel)
+    Concrete,   // Specific items (A, B, C)
+    Relative,   // Relative positions (+1, +2)
+    Structural, // Graph structure (successor, predecessor)
+    Functional, // Functional role (vowel-consonant-vowel)
 }
 
 /// System for discovering and applying macros in navigation
@@ -50,12 +50,12 @@ impl MacroDiscoverySystem {
             pattern_frequency: HashMap::new(),
             abstraction_enabled: true,
         };
-        
+
         // Initialize with common patterns
         system.initialize_common_macros();
         system
     }
-    
+
     fn initialize_common_macros(&mut self) {
         // Common alphabet patterns
         if self.topology.nodes.len() == 26 {
@@ -68,21 +68,24 @@ impl MacroDiscoverySystem {
                     frequency: 0,
                     context: MacroContext::Sequential,
                     abstraction_level: AbstractionLevel::Concrete,
-                }
+                },
             );
-            
+
             // Vowel sequence
             self.discovered_macros.insert(
                 "vowels".to_string(),
                 Macro {
                     name: "vowels".to_string(),
-                    pattern: vec!["A", "E", "I", "O", "U"].iter().map(|s| s.to_string()).collect(),
+                    pattern: vec!["A", "E", "I", "O", "U"]
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect(),
                     frequency: 0,
                     context: MacroContext::SkipPattern(3),
                     abstraction_level: AbstractionLevel::Functional,
-                }
+                },
             );
-            
+
             // Chunk endings (common boundary positions)
             self.discovered_macros.insert(
                 "chunk_end".to_string(),
@@ -92,33 +95,33 @@ impl MacroDiscoverySystem {
                     frequency: 0,
                     context: MacroContext::Boundary,
                     abstraction_level: AbstractionLevel::Structural,
-                }
+                },
             );
         }
     }
-    
+
     /// Discover macros from a sequence of navigation actions
     pub fn discover_macro_from_sequence(&mut self, sequence: &[String]) -> Option<Macro> {
         if sequence.len() < 3 {
             return None;
         }
-        
+
         // Update frequency tracking
         *self.pattern_frequency.entry(sequence.to_vec()).or_insert(0) += 1;
-        
+
         // Check if this pattern is frequent enough to become a macro
         let frequency = *self.pattern_frequency.get(sequence).unwrap();
         if frequency < 3 {
             return None; // Need at least 3 occurrences
         }
-        
+
         // Analyze the pattern to determine its type
         let context = self.analyze_pattern_context(sequence);
         let abstraction = self.determine_abstraction_level(sequence);
-        
+
         // Generate a name for the macro
         let name = self.generate_macro_name(sequence, &context);
-        
+
         let macro_def = Macro {
             name: name.clone(),
             pattern: sequence.to_vec(),
@@ -126,18 +129,19 @@ impl MacroDiscoverySystem {
             context,
             abstraction_level: abstraction,
         };
-        
-        self.discovered_macros.insert(name.clone(), macro_def.clone());
+
+        self.discovered_macros
+            .insert(name.clone(), macro_def.clone());
         Some(macro_def)
     }
-    
+
     fn analyze_pattern_context(&self, sequence: &[String]) -> MacroContext {
         // Check if it's a simple sequential pattern
         let mut is_sequential = true;
         for i in 0..sequence.len() - 1 {
             if let (Some(curr), Some(next)) = (
                 self.topology.get_node_by_label(&sequence[i]),
-                self.topology.get_node_by_label(&sequence[i + 1])
+                self.topology.get_node_by_label(&sequence[i + 1]),
             ) {
                 if self.topology.get_successor(&curr.id) != Some(next.id.clone()) {
                     is_sequential = false;
@@ -145,62 +149,64 @@ impl MacroDiscoverySystem {
                 }
             }
         }
-        
+
         if is_sequential {
             return MacroContext::Sequential;
         }
-        
+
         // Check for skip patterns
         if let Some(skip_size) = self.detect_skip_pattern(sequence) {
             return MacroContext::SkipPattern(skip_size);
         }
-        
+
         // Check if it crosses boundaries
         if self.crosses_chunk_boundary(sequence) {
             return MacroContext::Boundary;
         }
-        
+
         // Check for cyclic wraparound
         if self.has_cyclic_wrap(sequence) {
             return MacroContext::Cyclic;
         }
-        
+
         MacroContext::Sequential // Default
     }
-    
+
     fn detect_skip_pattern(&self, sequence: &[String]) -> Option<usize> {
         if sequence.len() < 2 {
             return None;
         }
-        
-        let positions: Vec<_> = sequence.iter()
+
+        let positions: Vec<_> = sequence
+            .iter()
             .filter_map(|label| self.topology.get_node_by_label(label))
             .map(|node| node.position as usize)
             .collect();
-        
+
         if positions.len() < 2 {
             return None;
         }
-        
+
         let skip = positions[1] - positions[0];
         for i in 1..positions.len() - 1 {
             if positions[i + 1] - positions[i] != skip {
                 return None;
             }
         }
-        
+
         Some(skip - 1) // Return skip size (0 means consecutive)
     }
-    
+
     fn crosses_chunk_boundary(&self, sequence: &[String]) -> bool {
         // Check if sequence crosses common chunk boundaries (e.g., F-G, M-N, S-T)
         let boundaries = vec![5, 12, 18]; // Common alphabet chunk boundaries
-        
-        let positions: Vec<_> = sequence.iter()
+
+        let positions: Vec<_> = sequence
+            .iter()
             .filter_map(|label| self.topology.get_node_by_label(label))
             .map(|node| node.position as usize)
             .collect();
-        
+
         for i in 0..positions.len() - 1 {
             for &boundary in &boundaries {
                 if positions[i] <= boundary && positions[i + 1] > boundary {
@@ -210,17 +216,21 @@ impl MacroDiscoverySystem {
         }
         false
     }
-    
+
     fn has_cyclic_wrap(&self, sequence: &[String]) -> bool {
-        if !matches!(self.topology.topology_type, crate::topology::TopologyType::Cyclic) {
+        if !matches!(
+            self.topology.topology_type,
+            crate::topology::TopologyType::Cyclic
+        ) {
             return false;
         }
-        
-        let positions: Vec<_> = sequence.iter()
+
+        let positions: Vec<_> = sequence
+            .iter()
             .filter_map(|label| self.topology.get_node_by_label(label))
             .map(|node| node.position as usize)
             .collect();
-        
+
         for i in 0..positions.len() - 1 {
             // Check for wrap from end to beginning
             if positions[i] > positions[i + 1] + 10 {
@@ -229,35 +239,35 @@ impl MacroDiscoverySystem {
         }
         false
     }
-    
+
     fn determine_abstraction_level(&self, sequence: &[String]) -> AbstractionLevel {
         // If abstraction is disabled, always return Concrete
         if !self.abstraction_enabled {
             return AbstractionLevel::Concrete;
         }
-        
+
         // Check if all items are vowels or consonants
         let vowels = vec!["A", "E", "I", "O", "U"];
         let all_vowels = sequence.iter().all(|s| vowels.contains(&s.as_str()));
         let all_consonants = sequence.iter().all(|s| !vowels.contains(&s.as_str()));
-        
+
         if all_vowels || all_consonants {
             return AbstractionLevel::Functional;
         }
-        
+
         // Check if it's a relative pattern (consistent jumps)
         if self.detect_skip_pattern(sequence).is_some() {
             return AbstractionLevel::Relative;
         }
-        
+
         // Check for structural patterns
         if self.crosses_chunk_boundary(sequence) {
             return AbstractionLevel::Structural;
         }
-        
+
         AbstractionLevel::Concrete
     }
-    
+
     fn generate_macro_name(&self, sequence: &[String], context: &MacroContext) -> String {
         let prefix = match context {
             MacroContext::Sequential => "seq",
@@ -266,21 +276,21 @@ impl MacroDiscoverySystem {
             MacroContext::Cyclic => "cyclic",
             MacroContext::Hierarchical(n) => &format!("hier{}", n),
         };
-        
+
         let content = if sequence.len() <= 3 {
             sequence.join("")
         } else {
             format!("{}..{}", sequence[0], sequence[sequence.len() - 1])
         };
-        
+
         format!("{}_{}", prefix, content.to_lowercase())
     }
-    
+
     /// Generate a task that teaches macro discovery
     pub fn generate_macro_discovery_task(&self) -> Task {
         // Select a random discovered macro or create a new pattern
         let macros: Vec<_> = self.discovered_macros.values().collect();
-        
+
         let (pattern, macro_name) = if !macros.is_empty() && rand::random::<bool>() {
             let macro_def = macros[rand::random::<usize>() % macros.len()];
             (macro_def.pattern.clone(), macro_def.name.clone())
@@ -288,38 +298,44 @@ impl MacroDiscoverySystem {
             // Generate a new pattern for discovery
             let start_idx = rand::random::<usize>() % (self.topology.nodes.len() - 4);
             let pattern_type = rand::random::<usize>() % 3;
-            
+
             let pattern = match pattern_type {
                 0 => {
                     // Sequential pattern
-                    (0..4).map(|i| self.topology.nodes[start_idx + i].label.clone()).collect()
+                    (0..4)
+                        .map(|i| self.topology.nodes[start_idx + i].label.clone())
+                        .collect()
                 }
                 1 => {
                     // Skip pattern
-                    (0..3).map(|i| self.topology.nodes[start_idx + i * 2].label.clone()).collect()
+                    (0..3)
+                        .map(|i| self.topology.nodes[start_idx + i * 2].label.clone())
+                        .collect()
                 }
                 _ => {
                     // Boundary crossing pattern
                     let boundary = 6; // F-G boundary
                     let start = (boundary - 1).max(0);
-                    (0..3).map(|i| self.topology.nodes[start + i].label.clone()).collect()
+                    (0..3)
+                        .map(|i| self.topology.nodes[start + i].label.clone())
+                        .collect()
                 }
             };
-            
+
             (pattern, "unknown".to_string())
         };
-        
+
         let prompt = format!(
             "What macro or pattern does this sequence represent: {}?",
             pattern.join(", ")
         );
-        
+
         let correct_answer = if macro_name != "unknown" {
             macro_name
         } else {
             self.identify_pattern_type(&pattern)
         };
-        
+
         let mut options = vec![
             correct_answer.clone(),
             "Sequential forward".to_string(),
@@ -329,7 +345,7 @@ impl MacroDiscoverySystem {
         ];
         options.dedup();
         options.shuffle(&mut rand::thread_rng());
-        
+
         Task {
             task_type: TaskType::Segment {
                 start: pattern[0].clone(),
@@ -343,7 +359,7 @@ impl MacroDiscoverySystem {
             operation: OperationType::Segment(pattern.len(), false),
         }
     }
-    
+
     fn identify_pattern_type(&self, sequence: &[String]) -> String {
         let context = self.analyze_pattern_context(sequence);
         match context {
@@ -354,31 +370,37 @@ impl MacroDiscoverySystem {
             MacroContext::Hierarchical(n) => format!("Hierarchical level {}", n),
         }
     }
-    
+
     /// Apply a discovered macro to navigate
     pub fn apply_macro(&mut self, macro_name: &str, start: &str) -> Option<Vec<String>> {
         // Clone the macro data to avoid borrow conflicts
         let (macro_pattern, abstraction_level, context) = {
             let m = self.discovered_macros.get(macro_name)?;
-            (m.pattern.clone(), m.abstraction_level.clone(), m.context.clone())
+            (
+                m.pattern.clone(),
+                m.abstraction_level.clone(),
+                m.context.clone(),
+            )
         };
-        
+
         // Record usage
-        self.macro_usage_history.push((macro_name.to_string(), 
+        self.macro_usage_history.push((
+            macro_name.to_string(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_secs() as usize));
-        
+                .as_secs() as usize,
+        ));
+
         // Update frequency
         if let Some(m) = self.discovered_macros.get_mut(macro_name) {
             m.frequency += 1;
         }
-        
+
         // Apply the macro pattern starting from the given position
         let start_node = self.topology.get_node_by_label(start)?;
         let mut result = vec![start.to_string()];
-        
+
         match &abstraction_level {
             AbstractionLevel::Concrete => {
                 // Direct application if starting point matches
@@ -412,10 +434,10 @@ impl MacroDiscoverySystem {
                 return self.adapt_macro_to_context(&macro_def, start);
             }
         }
-        
+
         None
     }
-    
+
     fn adapt_macro_to_context(&self, macro_def: &Macro, start: &str) -> Option<Vec<String>> {
         // Adapt abstract macros to specific starting positions
         match &macro_def.abstraction_level {
@@ -428,63 +450,73 @@ impl MacroDiscoverySystem {
             AbstractionLevel::Functional => {
                 // Apply functional pattern (e.g., vowel sequence)
                 if macro_def.name == "vowels" {
-                    return Some(vec!["A", "E", "I", "O", "U"].iter()
-                        .map(|s| s.to_string()).collect());
+                    return Some(
+                        vec!["A", "E", "I", "O", "U"]
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect(),
+                    );
                 }
                 None
             }
-            _ => None
+            _ => None,
         }
     }
-    
+
     /// Generate a task that uses macro application
     pub fn generate_macro_application_task(&self) -> Task {
         let macros: Vec<_> = self.discovered_macros.values().collect();
         if macros.is_empty() {
             return self.generate_macro_discovery_task();
         }
-        
+
         let macro_def = macros[rand::random::<usize>() % macros.len()];
-        let start_options: Vec<_> = self.topology.nodes.iter()
+        let start_options: Vec<_> = self
+            .topology
+            .nodes
+            .iter()
             .take(self.topology.nodes.len() - macro_def.pattern.len())
             .map(|n| n.label.clone())
             .collect();
-        
+
         let start = &start_options[rand::random::<usize>() % start_options.len()];
-        
+
         let prompt = format!(
             "Apply the '{}' macro starting from '{}'). What is the resulting sequence?",
             macro_def.name, start
         );
-        
+
         let correct_sequence = self.apply_macro_simulation(&macro_def, start);
         let correct_answer = correct_sequence.join(", ");
-        
+
         // Generate distractors
         let mut options = vec![correct_answer.clone()];
-        
+
         // Wrong direction
         let mut reversed = correct_sequence.clone();
         reversed.reverse();
         options.push(reversed.join(", "));
-        
+
         // Off by one
         if correct_sequence.len() > 1 {
             let off_by_one = correct_sequence[1..].to_vec();
             options.push(off_by_one.join(", "));
         }
-        
+
         // Random sequence
-        let random_seq = self.topology.nodes.iter()
+        let random_seq = self
+            .topology
+            .nodes
+            .iter()
             .skip(rand::random::<usize>() % 10)
             .take(macro_def.pattern.len())
             .map(|n| n.label.clone())
             .collect::<Vec<_>>();
         options.push(random_seq.join(", "));
-        
+
         options.dedup();
         options.shuffle(&mut rand::thread_rng());
-        
+
         Task {
             task_type: TaskType::Segment {
                 start: start.clone(),
@@ -498,7 +530,7 @@ impl MacroDiscoverySystem {
             operation: OperationType::Segment(macro_def.pattern.len(), false),
         }
     }
-    
+
     fn apply_macro_simulation(&self, macro_def: &Macro, start: &str) -> Vec<String> {
         // Simulate macro application for task generation
         match &macro_def.context {

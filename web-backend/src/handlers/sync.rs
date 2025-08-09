@@ -44,18 +44,18 @@ pub async fn register_device(
 ) -> AppResult<Json<RegisterDeviceResponse>> {
     let user_id = claims.sub;
     let mut conn = state.db_pool.acquire().await?;
-    
+
     // Check if device already registered
     let existing = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM registered_devices WHERE user_id = ? AND device_id = ?)"
+        "SELECT EXISTS(SELECT 1 FROM registered_devices WHERE user_id = ? AND device_id = ?)",
     )
     .bind(user_id.as_bytes().as_slice())
     .bind(&req.device_id)
     .fetch_one(&mut *conn)
     .await?;
-    
+
     let device_record_id = Uuid::new_v4();
-    
+
     if existing {
         // Update existing device
         sqlx::query(
@@ -63,7 +63,7 @@ pub async fn register_device(
              SET device_name = ?, device_type = ?, platform = ?, 
                  platform_version = ?, app_version = ?, push_token = ?,
                  last_seen_at = ?, active = true
-             WHERE user_id = ? AND device_id = ?"
+             WHERE user_id = ? AND device_id = ?",
         )
         .bind(&req.device_name)
         .bind(&req.device_type)
@@ -82,7 +82,7 @@ pub async fn register_device(
             "INSERT INTO registered_devices 
              (id, user_id, device_id, device_name, device_type, platform, 
               platform_version, app_version, push_token, last_seen_at, active, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?)"
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, ?)",
         )
         .bind(device_record_id.as_bytes().as_slice())
         .bind(user_id.as_bytes().as_slice())
@@ -98,10 +98,10 @@ pub async fn register_device(
         .execute(&mut *conn)
         .await?;
     }
-    
+
     // Generate sync token
     let sync_token = generate_sync_token(user_id, &req.device_id);
-    
+
     // Create or update sync metadata
     let sync_metadata_id = Uuid::new_v4();
     sqlx::query(
@@ -123,16 +123,16 @@ pub async fn register_device(
     .bind(Utc::now())
     .execute(&mut *conn)
     .await?;
-    
+
     // Check if initial sync is needed
     let has_data = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM sessions WHERE learner_id IN 
-         (SELECT id FROM learners WHERE user_id = ?))"
+         (SELECT id FROM learners WHERE user_id = ?))",
     )
     .bind(user_id.as_bytes().as_slice())
     .fetch_one(&mut *conn)
     .await?;
-    
+
     Ok(Json(RegisterDeviceResponse {
         device_id: req.device_id,
         sync_token,
@@ -150,17 +150,17 @@ pub async fn sync_push(
 ) -> AppResult<Json<SyncPushResponse>> {
     let user_id = claims.sub;
     let mut conn = state.db_pool.acquire().await?;
-    
+
     // Verify device
     verify_device(&mut conn, user_id, &req.device_id).await?;
-    
+
     // Start transaction
     let mut tx = state.db_pool.begin().await?;
-    
+
     let mut accepted = 0;
     let mut rejected = 0;
     let mut conflicts = Vec::new();
-    
+
     for change in &req.changes {
         match process_sync_change(&mut tx, user_id, &req.device_id, change).await {
             Ok(()) => accepted += 1,
@@ -171,13 +171,13 @@ pub async fn sync_push(
             Err(_) => rejected += 1,
         }
     }
-    
+
     // Update sync version
     let new_version = req.sync_version + 1;
     sqlx::query(
         "UPDATE sync_metadata 
          SET sync_version = ?, last_sync_at = ?, updated_at = ?
-         WHERE user_id = ? AND device_id = ?"
+         WHERE user_id = ? AND device_id = ?",
     )
     .bind(new_version)
     .bind(Utc::now())
@@ -186,13 +186,13 @@ pub async fn sync_push(
     .bind(&req.device_id)
     .execute(&mut *tx)
     .await?;
-    
+
     // Commit transaction
     tx.commit().await?;
-    
+
     // Generate new sync token
     let sync_token = generate_sync_token(user_id, &req.device_id);
-    
+
     Ok(Json(SyncPushResponse {
         sync_token,
         new_version,
@@ -210,34 +210,34 @@ pub async fn sync_pull(
 ) -> AppResult<Json<SyncPullResponse>> {
     let user_id = claims.sub;
     let mut conn = state.db_pool.acquire().await?;
-    
+
     // Verify device
     verify_device(&mut conn, user_id, &req.device_id).await?;
-    
+
     // Get current sync version
     let current_version = sqlx::query_scalar::<_, i32>(
-        "SELECT sync_version FROM sync_metadata WHERE user_id = ? AND device_id = ?"
+        "SELECT sync_version FROM sync_metadata WHERE user_id = ? AND device_id = ?",
     )
     .bind(user_id.as_bytes().as_slice())
     .bind(&req.device_id)
     .fetch_optional(&mut *conn)
     .await?
     .unwrap_or(0);
-    
+
     let from_version = req.sync_version.unwrap_or(0);
-    
+
     // Get changes since last sync
     let changes = get_changes_since_version(&mut conn, user_id, from_version).await?;
-    
+
     // Get deleted entities
     let deleted_entities = get_deleted_entities_since(&mut conn, user_id, from_version).await?;
-    
+
     // Generate sync token
     let sync_token = generate_sync_token(user_id, &req.device_id);
-    
+
     // Check if there are more changes
     let has_more = changes.len() >= 100; // Paginate large syncs
-    
+
     Ok(Json(SyncPullResponse {
         sync_token,
         changes,
@@ -254,47 +254,47 @@ pub async fn sync_status(
 ) -> AppResult<Json<SyncStatusResponse>> {
     let user_id = claims.sub;
     let mut conn = state.db_pool.acquire().await?;
-    
+
     // Get last sync info
     let last_sync = sqlx::query_as::<_, SyncMetadata>(
-        "SELECT * FROM sync_metadata WHERE user_id = ? ORDER BY last_sync_at DESC LIMIT 1"
+        "SELECT * FROM sync_metadata WHERE user_id = ? ORDER BY last_sync_at DESC LIMIT 1",
     )
     .bind(user_id.as_bytes().as_slice())
     .fetch_optional(&mut *conn)
     .await?;
-    
+
     // Count pending changes
     let pending_changes = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM sync_queue WHERE user_id = ? AND NOT synced"
+        "SELECT COUNT(*) FROM sync_queue WHERE user_id = ? AND NOT synced",
     )
     .bind(user_id.as_bytes().as_slice())
     .fetch_one(&mut *conn)
     .await? as i32;
-    
+
     // Count conflicts
     let conflicts = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM sync_conflicts WHERE user_id = ? AND NOT resolved"
+        "SELECT COUNT(*) FROM sync_conflicts WHERE user_id = ? AND NOT resolved",
     )
     .bind(user_id.as_bytes().as_slice())
     .fetch_one(&mut *conn)
     .await? as i32;
-    
+
     // Check if sync in progress
     let sync_in_progress = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE user_id = ? AND synced = false)"
+        "SELECT EXISTS(SELECT 1 FROM sync_queue WHERE user_id = ? AND synced = false)",
     )
     .bind(user_id.as_bytes().as_slice())
     .fetch_one(&mut *conn)
     .await?;
-    
+
     // Get connected devices
     let devices = sqlx::query_as::<_, RegisteredDevice>(
-        "SELECT * FROM registered_devices WHERE user_id = ? AND active = true"
+        "SELECT * FROM registered_devices WHERE user_id = ? AND active = true",
     )
     .bind(user_id.as_bytes().as_slice())
     .fetch_all(&mut *conn)
     .await?;
-    
+
     let connected_devices: Vec<DeviceInfo> = devices
         .into_iter()
         .map(|d| DeviceInfo {
@@ -305,14 +305,14 @@ pub async fn sync_status(
             is_current: false, // TODO: Mark current device
         })
         .collect();
-    
+
     // Determine cloud provider based on platform
     let cloud_provider = if let Some(ref sync) = last_sync {
         CloudProvider::from_platform(&sync.platform.clone().unwrap_or_default())
     } else {
         CloudProvider::Local
     };
-    
+
     Ok(Json(SyncStatusResponse {
         last_sync_at: last_sync.map(|s| s.last_sync_at),
         pending_changes,
@@ -334,17 +334,17 @@ pub async fn resolve_conflict(
 ) -> AppResult<Json<ResolveConflictResponse>> {
     let user_id = claims.sub;
     let mut conn = state.db_pool.acquire().await?;
-    
+
     // Get conflict
     let conflict = sqlx::query_as::<_, SyncConflict>(
-        "SELECT * FROM sync_conflicts WHERE id = ? AND user_id = ?"
+        "SELECT * FROM sync_conflicts WHERE id = ? AND user_id = ?",
     )
     .bind(conflict_id.as_bytes().as_slice())
     .bind(user_id.as_bytes().as_slice())
     .fetch_optional(&mut *conn)
     .await?
     .ok_or(AppError::NotFound("Conflict not found".to_string()))?;
-    
+
     // Determine final data based on resolution strategy
     let final_data = match req.resolution {
         ConflictResolution::LocalWins => serde_json::from_str(&conflict.local_data)?,
@@ -359,18 +359,17 @@ pub async fn resolve_conflict(
                 merge_sync_data(&local, &remote, &conflict.entity_type)
             }
         }
-        ConflictResolution::Manual => {
-            req.merged_data
-                .ok_or(AppError::BadRequest("Merged data required for manual resolution".to_string()))?
-        }
+        ConflictResolution::Manual => req.merged_data.ok_or(AppError::BadRequest(
+            "Merged data required for manual resolution".to_string(),
+        ))?,
     };
-    
+
     // Update conflict as resolved
     sqlx::query(
         "UPDATE sync_conflicts 
          SET resolved = true, resolved_at = ?, resolved_by = 'user', 
              resolution_strategy = ?, resolved_data = ?
-         WHERE id = ?"
+         WHERE id = ?",
     )
     .bind(Utc::now())
     .bind(format!("{:?}", req.resolution))
@@ -378,18 +377,25 @@ pub async fn resolve_conflict(
     .bind(conflict_id.as_bytes().as_slice())
     .execute(&mut *conn)
     .await?;
-    
+
     // Apply resolved data
-    apply_resolved_data(&mut conn, user_id, &conflict.entity_type, &conflict.entity_id, &final_data).await?;
-    
+    apply_resolved_data(
+        &mut conn,
+        user_id,
+        &conflict.entity_type,
+        &conflict.entity_id,
+        &final_data,
+    )
+    .await?;
+
     // Get new sync version
     let sync_version = sqlx::query_scalar::<_, i32>(
-        "SELECT MAX(sync_version) FROM sync_metadata WHERE user_id = ?"
+        "SELECT MAX(sync_version) FROM sync_metadata WHERE user_id = ?",
     )
     .bind(user_id.as_bytes().as_slice())
     .fetch_one(&mut *conn)
     .await?;
-    
+
     Ok(Json(ResolveConflictResponse {
         resolved: true,
         final_data,
@@ -400,7 +406,7 @@ pub async fn resolve_conflict(
 // ============= Helper Functions =============
 
 fn generate_sync_token(user_id: Uuid, device_id: &str) -> String {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(user_id.as_bytes());
     hasher.update(device_id);
@@ -420,11 +426,11 @@ async fn verify_device(
     .bind(device_id)
     .fetch_one(conn)
     .await?;
-    
+
     if !exists {
         return Err(AppError::Forbidden);
     }
-    
+
     Ok(())
 }
 
@@ -442,7 +448,7 @@ async fn process_sync_change(
 ) -> Result<(), SyncError> {
     // Check for conflicts
     let existing_version = get_entity_version(tx, &change.entity_type, &change.entity_id).await;
-    
+
     if let Some(existing) = existing_version {
         if existing >= change.version {
             // Conflict detected
@@ -450,7 +456,7 @@ async fn process_sync_change(
             sqlx::query(
                 "INSERT INTO sync_conflicts 
                  (id, user_id, entity_type, entity_id, local_data, remote_data, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)"
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(conflict_id.as_bytes().as_slice())
             .bind(user_id.as_bytes().as_slice())
@@ -462,7 +468,7 @@ async fn process_sync_change(
             .execute(&mut **tx)
             .await
             .ok();
-            
+
             return Err(SyncError::Conflict(SyncConflictInfo {
                 entity_type: change.entity_type.clone(),
                 entity_id: change.entity_id.clone(),
@@ -473,19 +479,27 @@ async fn process_sync_change(
             }));
         }
     }
-    
+
     // Apply change
     match change.operation {
         SyncOperation::Create | SyncOperation::Update => {
-            apply_entity_change(tx, user_id, &change.entity_type, &change.entity_id, &change.data).await
-                .map_err(|e| SyncError::Invalid(e.to_string()))?;
+            apply_entity_change(
+                tx,
+                user_id,
+                &change.entity_type,
+                &change.entity_id,
+                &change.data,
+            )
+            .await
+            .map_err(|e| SyncError::Invalid(e.to_string()))?;
         }
         SyncOperation::Delete => {
-            delete_entity(tx, user_id, &change.entity_type, &change.entity_id).await
+            delete_entity(tx, user_id, &change.entity_type, &change.entity_id)
+                .await
                 .map_err(|e| SyncError::Invalid(e.to_string()))?;
         }
     }
-    
+
     // Record in sync queue
     let queue_id = Uuid::new_v4();
     sqlx::query(
@@ -506,7 +520,7 @@ async fn process_sync_change(
     .execute(&mut **tx)
     .await
     .ok();
-    
+
     Ok(())
 }
 
@@ -519,7 +533,7 @@ async fn get_entity_version(
     sqlx::query_scalar::<_, i32>(
         "SELECT sync_version FROM sync_queue 
          WHERE entity_type = ? AND entity_id = ?
-         ORDER BY sync_version DESC LIMIT 1"
+         ORDER BY sync_version DESC LIMIT 1",
     )
     .bind(entity_type)
     .bind(entity_id)
@@ -550,7 +564,7 @@ async fn apply_entity_change(
         }
         _ => {}
     }
-    
+
     Ok(())
 }
 
@@ -570,7 +584,7 @@ async fn delete_entity(
         }
         _ => {}
     }
-    
+
     Ok(())
 }
 
@@ -585,13 +599,13 @@ async fn get_changes_since_version(
          FROM sync_queue 
          WHERE user_id = ? AND sync_version > ?
          ORDER BY sync_version
-         LIMIT 100"
+         LIMIT 100",
     )
     .bind(user_id.as_bytes().as_slice())
     .bind(from_version)
     .fetch_all(conn)
     .await?;
-    
+
     let changes = rows
         .into_iter()
         .map(|row| SyncChange {
@@ -608,7 +622,7 @@ async fn get_changes_since_version(
             version: row.sync_version,
         })
         .collect();
-    
+
     Ok(changes)
 }
 
@@ -622,13 +636,13 @@ async fn get_deleted_entities_since(
         "SELECT entity_type, entity_id, created_at
          FROM sync_queue 
          WHERE user_id = ? AND operation = 'delete' AND sync_version > ?
-         ORDER BY sync_version"
+         ORDER BY sync_version",
     )
     .bind(user_id.as_bytes().as_slice())
     .bind(from_version)
     .fetch_all(conn)
     .await?;
-    
+
     let deleted = rows
         .into_iter()
         .map(|row| DeletedEntity {
@@ -637,7 +651,7 @@ async fn get_deleted_entities_since(
             deleted_at: row.created_at,
         })
         .collect();
-    
+
     Ok(deleted)
 }
 
@@ -650,6 +664,6 @@ async fn apply_resolved_data(
 ) -> AppResult<()> {
     // Apply the resolved data to the appropriate entity
     // This is simplified - implement based on your entity types
-    
+
     Ok(())
 }

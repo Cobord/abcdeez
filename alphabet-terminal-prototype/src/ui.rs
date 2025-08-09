@@ -1,9 +1,9 @@
 use crossterm::{
+    cursor,
     event::{self, Event, KeyCode, KeyEvent},
     execute,
     style::{Color, Print, ResetColor, SetForegroundColor},
     terminal::{self, Clear, ClearType},
-    cursor,
 };
 use std::io::{self, Write};
 use std::time::Duration;
@@ -18,7 +18,10 @@ pub enum AppState {
     SelectTopology,
     Training,
     ViewMetrics,
-    TaskFeedback { correct: bool, correct_answer: String },
+    TaskFeedback {
+        correct: bool,
+        correct_answer: String,
+    },
 }
 
 pub struct TerminalApp {
@@ -55,9 +58,10 @@ impl TerminalApp {
                 AppState::SelectTopology => self.render_topology_selection(&mut stdout)?,
                 AppState::Training => self.render_training(&mut stdout)?,
                 AppState::ViewMetrics => self.render_metrics(&mut stdout)?,
-                AppState::TaskFeedback { correct, correct_answer } => {
-                    self.render_feedback(&mut stdout, *correct, correct_answer)?
-                }
+                AppState::TaskFeedback {
+                    correct,
+                    correct_answer,
+                } => self.render_feedback(&mut stdout, *correct, correct_answer)?,
             }
 
             stdout.flush()?;
@@ -123,7 +127,7 @@ impl TerminalApp {
         if let Some(session) = &self.session {
             if let Some(task) = &session.current_task {
                 let stats = session.get_statistics();
-                
+
                 execute!(
                     stdout,
                     SetForegroundColor(Color::Cyan),
@@ -131,8 +135,11 @@ impl TerminalApp {
                     Print("═══════════════════════════════════════════════════\n\n"),
                     ResetColor,
                     SetForegroundColor(Color::Green),
-                    Print(format!("Progress: {} tasks completed | Accuracy: {:.1}%\n\n", 
-                        stats.total_tasks, stats.accuracy * 100.0)),
+                    Print(format!(
+                        "Progress: {} tasks completed | Accuracy: {:.1}%\n\n",
+                        stats.total_tasks,
+                        stats.accuracy * 100.0
+                    )),
                     ResetColor,
                     SetForegroundColor(Color::Yellow),
                     Print("Current Task:\n"),
@@ -144,10 +151,7 @@ impl TerminalApp {
                 if !task.options.is_empty() {
                     execute!(stdout, Print("Options:\n"))?;
                     for (i, option) in task.options.iter().enumerate() {
-                        execute!(
-                            stdout,
-                            Print(format!("  [{}] {}\n", i + 1, option))
-                        )?;
+                        execute!(stdout, Print(format!("  [{}] {}\n", i + 1, option)))?;
                     }
                     execute!(stdout, Print("\n"))?;
                 }
@@ -171,7 +175,12 @@ impl TerminalApp {
         Ok(())
     }
 
-    fn render_feedback(&self, stdout: &mut io::Stdout, correct: bool, correct_answer: &str) -> io::Result<()> {
+    fn render_feedback(
+        &self,
+        stdout: &mut io::Stdout,
+        correct: bool,
+        correct_answer: &str,
+    ) -> io::Result<()> {
         execute!(
             stdout,
             SetForegroundColor(Color::Cyan),
@@ -197,10 +206,7 @@ impl TerminalApp {
             )?;
         }
 
-        execute!(
-            stdout,
-            Print("Press any key to continue...")
-        )
+        execute!(stdout, Print("Press any key to continue..."))
     }
 
     fn render_metrics(&self, stdout: &mut io::Stdout) -> io::Result<()> {
@@ -222,10 +228,22 @@ impl TerminalApp {
                 Print("Performance Indicators:\n"),
                 ResetColor,
                 Print("──────────────────────────────────────────────────\n"),
-                Print(format!("Bidirectionality Index: {:.3}\n", metrics.bidirectionality_index)),
-                Print(format!("Symbolic Distance Slope: {:.3}\n", metrics.symbolic_distance_slope)),
-                Print(format!("Chunk Boundary Penalty: {:.3}\n", metrics.chunk_boundary_penalty)),
-                Print(format!("Average Memory Strength: {:.2}%\n\n", metrics.avg_memory_strength * 100.0)),
+                Print(format!(
+                    "Bidirectionality Index: {:.3}\n",
+                    metrics.bidirectionality_index
+                )),
+                Print(format!(
+                    "Symbolic Distance Slope: {:.3}\n",
+                    metrics.symbolic_distance_slope
+                )),
+                Print(format!(
+                    "Chunk Boundary Penalty: {:.3}\n",
+                    metrics.chunk_boundary_penalty
+                )),
+                Print(format!(
+                    "Average Memory Strength: {:.2}%\n\n",
+                    metrics.avg_memory_strength * 100.0
+                )),
                 SetForegroundColor(Color::Yellow),
                 Print("Operation Proficiencies:\n"),
                 ResetColor,
@@ -248,10 +266,7 @@ impl TerminalApp {
             )?;
         }
 
-        execute!(
-            stdout,
-            Print("\n[B] Back to Main Menu\n")
-        )
+        execute!(stdout, Print("\n[B] Back to Main Menu\n"))
     }
 
     fn handle_input(&mut self, key: KeyEvent) -> io::Result<bool> {
@@ -338,11 +353,11 @@ impl TerminalApp {
         let learner_model = LearnerModel::new(self.learner_name.clone(), &topology);
         let scheduler = AdaptiveScheduler::new(learner_model, topology.clone());
         let session = TaskSession::new(topology.clone());
-        
+
         self.topology = Some(topology);
         self.scheduler = Some(scheduler);
         self.session = Some(session);
-        
+
         self.start_next_task();
     }
 
@@ -359,7 +374,7 @@ impl TerminalApp {
         if let (Some(scheduler), Some(session)) = (&mut self.scheduler, &mut self.session) {
             let response = session.submit_answer(self.current_input.clone());
             scheduler.update_model(&response.task, response.correct, response.response_time_ms);
-            
+
             self.state = AppState::TaskFeedback {
                 correct: response.correct,
                 correct_answer: response.task.correct_answer.clone(),

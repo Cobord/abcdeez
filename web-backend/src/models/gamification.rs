@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc, NaiveDate};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::str::FromStr;
@@ -31,7 +31,7 @@ pub enum Rarity {
 
 impl FromStr for Rarity {
     type Err = String;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "common" => Ok(Rarity::Common),
@@ -315,36 +315,125 @@ impl UserGamification {
         } else {
             (1..self.level).map(|l| 100 + (l - 1) * 50).sum()
         };
-        
+
         let xp_in_current_level = self.experience - xp_for_current;
         let xp_needed = self.xp_for_next_level();
-        
+
         (xp_in_current_level as f32 / xp_needed as f32) * 100.0
     }
 }
 
 // Default achievements that should be created for new users
-pub fn get_default_achievements() -> Vec<(String, String, String, AchievementCategory, Rarity, i32)> {
+pub fn get_default_achievements() -> Vec<(String, String, String, AchievementCategory, Rarity, i32)>
+{
     vec![
         // Streak achievements
-        ("first_day".to_string(), "First Day".to_string(), "Complete your first day of practice".to_string(), AchievementCategory::Streak, Rarity::Common, 10),
-        ("week_warrior".to_string(), "Week Warrior".to_string(), "Maintain a 7-day streak".to_string(), AchievementCategory::Streak, Rarity::Uncommon, 50),
-        ("month_master".to_string(), "Month Master".to_string(), "Maintain a 30-day streak".to_string(), AchievementCategory::Streak, Rarity::Rare, 200),
-        ("century_streak".to_string(), "Century Streak".to_string(), "Maintain a 100-day streak".to_string(), AchievementCategory::Streak, Rarity::Epic, 1000),
-        
+        (
+            "first_day".to_string(),
+            "First Day".to_string(),
+            "Complete your first day of practice".to_string(),
+            AchievementCategory::Streak,
+            Rarity::Common,
+            10,
+        ),
+        (
+            "week_warrior".to_string(),
+            "Week Warrior".to_string(),
+            "Maintain a 7-day streak".to_string(),
+            AchievementCategory::Streak,
+            Rarity::Uncommon,
+            50,
+        ),
+        (
+            "month_master".to_string(),
+            "Month Master".to_string(),
+            "Maintain a 30-day streak".to_string(),
+            AchievementCategory::Streak,
+            Rarity::Rare,
+            200,
+        ),
+        (
+            "century_streak".to_string(),
+            "Century Streak".to_string(),
+            "Maintain a 100-day streak".to_string(),
+            AchievementCategory::Streak,
+            Rarity::Epic,
+            1000,
+        ),
         // Accuracy achievements
-        ("sharpshooter".to_string(), "Sharpshooter".to_string(), "Achieve 90% accuracy in a session".to_string(), AchievementCategory::Accuracy, Rarity::Common, 20),
-        ("perfectionist".to_string(), "Perfectionist".to_string(), "Complete 20 tasks without a mistake".to_string(), AchievementCategory::Accuracy, Rarity::Uncommon, 75),
-        ("flawless_victory".to_string(), "Flawless Victory".to_string(), "100% accuracy with 50+ tasks".to_string(), AchievementCategory::Accuracy, Rarity::Rare, 300),
-        
+        (
+            "sharpshooter".to_string(),
+            "Sharpshooter".to_string(),
+            "Achieve 90% accuracy in a session".to_string(),
+            AchievementCategory::Accuracy,
+            Rarity::Common,
+            20,
+        ),
+        (
+            "perfectionist".to_string(),
+            "Perfectionist".to_string(),
+            "Complete 20 tasks without a mistake".to_string(),
+            AchievementCategory::Accuracy,
+            Rarity::Uncommon,
+            75,
+        ),
+        (
+            "flawless_victory".to_string(),
+            "Flawless Victory".to_string(),
+            "100% accuracy with 50+ tasks".to_string(),
+            AchievementCategory::Accuracy,
+            Rarity::Rare,
+            300,
+        ),
         // Volume achievements
-        ("getting_started".to_string(), "Getting Started".to_string(), "Complete 10 tasks".to_string(), AchievementCategory::Volume, Rarity::Common, 10),
-        ("dedicated_learner".to_string(), "Dedicated Learner".to_string(), "Complete 100 tasks".to_string(), AchievementCategory::Volume, Rarity::Uncommon, 50),
-        ("task_master".to_string(), "Task Master".to_string(), "Complete 1000 tasks".to_string(), AchievementCategory::Volume, Rarity::Rare, 250),
-        ("legendary_scholar".to_string(), "Legendary Scholar".to_string(), "Complete 10000 tasks".to_string(), AchievementCategory::Volume, Rarity::Legendary, 5000),
-        
+        (
+            "getting_started".to_string(),
+            "Getting Started".to_string(),
+            "Complete 10 tasks".to_string(),
+            AchievementCategory::Volume,
+            Rarity::Common,
+            10,
+        ),
+        (
+            "dedicated_learner".to_string(),
+            "Dedicated Learner".to_string(),
+            "Complete 100 tasks".to_string(),
+            AchievementCategory::Volume,
+            Rarity::Uncommon,
+            50,
+        ),
+        (
+            "task_master".to_string(),
+            "Task Master".to_string(),
+            "Complete 1000 tasks".to_string(),
+            AchievementCategory::Volume,
+            Rarity::Rare,
+            250,
+        ),
+        (
+            "legendary_scholar".to_string(),
+            "Legendary Scholar".to_string(),
+            "Complete 10000 tasks".to_string(),
+            AchievementCategory::Volume,
+            Rarity::Legendary,
+            5000,
+        ),
         // Speed achievements
-        ("quick_thinker".to_string(), "Quick Thinker".to_string(), "Average response time under 2 seconds".to_string(), AchievementCategory::Speed, Rarity::Common, 30),
-        ("lightning_fast".to_string(), "Lightning Fast".to_string(), "Average response time under 1 second".to_string(), AchievementCategory::Speed, Rarity::Rare, 150),
+        (
+            "quick_thinker".to_string(),
+            "Quick Thinker".to_string(),
+            "Average response time under 2 seconds".to_string(),
+            AchievementCategory::Speed,
+            Rarity::Common,
+            30,
+        ),
+        (
+            "lightning_fast".to_string(),
+            "Lightning Fast".to_string(),
+            "Average response time under 1 second".to_string(),
+            AchievementCategory::Speed,
+            Rarity::Rare,
+            150,
+        ),
     ]
 }
