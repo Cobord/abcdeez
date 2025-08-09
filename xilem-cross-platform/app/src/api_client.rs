@@ -377,28 +377,12 @@ impl ApiClientTrait for MockApiClient {
 
     async fn create_session(&self, request: CreateSessionRequest) -> Result<Session> {
         info!("Mock creating session for learner: {}", request.learner_id);
-        Ok(Session {
-            id: Uuid::new_v4().to_string(),
-            learner_id: request.learner_id,
-            topology: None, // Will be populated by UI
-            responses: Vec::new(),
-            status: SessionStatus::Active,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        })
+        Ok(Session::new(Uuid::new_v4().to_string(), request.learner_id))
     }
 
     async fn get_session(&self, session_id: &str) -> Result<Session> {
         info!("Mock getting session: {}", session_id);
-        Ok(Session {
-            id: session_id.to_string(),
-            learner_id: self.user_id.clone(),
-            topology: None,
-            responses: Vec::new(),
-            status: SessionStatus::Active,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-        })
+        Ok(Session::new(session_id.to_string(), self.user_id.clone()))
     }
 
     async fn complete_session(&self, session_id: &str) -> Result<()> {
