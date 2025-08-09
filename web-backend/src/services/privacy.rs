@@ -1,5 +1,11 @@
 use rand::{thread_rng, Rng};
-use rand_distr::{Distribution, Laplace, Normal};
+use rand_distr::{Distribution, Normal};
+
+/// Simple Laplace distribution implementation
+fn sample_laplace(rng: &mut impl Rng, location: f64, scale: f64) -> f64 {
+    let u = rng.gen::<f64>() - 0.5;
+    location - scale * u.signum() * (1.0 - 2.0 * u.abs()).ln()
+}
 
 #[derive(Debug, Clone, Copy)]
 pub enum Mechanism {
@@ -63,9 +69,8 @@ impl DifferentialPrivacyEngine {
                     return f64::NAN;
                 }
                 let scale = (sensitivity.max(f64::EPSILON)) / epsilon_cost.max(f64::EPSILON);
-                let dist = Laplace::new(0.0, scale).unwrap();
                 let mut rng = thread_rng();
-                true_value + dist.sample(&mut rng)
+                true_value + sample_laplace(&mut rng, 0.0, scale)
             }
             Mechanism::Gaussian { sensitivity, delta } => {
                 if !self.budget.spend(epsilon_cost, delta) {

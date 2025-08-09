@@ -32,8 +32,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::Config;
 use crate::handlers::{
-    admin, analytics, auth, business, dashboard, experiment, gamification, learner, migration,
-    music, session, sync, task_simple,
+    admin, analytics, audit_retention, auth, business, dashboard, experiment, gamification, 
+    learner, migration, music, session, sync, task_simple,
 };
 use crate::middleware::{
     audit_middleware, auth_middleware, content_validation, correlation_id_middleware, ip_blocking,
@@ -276,6 +276,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/admin/migrations/preview/:version",
             get(migration::preview_rollback),
+        )
+        // Audit retention management routes (admin only)
+        .route(
+            "/admin/audit/retention/statistics",
+            get(audit_retention::get_retention_statistics),
+        )
+        .route(
+            "/admin/audit/retention/cleanup",
+            post(audit_retention::apply_retention_policies),
+        )
+        .route(
+            "/admin/audit/retention/compliance-report",
+            get(audit_retention::generate_compliance_report),
+        )
+        .route(
+            "/admin/audit/retention/policies",
+            get(audit_retention::get_retention_policies),
+        )
+        .route(
+            "/admin/audit/retention/policies",
+            put(audit_retention::update_retention_policy),
+        )
+        .route(
+            "/admin/audit/retention/policies/:name",
+            delete(audit_retention::delete_retention_policy),
+        )
+        .route(
+            "/admin/audit/trail",
+            get(audit_retention::get_audit_trail_with_retention),
         )
         // Apply admin-only middleware to admin routes
         .layer(axum_middleware::from_fn(require_admin))

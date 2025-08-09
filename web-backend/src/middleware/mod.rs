@@ -8,6 +8,7 @@ use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::time::Instant;
+use tracing as log;
 use uuid::Uuid;
 
 use crate::{
@@ -40,14 +41,13 @@ pub async fn correlation_id_middleware(mut request: Request, next: Next) -> Resp
         .extensions_mut()
         .insert(CorrelationId(correlation_id.clone()));
 
-    // Create a tracing span with the correlation ID
-    let _span = tracing::info_span!(
-        "request",
+    // Log request with correlation ID
+    log::debug!(
         correlation_id = %correlation_id,
         method = %request.method(),
-        uri = %request.uri()
-    )
-    .entered();
+        uri = %request.uri(),
+        "Processing request"
+    );
 
     // Process the request
     let mut response = next.run(request).await;
@@ -115,7 +115,7 @@ pub async fn auth_middleware(
         &validation,
     )
     .map_err(|e| {
-        tracing::warn!("Token validation failed: {:?}", e);
+        log::warn!("Token validation failed: {:?}", e);
         AppError::Unauthorized
     })?;
 
@@ -129,7 +129,7 @@ pub async fn auth_middleware(
             .await
         {
             if blacklisted.parse::<i64>().unwrap_or(0) > 0 {
-                tracing::warn!("Attempted use of blacklisted session: {}", session_id);
+                log::warn!("Attempted use of blacklisted session: {}", session_id);
                 return Err(AppError::Unauthorized);
             }
         }
@@ -153,7 +153,7 @@ pub async fn auth_middleware(
     .unwrap_or(false);
 
     if !user_active {
-        tracing::warn!(
+        log::warn!(
             "Attempted access with disabled/deleted user: {}",
             token_data.claims.sub
         );
@@ -200,7 +200,7 @@ pub async fn require_researcher(
     next: Next,
 ) -> Result<Response, AppError> {
     if claims.role != "researcher" && claims.role != "admin" {
-        tracing::warn!(
+        log::warn!(
             "Researcher access denied for user: {} with role: {}",
             claims.username,
             claims.role
@@ -217,7 +217,7 @@ pub async fn require_analytics_permission(
     next: Next,
 ) -> Result<Response, AppError> {
     if !claims.permissions.contains(&"analytics_access".to_string()) && claims.role != "admin" {
-        tracing::warn!(
+        log::warn!(
             "Analytics access denied for user: {} with permissions: {:?}",
             claims.username,
             claims.permissions
@@ -234,7 +234,7 @@ pub async fn require_admin(
     next: Next,
 ) -> Result<Response, AppError> {
     if claims.role != "admin" {
-        tracing::warn!(
+        log::warn!(
             "Admin access denied for user: {} with role: {}",
             claims.username,
             claims.role
@@ -343,7 +343,7 @@ pub async fn rate_limit(
     // Global rate limit: max requests per minute across all users
     let global_limit = (state.config.rate_limit_requests * 100) as i64; // 100x individual limit
     if global_count > global_limit {
-        tracing::warn!("Global rate limit exceeded: {} requests", global_count);
+        log::warn!("Global rate limit exceeded: {} requests", global_count);
 
         // Increment DoS counter for monitoring
         let dos_key = "dos_events:global_rate_limit";
@@ -389,7 +389,7 @@ pub async fn rate_limit(
     // Per-IP global limit (prevents single IP from consuming all resources)
     let ip_global_limit = (state.config.rate_limit_requests * 5) as i64; // 5x individual limit
     if ip_global_count > ip_global_limit {
-        tracing::warn!(
+        log::warn!(
             "IP global rate limit exceeded for {}: {} requests",
             client_ip,
             ip_global_count
@@ -431,7 +431,7 @@ pub async fn rate_limit(
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(0);
     if blocked > 0 {
-        tracing::warn!("Blocked request from auto-blocked IP: {}", client_ip);
+        log::warn!("Blocked request from auto-blocked IP: {}", client_ip);
         return Err(AppError::Forbidden);
     }
 
@@ -650,7 +650,7 @@ pub async fn ip_blocking(
         .query_async::<String>(&mut conn)
         .await
     {
-        tracing::warn!("Blocked request from IP: {}", ip);
+        log::warn!("Blocked request from IP: {}", ip);
         return Err(AppError::Forbidden);
     }
 
@@ -674,7 +674,7 @@ pub async fn ip_blocking(
             .query_async::<String>(&mut conn)
             .await;
 
-        tracing::warn!("Auto-blocked IP due to error rate: {}", ip);
+        log::warn!("Auto-blocked IP due to error rate: {}", ip);
         return Err(AppError::Forbidden);
     }
 
@@ -789,7 +789,7 @@ pub async fn audit_middleware(
     // Enhanced logging with correlation ID
     if let Some(ref corr_id) = correlation_id {
         if status.is_client_error() || status.is_server_error() {
-            tracing::error!(
+            log::error!(
                 correlation_id = %corr_id,
                 method = %method,
                 path = %path,
@@ -798,7 +798,7 @@ pub async fn audit_middleware(
                 "Request failed"
             );
         } else {
-            tracing::info!(
+            log::info!(
                 correlation_id = %corr_id,
                 method = %method,
                 path = %path,

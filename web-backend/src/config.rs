@@ -40,9 +40,12 @@ pub struct Config {
     pub github_redirect_uri: String,
 
     // TLS/SSL configuration
+    pub tls_enabled: bool,
     pub tls_domain: Option<String>,
     pub tls_use_letsencrypt: bool,
     pub tls_port: u16,
+    pub tls_cert_path: Option<String>,
+    pub tls_key_path: Option<String>,
     pub admin_email: Option<String>,
     pub server_name: String,
 }
@@ -230,6 +233,10 @@ impl Config {
             }),
 
             // TLS/SSL configuration
+            tls_enabled: env::var("TLS_ENABLED")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .expect("TLS_ENABLED must be a boolean"),
             tls_domain: env::var("TLS_DOMAIN").ok(),
             tls_use_letsencrypt: env::var("TLS_USE_LETSENCRYPT")
                 .unwrap_or_else(|_| "true".to_string())
@@ -239,6 +246,8 @@ impl Config {
                 .unwrap_or_else(|_| "443".to_string())
                 .parse()
                 .expect("TLS_PORT must be a number"),
+            tls_cert_path: env::var("TLS_CERT_PATH").ok(),
+            tls_key_path: env::var("TLS_KEY_PATH").ok(),
             admin_email: env::var("ADMIN_EMAIL").ok(),
             server_name: env::var("SERVER_NAME").unwrap_or_else(|_| "localhost".to_string()),
         })

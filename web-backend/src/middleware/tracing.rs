@@ -70,25 +70,38 @@ pub async fn tracing_middleware(mut request: Request, next: Next) -> Response {
             HeaderValue::from_str(&request_id).unwrap(),
         );
 
-        // Log response with metrics
-        let log_level = if status.is_success() {
-            tracing::Level::INFO
+        // Log response with metrics based on status
+        if status.is_success() {
+            tracing::info!(
+                method = %method,
+                path = %path,
+                status = %status,
+                duration_ms = duration.as_millis(),
+                trace_id = %trace_id,
+                request_id = %request_id,
+                "Request completed successfully"
+            );
         } else if status.is_client_error() {
-            tracing::Level::WARN
+            tracing::warn!(
+                method = %method,
+                path = %path,
+                status = %status,
+                duration_ms = duration.as_millis(),
+                trace_id = %trace_id,
+                request_id = %request_id,
+                "Request completed with client error"
+            );
         } else {
-            tracing::Level::ERROR
-        };
-
-        tracing::event!(
-            log_level,
-            method = %method,
-            path = %path,
-            status = %status,
-            duration_ms = duration.as_millis(),
-            trace_id = %trace_id,
-            request_id = %request_id,
-            "Request completed"
-        );
+            tracing::error!(
+                method = %method,
+                path = %path,
+                status = %status,
+                duration_ms = duration.as_millis(),
+                trace_id = %trace_id,
+                request_id = %request_id,
+                "Request completed with server error"
+            );
+        }
 
         // Record metrics
         crate::monitoring::global_metrics()

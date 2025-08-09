@@ -7,6 +7,7 @@ use tokio::time::interval;
 use uuid::Uuid;
 
 use crate::config::Config;
+use crate::services::audit::{AuditRetentionManager, AuditService};
 use crate::services::oauth_service::{CredentialState, OAuthProvider, OAuthService};
 use crate::services::{AnalyticsService, LearnerService};
 
@@ -18,6 +19,7 @@ pub enum JobType {
     DataCleanup,
     CacheWarmup,
     OAuthCredentialValidation,
+    AuditRetentionCleanup,
 }
 
 impl JobType {
@@ -29,6 +31,7 @@ impl JobType {
             "data_cleanup" => Some(JobType::DataCleanup),
             "cache_warmup" => Some(JobType::CacheWarmup),
             "oauth_credential_validation" => Some(JobType::OAuthCredentialValidation),
+            "audit_retention_cleanup" => Some(JobType::AuditRetentionCleanup),
             _ => None,
         }
     }
@@ -41,6 +44,7 @@ impl JobType {
             JobType::DataCleanup => "data_cleanup",
             JobType::CacheWarmup => "cache_warmup",
             JobType::OAuthCredentialValidation => "oauth_credential_validation",
+            JobType::AuditRetentionCleanup => "audit_retention_cleanup",
         }
     }
 }
@@ -163,6 +167,7 @@ impl BatchJobService {
             JobType::DataCleanup => self.cleanup_old_data().await,
             JobType::CacheWarmup => self.warmup_cache().await,
             JobType::OAuthCredentialValidation => self.validate_oauth_credentials().await,
+            JobType::AuditRetentionCleanup => self.audit_retention_cleanup(payload).await,
         }
     }
 
@@ -642,6 +647,117 @@ impl BatchJobService {
                 }
                 Err(e) => {
                     tracing::error!("Failed to schedule OAuth credential validation: {}", e);
+                }
+            }
+        }
+    }
+
+    /// Execute audit trail retention cleanup job
+    async fn audit_retention_cleanup(&self, payload: &str) -> Result<()> {
+        tracing::info!("Starting audit retention cleanup job");
+
+        // Parse configuration from payload (default to not dry run for scheduled jobs)
+        let dry_run = payload.contains("\"dry_run\":true");
+        
+        let retention_manager = AuditRetentionManager::new();
+        
+        match AuditService::apply_retention_policies(&self.db, &retention_manager, dry_run).await {
+            Ok(stats) => {
+                tracing::info!(
+                    "Audit retention cleanup completed - examined: {}, eligible: {}, deleted: {}, on_hold: {}",
+                    stats.total_records_examined,
+                    stats.records_eligible_for_deletion,
+                    stats.records_deleted,
+                    stats.records_on_legal_hold
+                );
+
+                // Cache the cleanup stats for admin dashboard
+                let stats_json = serde_json::to_string(&stats)?;
+                let mut conn = self.redis.clone();
+                crate::cache::cmd("SETEX")
+                    .arg("last_audit_cleanup_stats")
+                    .arg(86400) // 24 hours TTL
+                    .arg(stats_json)
+                    .query_async::<()>(&mut conn)
+                    .await?;
+
+                // If significant cleanup occurred, log a system audit event
+                if stats.records_deleted > 0 {
+                    AuditService::log_event(
+                        &self.db,
+                        None, // System operation
+                        "scheduled_audit_cleanup".to_string(),
+                        "system".to_string(),
+                        "audit_retention_job".to_string(),
+                        Some(serde_json::json!({
+                            "cleanup_stats": stats,
+                            "job_type": "scheduled",
+                            "policies_applied": stats.policies_applied.len()
+                        })),
+                        None,
+                        Some("BatchJobService".to_string()),
+                    )
+                    .await?;
+                }
+            }
+            Err(e) => {
+                tracing::error!("Audit retention cleanup job failed: {}", e);
+                
+                // Log the failure as a system audit event
+                AuditService::log_event(
+                    &self.db,
+                    None,
+                    "audit_cleanup_failure".to_string(),
+                    "system".to_string(),
+                    "audit_retention_job".to_string(),
+                    Some(serde_json::json!({
+                        "error": e.to_string(),
+                        "job_type": "scheduled",
+                        "dry_run": dry_run
+                    })),
+                    None,
+                    Some("BatchJobService".to_string()),
+                )
+                .await?;
+                
+                return Err(e);
+            }
+        }
+
+        tracing::info!("Audit retention cleanup job completed successfully");
+        Ok(())
+    }
+
+    /// Schedule daily audit retention cleanup job (typically run at night)
+    pub async fn schedule_audit_cleanup(&self, dry_run: bool) -> Result<Uuid> {
+        let job_id = Uuid::new_v4();
+        let payload = serde_json::json!({
+            "scheduled_at": chrono::Utc::now(),
+            "dry_run": dry_run,
+            "job_type": "audit_retention_cleanup"
+        }).to_string();
+
+        self.schedule_job(job_id, JobType::AuditRetentionCleanup, &payload).await?;
+        Ok(job_id)
+    }
+
+    /// Start background audit cleanup scheduler (run daily at 2 AM)
+    pub async fn start_audit_cleanup_scheduler(&self) {
+        let mut interval = tokio::time::interval(Duration::from_secs(24 * 3600)); // 24 hours
+
+        loop {
+            interval.tick().await;
+
+            // Check if it's around 2 AM local time for cleanup
+            let now = chrono::Utc::now();
+            if now.hour() == 2 {
+                match self.schedule_audit_cleanup(false).await {
+                    Ok(job_id) => {
+                        tracing::info!("Scheduled daily audit retention cleanup job: {}", job_id);
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to schedule audit retention cleanup: {}", e);
+                    }
                 }
             }
         }

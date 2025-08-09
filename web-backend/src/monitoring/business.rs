@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicF64, AtomicU64, Ordering},
+    atomic::{AtomicU64, Ordering},
     Arc,
 };
 use tokio::sync::RwLock;
@@ -15,13 +15,13 @@ pub struct BusinessMetricsCollector {
     pub daily_active_users: Arc<AtomicU64>,
     pub weekly_active_users: Arc<AtomicU64>,
     pub monthly_active_users: Arc<AtomicU64>,
-    pub user_retention_rate: Arc<AtomicF64>,
+    pub user_retention_rate: Arc<AtomicU64>, // Stored as percentage * 1000 for precision
 
-    // Learning effectiveness metrics
-    pub average_session_duration: Arc<AtomicF64>, // in minutes
-    pub task_completion_rate: Arc<AtomicF64>,
-    pub accuracy_rate: Arc<AtomicF64>,
-    pub learning_velocity: Arc<AtomicF64>, // tasks per hour
+    // Learning effectiveness metrics (stored as scaled integers)
+    pub average_session_duration: Arc<AtomicU64>, // in minutes * 1000
+    pub task_completion_rate: Arc<AtomicU64>, // percentage * 1000
+    pub accuracy_rate: Arc<AtomicU64>, // percentage * 1000
+    pub learning_velocity: Arc<AtomicU64>, // tasks per hour * 1000
 
     // Content engagement metrics
     pub tasks_attempted: Arc<AtomicU64>,
@@ -31,14 +31,14 @@ pub struct BusinessMetricsCollector {
 
     // Conversion and growth metrics
     pub new_user_signups: Arc<AtomicU64>,
-    pub trial_to_paid_conversion: Arc<AtomicF64>,
-    pub user_churn_rate: Arc<AtomicF64>,
-    pub customer_lifetime_value: Arc<AtomicF64>,
+    pub trial_to_paid_conversion: Arc<AtomicU64>, // percentage * 1000
+    pub user_churn_rate: Arc<AtomicU64>, // percentage * 1000
+    pub customer_lifetime_value: Arc<AtomicU64>, // dollars * 100
 
     // Platform health metrics
-    pub error_impact_score: Arc<AtomicF64>, // business impact of errors
-    pub feature_adoption_rate: Arc<AtomicF64>,
-    pub user_satisfaction_score: Arc<AtomicF64>,
+    pub error_impact_score: Arc<AtomicU64>, // business impact * 1000
+    pub feature_adoption_rate: Arc<AtomicU64>, // percentage * 1000
+    pub user_satisfaction_score: Arc<AtomicU64>, // score * 1000
 
     // Time-series data storage
     pub daily_snapshots: Arc<RwLock<Vec<DailyBusinessMetrics>>>,
@@ -124,22 +124,22 @@ impl BusinessMetricsCollector {
             daily_active_users: Arc::new(AtomicU64::new(0)),
             weekly_active_users: Arc::new(AtomicU64::new(0)),
             monthly_active_users: Arc::new(AtomicU64::new(0)),
-            user_retention_rate: Arc::new(AtomicF64::new(0.0)),
-            average_session_duration: Arc::new(AtomicF64::new(0.0)),
-            task_completion_rate: Arc::new(AtomicF64::new(0.0)),
-            accuracy_rate: Arc::new(AtomicF64::new(0.0)),
-            learning_velocity: Arc::new(AtomicF64::new(0.0)),
+            user_retention_rate: Arc::new(AtomicU64::new(0)),
+            average_session_duration: Arc::new(AtomicU64::new(0)),
+            task_completion_rate: Arc::new(AtomicU64::new(0)),
+            accuracy_rate: Arc::new(AtomicU64::new(0)),
+            learning_velocity: Arc::new(AtomicU64::new(0)),
             tasks_attempted: Arc::new(AtomicU64::new(0)),
             tasks_completed: Arc::new(AtomicU64::new(0)),
             hints_requested: Arc::new(AtomicU64::new(0)),
             interventions_triggered: Arc::new(AtomicU64::new(0)),
             new_user_signups: Arc::new(AtomicU64::new(0)),
-            trial_to_paid_conversion: Arc::new(AtomicF64::new(0.0)),
-            user_churn_rate: Arc::new(AtomicF64::new(0.0)),
-            customer_lifetime_value: Arc::new(AtomicF64::new(0.0)),
-            error_impact_score: Arc::new(AtomicF64::new(0.0)),
-            feature_adoption_rate: Arc::new(AtomicF64::new(0.0)),
-            user_satisfaction_score: Arc::new(AtomicF64::new(0.0)),
+            trial_to_paid_conversion: Arc::new(AtomicU64::new(0)),
+            user_churn_rate: Arc::new(AtomicU64::new(0)),
+            customer_lifetime_value: Arc::new(AtomicU64::new(0)),
+            error_impact_score: Arc::new(AtomicU64::new(0)),
+            feature_adoption_rate: Arc::new(AtomicU64::new(0)),
+            user_satisfaction_score: Arc::new(AtomicU64::new(0)),
             daily_snapshots: Arc::new(RwLock::new(Vec::new())),
             user_journey_data: Arc::new(RwLock::new(HashMap::new())),
         }

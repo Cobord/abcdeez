@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod analytics;
+pub mod audit_retention;
 pub mod auth;
 pub mod business;
 pub mod dashboard;

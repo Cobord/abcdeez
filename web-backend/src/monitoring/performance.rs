@@ -329,7 +329,7 @@ pub async fn start_performance_monitor(state: Arc<AppState>) {
 }
 
 /// Get endpoint-specific performance statistics
-pub async fn get_endpoint_performance() -> AppResult<Json<Vec<EndpointPerformanceStats>>> {
+pub async fn get_endpoint_performance_stats() -> AppResult<Json<Vec<EndpointPerformanceStats>>> {
     let snapshot = global_metrics().get_snapshot().await;
 
     let mut endpoint_stats = Vec::new();

@@ -125,8 +125,67 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     }),
                 ))
                 .direction(Axis::Horizontal),
+                
+                // Protocol Version Selection
+                label("Select Protocol Version:").alignment(TextAlignment::Start),
+                if !data.protocol_versions.is_empty() {
+                    Some(
+                        flex(
+                            data.protocol_versions.iter().take(5).map(|version| {
+                                let is_selected = data.current_protocol_version.as_ref() == Some(&version.version);
+                                button(
+                                    &format!("v{} {}", version.version, if version.is_current { "★" } else { "" }),
+                                    {
+                                        let version_id = version.id.clone();
+                                        let experiment_id = version.experiment_id.clone();
+                                        move |data: &mut AppData| {
+                                            data.set_current_protocol_version(version_id.clone(), experiment_id.clone());
+                                        }
+                                    }
+                                )
+                            }).collect::<Vec<_>>()
+                        ).direction(Axis::Horizontal)
+                    )
+                } else {
+                    Some(
+                        flex((
+                            label("No protocol versions available")
+                                .brush(Color::from_rgb8(200, 100, 0))
+                                .alignment(TextAlignment::Start),
+                            button("Create Protocol", |data: &mut AppData| {
+                                data.show_protocol_editor = true;
+                                data.show_experiment_setup = false;
+                            }),
+                        ))
+                        .direction(Axis::Horizontal)
+                    )
+                },
+                if let Some(version) = &data.current_protocol_version {
+                    Some(
+                        label(format!("Using Protocol Version: {}", version))
+                            .brush(Color::from_rgb8(0, 150, 0))
+                            .alignment(TextAlignment::Start)
+                    )
+                } else {
+                    Some(
+                        label("⚠️ No protocol version selected")
+                            .brush(Color::from_rgb8(255, 100, 0))
+                            .alignment(TextAlignment::Start)
+                    )
+                },
                 flex((
                     button("✅ Start", |data: &mut AppData| {
+                        // Validate protocol version is selected
+                        if data.current_protocol_version.is_none() {
+                            data.error_message = Some("Please select a protocol version before starting the experiment".to_string());
+                            return;
+                        }
+                        
+                        // Load protocol versions if not already loaded
+                        if data.protocol_versions.is_empty() {
+                            data.load_protocol_versions("experiment-1".to_string());
+                        }
+                        
                         if let Some(controller) = &mut data.research_controller {
                             if let Some(exp_type) = data.selected_experiment_type.clone() {
                                 let condition = ExperimentCondition {
@@ -141,14 +200,24 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
 
                                 match controller.start_experiment(exp_type, condition) {
                                     Ok(session_id) => {
-                                        data.success_message =
-                                            Some(format!("Started experiment: {}", session_id));
+                                        let protocol_info = if let Some(version) = &data.current_protocol_version {
+                                            format!(" using protocol version {}", version)
+                                        } else {
+                                            String::new()
+                                        };
+                                        data.success_message = Some(format!(
+                                            "Started experiment: {}{}", 
+                                            session_id, 
+                                            protocol_info
+                                        ));
                                         data.show_experiment_setup = false;
                                     }
                                     Err(e) => {
                                         data.error_message = Some(e);
                                     }
                                 }
+                            } else {
+                                data.error_message = Some("Please select an experiment type".to_string());
                             }
                         }
                     }),
@@ -1423,6 +1492,391 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
         .direction(Axis::Vertical),
     );
 
+    // Protocol Versioning Controls
+    let protocol_versioning_controls = if has_controller {
+        Some(card(
+            "📋 Protocol Versioning",
+            flex((
+                flex((
+                    button("📋 View History", |data: &mut AppData| {
+                        data.show_protocol_version_history = !data.show_protocol_version_history;
+                        if data.show_protocol_version_history {
+                            // Load protocol versions when opening the history view
+                            data.load_protocol_versions("experiment-1".to_string());
+                        }
+                    }),
+                    button("🆚 Compare Versions", |data: &mut AppData| {
+                        data.show_protocol_comparison = !data.show_protocol_comparison;
+                    }),
+                    button("✏️ Edit Protocol", |data: &mut AppData| {
+                        data.show_protocol_editor = !data.show_protocol_editor;
+                    }),
+                ))
+                .direction(Axis::Horizontal),
+                if let Some(version) = &data.current_protocol_version {
+                    Some(
+                        flex((
+                            label(format!("Current Version: {}", version))
+                                .alignment(TextAlignment::Start),
+                            label("Status: Active")
+                                .brush(Color::from_rgb8(0, 200, 0))
+                                .alignment(TextAlignment::Start),
+                        ))
+                        .direction(Axis::Horizontal),
+                    )
+                } else {
+                    Some(
+                        label("No protocol version selected")
+                            .brush(Color::from_rgb8(200, 100, 0))
+                            .alignment(TextAlignment::Start),
+                    )
+                },
+            ))
+            .direction(Axis::Vertical),
+        ))
+    } else {
+        None
+    };
+
+    // Protocol Version History Modal
+    let protocol_history_modal = if data.show_protocol_version_history {
+        Some(
+            card(
+                "📋 Protocol Version History",
+                flex((
+                    if data.protocol_loading {
+                        Some(
+                            label("Loading protocol versions...")
+                                .alignment(TextAlignment::Middle)
+                        )
+                    } else if data.protocol_versions.is_empty() {
+                        Some(
+                            flex((
+                                label("No protocol versions found")
+                                    .alignment(TextAlignment::Middle),
+                                button("Create First Version", |data: &mut AppData| {
+                                    data.show_protocol_editor = true;
+                                    data.show_protocol_version_history = false;
+                                }),
+                            ))
+                            .direction(Axis::Vertical)
+                        )
+                    } else {
+                        let version_list = data.protocol_versions.iter().take(10).map(|version| {
+                            flex((
+                                flex((
+                                    label(format!("v{}", version.version))
+                                        .brush(if version.is_current {
+                                            Color::from_rgb8(0, 200, 0)
+                                        } else {
+                                            Color::from_rgb8(128, 128, 128)
+                                        })
+                                        .alignment(TextAlignment::Start),
+                                    label(&version.author)
+                                        .alignment(TextAlignment::Start),
+                                    label(version.created_at.format("%Y-%m-%d %H:%M").to_string())
+                                        .alignment(TextAlignment::End),
+                                ))
+                                .direction(Axis::Horizontal),
+                                label(&version.message)
+                                    .alignment(TextAlignment::Start),
+                                flex((
+                                    button("View", {
+                                        let version_id = version.id.clone();
+                                        move |data: &mut AppData| {
+                                            data.selected_protocol_version = Some(version_id.clone());
+                                        }
+                                    }),
+                                    button("Compare", {
+                                        let version_id = version.id.clone();
+                                        move |data: &mut AppData| {
+                                            data.selected_protocol_version = Some(version_id.clone());
+                                            data.show_protocol_comparison = true;
+                                        }
+                                    }),
+                                    if !version.is_current {
+                                        Some(button("Set as Current", {
+                                            let version_id = version.id.clone();
+                                            move |data: &mut AppData| {
+                                                data.current_protocol_version = Some(version_id.clone());
+                                            }
+                                        }))
+                                    } else {
+                                        None
+                                    },
+                                ))
+                                .direction(Axis::Horizontal),
+                            ))
+                            .direction(Axis::Vertical)
+                        }).collect::<Vec<_>>();
+                        Some(
+                            flex((
+                                flex(version_list).direction(Axis::Vertical),
+                            ))
+                            .direction(Axis::Vertical)
+                        )
+                    },
+                    button("❌ Close", |data: &mut AppData| {
+                        data.show_protocol_version_history = false;
+                    }),
+                ))
+                .direction(Axis::Vertical),
+            )
+        )
+    } else {
+        None
+    };
+
+    // Protocol Comparison Modal
+    let protocol_comparison_modal = if data.show_protocol_comparison {
+        Some(
+            card(
+                "🆚 Protocol Version Comparison",
+                flex((
+                    if let Some(diff) = &data.protocol_version_diff {
+                        Some(
+                            flex((
+                                flex((
+                                    label(format!("Comparing {} → {}", diff.from_version, diff.to_version))
+                                        .alignment(TextAlignment::Middle),
+                                    label(&diff.summary)
+                                        .alignment(TextAlignment::Start),
+                                    label(format!("Compatibility: {:?}", diff.compatibility))
+                                        .brush(match diff.compatibility {
+                                            CompatibilityStatus::Compatible => Color::from_rgb8(0, 200, 0),
+                                            CompatibilityStatus::MinorIncompatibility => Color::from_rgb8(255, 165, 0),
+                                            CompatibilityStatus::MajorIncompatibility => Color::from_rgb8(255, 0, 0),
+                                            CompatibilityStatus::RequiresReview => Color::from_rgb8(255, 100, 0),
+                                        })
+                                        .alignment(TextAlignment::Start),
+                                ))
+                                .direction(Axis::Vertical),
+                                label("Changes:").alignment(TextAlignment::Start),
+                                flex(
+                                    diff.changes.iter().map(|change| {
+                                        flex((
+                                            label(format!("{:?}: {}", change.change_type, change.field))
+                                                .alignment(TextAlignment::Start),
+                                            label(&change.description)
+                                                .alignment(TextAlignment::Start),
+                                            label(format!("Impact: {:?}", change.impact_level))
+                                                .brush(match change.impact_level {
+                                                    ImpactLevel::Patch => Color::from_rgb8(0, 200, 0),
+                                                    ImpactLevel::Minor => Color::from_rgb8(255, 165, 0),
+                                                    ImpactLevel::Major => Color::from_rgb8(255, 0, 0),
+                                                })
+                                                .alignment(TextAlignment::End),
+                                        ))
+                                        .direction(Axis::Horizontal)
+                                    }).collect::<Vec<_>>()
+                                ).direction(Axis::Vertical),
+                            ))
+                            .direction(Axis::Vertical)
+                        )
+                    } else {
+                        Some(
+                            label("Select two versions to compare")
+                                .alignment(TextAlignment::Middle)
+                        )
+                    },
+                    button("❌ Close", |data: &mut AppData| {
+                        data.show_protocol_comparison = false;
+                    }),
+                ))
+                .direction(Axis::Vertical),
+            )
+        )
+    } else {
+        None
+    };
+
+    // Protocol Editor Modal
+    let protocol_editor_modal = if data.show_protocol_editor {
+        Some(
+            card(
+                "✏️ Protocol Editor",
+                flex((
+                    label("Create New Protocol Version")
+                        .brush(Color::from_rgb8(0, 100, 200))
+                        .alignment(TextAlignment::Middle),
+                    
+                    // Basic Information Section
+                    card(
+                        "📝 Basic Information",
+                        flex((
+                            flex((
+                                label("Protocol Name:").alignment(TextAlignment::Start),
+                                textbox(&data.protocol_editor_name, |data: &mut AppData, new_value: String| {
+                                    data.protocol_editor_name = new_value;
+                                }),
+                            ))
+                            .direction(Axis::Horizontal),
+                            flex((
+                                label("Description:").alignment(TextAlignment::Start),
+                                textbox(&data.protocol_editor_description, |data: &mut AppData, new_value: String| {
+                                    data.protocol_editor_description = new_value;
+                                }),
+                            ))
+                            .direction(Axis::Horizontal),
+                            flex((
+                                label("Version Message:").alignment(TextAlignment::Start),
+                                textbox(&data.protocol_editor_version_message, |data: &mut AppData, new_value: String| {
+                                    data.protocol_editor_version_message = new_value;
+                                }),
+                            ))
+                            .direction(Axis::Horizontal),
+                        ))
+                        .direction(Axis::Vertical),
+                    ),
+
+                    // Experiment Design Section
+                    card(
+                        "🔬 Experiment Design",
+                        flex((
+                            flex((
+                                label("Design Type:").alignment(TextAlignment::Start),
+                                flex((
+                                    button("Between-Subjects", |data: &mut AppData| {
+                                        data.protocol_editor_design_type = "between-subjects".to_string();
+                                    }),
+                                    button("Within-Subjects", |data: &mut AppData| {
+                                        data.protocol_editor_design_type = "within-subjects".to_string();
+                                    }),
+                                    button("Mixed Design", |data: &mut AppData| {
+                                        data.protocol_editor_design_type = "mixed".to_string();
+                                    }),
+                                ))
+                                .direction(Axis::Horizontal),
+                            ))
+                            .direction(Axis::Vertical),
+                            label(format!("Selected: {}", data.protocol_editor_design_type))
+                                .brush(Color::from_rgb8(0, 150, 0))
+                                .alignment(TextAlignment::Start),
+                        ))
+                        .direction(Axis::Vertical),
+                    ),
+
+                    // Sample Size Configuration
+                    card(
+                        "📊 Sample Size & Power Analysis", 
+                        flex((
+                            flex((
+                                label("Target N:").alignment(TextAlignment::Start),
+                                textbox(&data.protocol_editor_target_n, |data: &mut AppData, new_value: String| {
+                                    data.protocol_editor_target_n = new_value;
+                                }),
+                            ))
+                            .direction(Axis::Horizontal),
+                            flex((
+                                flex((
+                                    label("Power:").alignment(TextAlignment::Start),
+                                    textbox(&data.protocol_editor_power, |data: &mut AppData, new_value: String| {
+                                        data.protocol_editor_power = new_value;
+                                    }),
+                                ))
+                                .direction(Axis::Horizontal),
+                                flex((
+                                    label("Effect Size:").alignment(TextAlignment::Start),
+                                    textbox(&data.protocol_editor_effect_size, |data: &mut AppData, new_value: String| {
+                                        data.protocol_editor_effect_size = new_value;
+                                    }),
+                                ))
+                                .direction(Axis::Horizontal),
+                            ))
+                            .direction(Axis::Horizontal),
+                            flex((
+                                label("Alpha Level:").alignment(TextAlignment::Start),
+                                textbox(&data.protocol_editor_alpha, |data: &mut AppData, new_value: String| {
+                                    data.protocol_editor_alpha = new_value;
+                                }),
+                            ))
+                            .direction(Axis::Horizontal),
+                        ))
+                        .direction(Axis::Vertical),
+                    ),
+
+                    // Data Collection Plan
+                    card(
+                        "📈 Data Collection Plan",
+                        flex((
+                            flex((
+                                label("Duration (weeks):").alignment(TextAlignment::Start),
+                                textbox(&data.protocol_editor_duration_weeks, |data: &mut AppData, new_value: String| {
+                                    data.protocol_editor_duration_weeks = new_value;
+                                }),
+                            ))
+                            .direction(Axis::Horizontal),
+                            flex((
+                                label("Sessions per Participant:").alignment(TextAlignment::Start),
+                                textbox(&data.protocol_editor_sessions_per_participant, |data: &mut AppData, new_value: String| {
+                                    data.protocol_editor_sessions_per_participant = new_value;
+                                }),
+                            ))
+                            .direction(Axis::Horizontal),
+                        ))
+                        .direction(Axis::Vertical),
+                    ),
+
+                    // Compliance Requirements
+                    card(
+                        "⚖️ Compliance Requirements",
+                        flex((
+                            flex((
+                                label("Data Retention (years):").alignment(TextAlignment::Start),
+                                textbox(&data.protocol_editor_data_retention_years, |data: &mut AppData, new_value: String| {
+                                    data.protocol_editor_data_retention_years = new_value;
+                                }),
+                            ))
+                            .direction(Axis::Horizontal),
+                            label("• IRB Approval Required: Yes")
+                                .alignment(TextAlignment::Start),
+                            label("• Informed Consent Required: Yes")
+                                .alignment(TextAlignment::Start),
+                            label("• Privacy Level: High")
+                                .alignment(TextAlignment::Start),
+                        ))
+                        .direction(Axis::Vertical),
+                    ),
+
+                    // Action Buttons
+                    flex((
+                        button("💾 Save Version", |data: &mut AppData| {
+                            // Validate form before saving
+                            match data.validate_protocol_form() {
+                                Ok(()) => {
+                                    data.save_protocol_version();
+                                },
+                                Err(validation_error) => {
+                                    data.error_message = Some(format!("Validation Error: {}", validation_error));
+                                }
+                            }
+                        }),
+                        button("👁 Preview", |data: &mut AppData| {
+                            data.success_message = Some("Protocol preview functionality would show formatted version".to_string());
+                        }),
+                        button("❌ Cancel", |data: &mut AppData| {
+                            data.show_protocol_editor = false;
+                        }),
+                    ))
+                    .direction(Axis::Horizontal),
+
+                    if data.protocol_creation_in_flight {
+                        Some(
+                            label("Creating protocol version...")
+                                .brush(Color::from_rgb8(255, 165, 0))
+                                .alignment(TextAlignment::Middle)
+                        )
+                    } else {
+                        None
+                    },
+                ))
+                .direction(Axis::Vertical),
+            )
+        )
+    } else {
+        None
+    };
+
     flex((
         label("🔬 Research Dashboard")
             .brush(Color::from_rgb8(128, 0, 255))
@@ -1434,9 +1888,13 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
         study_coordination_modal,
         irb_form_modal,
         irb_documents_modal,
+        protocol_history_modal,
+        protocol_comparison_modal,
+        protocol_editor_modal,
         audio_controls,
         sensor_controls,
         federation_controls,
+        protocol_versioning_controls,
         irb_controls,
         collected_data,
         analysis_section,
