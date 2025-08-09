@@ -55,11 +55,8 @@ pub struct BatchJobService {
 
 impl BatchJobService {
     pub fn new(db: Arc<DbPool>, redis: ConnectionManager, config: Arc<Config>) -> Self {
-        let analytics_service = AnalyticsService::new_with_config(
-            db.clone(),
-            Arc::new(redis.clone()),
-            config.clone(),
-        );
+        let analytics_service =
+            AnalyticsService::new_with_config(db.clone(), Arc::new(redis.clone()), config.clone());
         let learner_service = Arc::new(LearnerService::new(db.clone(), redis.clone()));
 
         Self {

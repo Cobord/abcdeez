@@ -1,6 +1,6 @@
 use axum::{
     extract::{Request, State},
-    http::{header, Method, HeaderValue},
+    http::{header, HeaderValue, Method},
     middleware::Next,
     response::Response,
 };
@@ -23,10 +23,7 @@ pub struct CorrelationId(pub String);
 pub mod tracing;
 
 /// Correlation ID middleware that generates or extracts correlation IDs for request tracing
-pub async fn correlation_id_middleware(
-    mut request: Request,
-    next: Next,
-) -> Response {
+pub async fn correlation_id_middleware(mut request: Request, next: Next) -> Response {
     // Check if correlation ID is provided in request headers
     let correlation_id = request
         .headers()
@@ -39,7 +36,9 @@ pub async fn correlation_id_middleware(
         });
 
     // Add correlation ID to request extensions for use by other middleware and handlers
-    request.extensions_mut().insert(CorrelationId(correlation_id.clone()));
+    request
+        .extensions_mut()
+        .insert(CorrelationId(correlation_id.clone()));
 
     // Create a tracing span with the correlation ID
     let _span = tracing::info_span!(
@@ -47,14 +46,17 @@ pub async fn correlation_id_middleware(
         correlation_id = %correlation_id,
         method = %request.method(),
         uri = %request.uri()
-    ).entered();
+    )
+    .entered();
 
     // Process the request
     let mut response = next.run(request).await;
 
     // Add correlation ID to response headers for client tracing
     if let Ok(header_value) = HeaderValue::from_str(&correlation_id) {
-        response.headers_mut().insert("x-correlation-id", header_value);
+        response
+            .headers_mut()
+            .insert("x-correlation-id", header_value);
     }
 
     // Add additional tracing headers for debugging
@@ -342,7 +344,7 @@ pub async fn rate_limit(
     let global_limit = (state.config.rate_limit_requests * 100) as i64; // 100x individual limit
     if global_count > global_limit {
         tracing::warn!("Global rate limit exceeded: {} requests", global_count);
-        
+
         // Increment DoS counter for monitoring
         let dos_key = "dos_events:global_rate_limit";
         crate::cache::cmd("INCR")
@@ -356,7 +358,7 @@ pub async fn rate_limit(
             .query_async::<()>(&mut conn)
             .await
             .ok();
-        
+
         return Err(AppError::RateLimitExceeded);
     }
 
@@ -387,8 +389,12 @@ pub async fn rate_limit(
     // Per-IP global limit (prevents single IP from consuming all resources)
     let ip_global_limit = (state.config.rate_limit_requests * 5) as i64; // 5x individual limit
     if ip_global_count > ip_global_limit {
-        tracing::warn!("IP global rate limit exceeded for {}: {} requests", client_ip, ip_global_count);
-        
+        tracing::warn!(
+            "IP global rate limit exceeded for {}: {} requests",
+            client_ip,
+            ip_global_count
+        );
+
         // Auto-block aggressive IPs temporarily
         let block_key = format!("auto_block:{}", client_ip);
         crate::cache::cmd("SETEX")
@@ -398,7 +404,7 @@ pub async fn rate_limit(
             .query_async::<String>(&mut conn)
             .await
             .ok();
-        
+
         return Err(AppError::RateLimitExceeded);
     }
 
@@ -424,8 +430,7 @@ pub async fn rate_limit(
         .ok()
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(0);
-    if blocked > 0
-    {
+    if blocked > 0 {
         tracing::warn!("Blocked request from auto-blocked IP: {}", client_ip);
         return Err(AppError::Forbidden);
     }
@@ -504,7 +509,10 @@ pub async fn rate_limit(
             .unwrap(),
     );
     headers.insert("X-RateLimit-Window", window.to_string().parse().unwrap());
-    headers.insert("X-RateLimit-Global", global_count.to_string().parse().unwrap());
+    headers.insert(
+        "X-RateLimit-Global",
+        global_count.to_string().parse().unwrap(),
+    );
 
     Ok(response)
 }
@@ -606,7 +614,7 @@ fn get_client_ip(request: &Request) -> String {
         .or_else(|| {
             request
                 .headers()
-                .get("cf-connecting-ip")  // Cloudflare
+                .get("cf-connecting-ip") // Cloudflare
                 .and_then(|h| h.to_str().ok())
                 .map(|s| s.to_string())
         })

@@ -406,7 +406,7 @@ mod integration_tests {
         // 2. Create valid test JWT tokens
         // 3. Test the full OAuth flow end-to-end
         // 4. Verify database user creation and session management
-        
+
         // For now, we'll just verify the test framework is set up correctly
         assert!(true, "Apple Sign In integration test framework ready");
     }
@@ -426,7 +426,7 @@ mod integration_tests {
         // 3. Mock callback handling with authorization codes
         // 4. Verify user profile data retrieval and parsing
         // 5. Test database user creation and profile updates
-        
+
         // For now, we'll just verify the test framework is set up correctly
         assert!(true, "GitHub OAuth integration test framework ready");
     }
@@ -445,7 +445,7 @@ mod integration_tests {
         // 3. Run the credential validation background job
         // 4. Verify credential status updates in database
         // 5. Test notification/logging of credential issues
-        
+
         // For now, we'll just verify the test framework is set up correctly
         assert!(true, "OAuth credential validation test framework ready");
     }

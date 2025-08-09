@@ -3,7 +3,7 @@ use crate::learner::LearnerModel;
 use crate::tasks::{Task, TaskGenerator, TaskType};
 use crate::topology::Topology;
 use rand::Rng;
-use tracing::{debug, info, warn, instrument, span, Level};
+use tracing::{debug, info, instrument, span, warn, Level};
 
 #[derive(Debug)]
 pub struct AdaptiveScheduler {
@@ -25,10 +25,10 @@ impl AdaptiveScheduler {
             topology_size = topology.nodes.len(),
             "Creating new adaptive scheduler"
         );
-        
+
         let task_generator = TaskGenerator::new(topology.clone());
         let bayesian_model = BayesianLearnerModel::new(&topology);
-        
+
         use rand::SeedableRng;
         let scheduler = AdaptiveScheduler {
             learner_model,
@@ -41,20 +41,20 @@ impl AdaptiveScheduler {
             exploration_decay: 0.995, // Decay epsilon over time
             rng: rand::rngs::StdRng::from_entropy(),
         };
-        
+
         debug!(
             epsilon = scheduler.epsilon,
             use_eig = scheduler.use_eig,
             "Adaptive scheduler initialized"
         );
-        
+
         scheduler
     }
 
     pub fn new_with_eig(learner_model: LearnerModel, topology: Topology, use_eig: bool) -> Self {
         let task_generator = TaskGenerator::new(topology.clone());
         let bayesian_model = BayesianLearnerModel::new(&topology);
-        
+
         use rand::SeedableRng;
         AdaptiveScheduler {
             learner_model,
@@ -104,10 +104,16 @@ impl AdaptiveScheduler {
             self.task_generator.generate_task(None)
         } else {
             // Exploitation: select best task
-            debug!("Selecting exploitation task using {}", if self.use_eig { "EIG" } else { "standard" });
+            debug!(
+                "Selecting exploitation task using {}",
+                if self.use_eig { "EIG" } else { "standard" }
+            );
             let candidates = self.generate_candidate_tasks();
-            debug!(candidate_count = candidates.len(), "Generated task candidates");
-            
+            debug!(
+                candidate_count = candidates.len(),
+                "Generated task candidates"
+            );
+
             let best_task = if self.use_eig {
                 self.select_best_task_by_eig(candidates)
             } else {

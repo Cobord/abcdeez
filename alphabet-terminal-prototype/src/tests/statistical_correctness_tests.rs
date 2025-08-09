@@ -275,11 +275,8 @@ fn bootstrap_confidence_interval(data: &[f64], n_bootstrap: usize, confidence: f
     let end = (m - trim).max(start + 1);
     let slice = &bootstrap_means[start..end];
     let mean_slice = slice.iter().sum::<f64>() / slice.len() as f64;
-    let var_slice = slice
-        .iter()
-        .map(|x| (x - mean_slice).powi(2))
-        .sum::<f64>()
-        / (slice.len() - 1) as f64;
+    let var_slice =
+        slice.iter().map(|x| (x - mean_slice).powi(2)).sum::<f64>() / (slice.len() - 1) as f64;
     let sd = var_slice.sqrt();
     let z = 1.96; // ~95%
     (mean_boot - z * sd, mean_boot + z * sd)

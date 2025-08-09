@@ -1,3 +1,5 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -5,9 +7,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn, error, instrument};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Database performance monitoring and query analysis
 #[derive(Debug, Clone)]
@@ -87,7 +87,8 @@ impl ConnectionMetrics {
 
     pub fn connection_acquired(&self) {
         self.active_connections.fetch_add(1, Ordering::Relaxed);
-        self.total_connections_created.fetch_add(1, Ordering::Relaxed);
+        self.total_connections_created
+            .fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn connection_released(&self) {
@@ -174,7 +175,7 @@ impl DatabaseMonitor {
         query_metrics.total_duration_ms += duration_ms;
         query_metrics.min_duration_ms = query_metrics.min_duration_ms.min(duration_ms);
         query_metrics.max_duration_ms = query_metrics.max_duration_ms.max(duration_ms);
-        query_metrics.avg_duration_ms = 
+        query_metrics.avg_duration_ms =
             query_metrics.total_duration_ms as f64 / query_metrics.total_executions as f64;
         query_metrics.last_executed = now;
 
@@ -202,7 +203,7 @@ impl DatabaseMonitor {
     /// Get comprehensive database health metrics
     pub async fn get_health_metrics(&self) -> DatabaseHealthMetrics {
         let metrics = self.query_metrics.read().await;
-        
+
         let total_queries: u64 = metrics.values().map(|m| m.total_executions).sum();
         let total_duration: u64 = metrics.values().map(|m| m.total_duration_ms).sum();
         let total_slow_queries: u64 = metrics.values().map(|m| m.slow_query_count).sum();
@@ -237,7 +238,10 @@ impl DatabaseMonitor {
             })
             .collect();
 
-        let active_connections = self.connection_metrics.active_connections.load(Ordering::Relaxed);
+        let active_connections = self
+            .connection_metrics
+            .active_connections
+            .load(Ordering::Relaxed);
 
         DatabaseHealthMetrics {
             total_queries,
@@ -253,7 +257,7 @@ impl DatabaseMonitor {
     /// Get slow queries that exceed the threshold
     pub async fn get_slow_queries(&self, limit: usize) -> Vec<SlowQuery> {
         let metrics = self.query_metrics.read().await;
-        
+
         let mut slow_queries: Vec<SlowQuery> = metrics
             .values()
             .filter(|m| m.slow_query_count > 0)
@@ -332,12 +336,20 @@ impl DatabaseMonitor {
     pub async fn reset_metrics(&self) {
         let mut metrics = self.query_metrics.write().await;
         metrics.clear();
-        
+
         // Reset connection metrics
-        self.connection_metrics.active_connections.store(0, Ordering::Relaxed);
-        self.connection_metrics.total_connections_created.store(0, Ordering::Relaxed);
-        self.connection_metrics.connection_errors.store(0, Ordering::Relaxed);
-        self.connection_metrics.connection_timeouts.store(0, Ordering::Relaxed);
+        self.connection_metrics
+            .active_connections
+            .store(0, Ordering::Relaxed);
+        self.connection_metrics
+            .total_connections_created
+            .store(0, Ordering::Relaxed);
+        self.connection_metrics
+            .connection_errors
+            .store(0, Ordering::Relaxed);
+        self.connection_metrics
+            .connection_timeouts
+            .store(0, Ordering::Relaxed);
 
         info!("Database monitoring metrics reset");
     }
@@ -345,10 +357,18 @@ impl DatabaseMonitor {
     /// Get connection metrics
     pub fn get_connection_metrics(&self) -> (u64, u64, u64, u64) {
         (
-            self.connection_metrics.active_connections.load(Ordering::Relaxed),
-            self.connection_metrics.total_connections_created.load(Ordering::Relaxed),
-            self.connection_metrics.connection_errors.load(Ordering::Relaxed),
-            self.connection_metrics.connection_timeouts.load(Ordering::Relaxed),
+            self.connection_metrics
+                .active_connections
+                .load(Ordering::Relaxed),
+            self.connection_metrics
+                .total_connections_created
+                .load(Ordering::Relaxed),
+            self.connection_metrics
+                .connection_errors
+                .load(Ordering::Relaxed),
+            self.connection_metrics
+                .connection_timeouts
+                .load(Ordering::Relaxed),
         )
     }
 }
@@ -369,7 +389,7 @@ macro_rules! track_db_query {
         let result = $query;
         let duration = start.elapsed();
         let is_error = result.is_err();
-        
+
         // Get trace ID from current span if available
         let trace_id = tracing::Span::current()
             .field("trace_id")
@@ -377,13 +397,13 @@ macro_rules! track_db_query {
                 // This would need proper implementation to extract trace_id
                 None::<String>
             });
-        
+
         tokio::spawn(async move {
             crate::monitoring::database::global_database_monitor()
                 .track_query($query_type, duration, is_error, trace_id.as_deref())
                 .await;
         });
-        
+
         result
     }};
 }
@@ -396,14 +416,35 @@ mod tests {
     #[tokio::test]
     async fn test_database_monitor() {
         let monitor = DatabaseMonitor::new(100); // 100ms threshold
-        
+
         // Track some queries
-        monitor.track_query("SELECT", Duration::from_millis(50), false, Some("trace-123")).await;
-        monitor.track_query("INSERT", Duration::from_millis(150), false, Some("trace-124")).await;
-        monitor.track_query("UPDATE", Duration::from_millis(200), true, Some("trace-125")).await;
-        
+        monitor
+            .track_query(
+                "SELECT",
+                Duration::from_millis(50),
+                false,
+                Some("trace-123"),
+            )
+            .await;
+        monitor
+            .track_query(
+                "INSERT",
+                Duration::from_millis(150),
+                false,
+                Some("trace-124"),
+            )
+            .await;
+        monitor
+            .track_query(
+                "UPDATE",
+                Duration::from_millis(200),
+                true,
+                Some("trace-125"),
+            )
+            .await;
+
         let health_metrics = monitor.get_health_metrics().await;
-        
+
         assert_eq!(health_metrics.total_queries, 3);
         assert!(health_metrics.slow_query_percentage > 0.0);
         assert!(health_metrics.error_rate_percentage > 0.0);
@@ -413,10 +454,12 @@ mod tests {
     #[tokio::test]
     async fn test_slow_query_detection() {
         let monitor = DatabaseMonitor::new(100); // 100ms threshold
-        
+
         // Track a slow query
-        monitor.track_query("SLOW_SELECT", Duration::from_millis(500), false, None).await;
-        
+        monitor
+            .track_query("SLOW_SELECT", Duration::from_millis(500), false, None)
+            .await;
+
         let slow_queries = monitor.get_slow_queries(10).await;
         assert!(!slow_queries.is_empty());
         assert_eq!(slow_queries[0].query_type, "SLOW_SELECT");
@@ -426,12 +469,12 @@ mod tests {
     #[tokio::test]
     async fn test_connection_metrics() {
         let monitor = DatabaseMonitor::new(100);
-        
+
         monitor.connection_metrics.connection_acquired();
         monitor.connection_metrics.connection_acquired();
         monitor.connection_metrics.connection_released();
         monitor.connection_metrics.connection_error();
-        
+
         let (active, total, errors, timeouts) = monitor.get_connection_metrics();
         assert_eq!(active, 1);
         assert_eq!(total, 2);

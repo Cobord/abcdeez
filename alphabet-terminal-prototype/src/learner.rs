@@ -69,8 +69,12 @@ impl LearnerModel {
     pub fn new(learner_id: String, topology: &crate::topology::Topology) -> Self {
         Self::new_with_config(learner_id, topology, LearnerConfig::adult())
     }
-    
-    pub fn new_with_config(learner_id: String, topology: &crate::topology::Topology, config: LearnerConfig) -> Self {
+
+    pub fn new_with_config(
+        learner_id: String,
+        topology: &crate::topology::Topology,
+        config: LearnerConfig,
+    ) -> Self {
         let mut node_embeddings = HashMap::new();
         let mut memory_strengths = HashMap::new();
 
@@ -176,18 +180,19 @@ impl LearnerModel {
             // 1. Current proficiency (learn faster when less proficient)
             // 2. Practice count (decrease learning rate over time)
             // 3. Recent performance (adjust based on consistency)
-            
+
             // Base learning rate decreases with practice (power law)
-            let base_rate = self.config.learning_rate_base / (1.0 + prof.practice_count as f64).powf(self.config.learning_rate_decay);
-            
+            let base_rate = self.config.learning_rate_base
+                / (1.0 + prof.practice_count as f64).powf(self.config.learning_rate_decay);
+
             // Adjust based on current proficiency level
             // Learn faster in the middle range, slower at extremes
             let theta_range = self.config.theta_bounds.1 - self.config.theta_bounds.0;
             let proficiency_factor = 1.0 - (prof.theta.abs() / (theta_range / 2.0)).min(1.0);
-            
+
             // Calculate adaptive learning rate
             let learning_rate = (base_rate * (0.5 + proficiency_factor)).max(0.01).min(0.5);
-            
+
             if success {
                 // Update with diminishing returns as proficiency increases
                 prof.theta += learning_rate * (1.0 - sigmoid(prof.theta));
@@ -196,9 +201,12 @@ impl LearnerModel {
                 let error_weight = if prof.theta > 1.0 { 1.5 } else { 1.0 };
                 prof.theta -= learning_rate * sigmoid(prof.theta) * error_weight;
             }
-            
+
             // Ensure theta stays within reasonable bounds
-            prof.theta = prof.theta.max(self.config.theta_bounds.0).min(self.config.theta_bounds.1);
+            prof.theta = prof
+                .theta
+                .max(self.config.theta_bounds.0)
+                .min(self.config.theta_bounds.1);
         }
     }
 

@@ -297,10 +297,10 @@ impl MultiSessionManager {
         scheduling_rules: SchedulingRules,
     ) -> Result<String, String> {
         let experiment_id = uuid::Uuid::new_v4().to_string();
-        
+
         // Validate experiment design
         self.validate_experiment_design(&design, &sessions)?;
-        
+
         let experiment = MultiSessionExperiment {
             id: experiment_id.clone(),
             name,
@@ -315,7 +315,7 @@ impl MultiSessionManager {
             created_at: chrono::Utc::now(),
             last_modified: chrono::Utc::now(),
         };
-        
+
         self.experiments.insert(experiment_id.clone(), experiment);
         Ok(experiment_id)
     }
@@ -327,9 +327,11 @@ impl MultiSessionManager {
         participant_id: String,
         participant_characteristics: Option<HashMap<String, String>>,
     ) -> Result<ParticipantAssignment, String> {
-        let experiment = self.experiments.get_mut(experiment_id)
+        let experiment = self
+            .experiments
+            .get_mut(experiment_id)
             .ok_or("Experiment not found")?;
-        
+
         // Use experimental design to assign participant
         use crate::experimental_design::ExperimentalDesigner;
         let mut designer = ExperimentalDesigner::new(None);
@@ -338,10 +340,12 @@ impl MultiSessionManager {
             &experiment.design,
             participant_characteristics,
         )?;
-        
+
         // Store assignment
-        experiment.participant_assignments.insert(participant_id.clone(), assignment.clone());
-        
+        experiment
+            .participant_assignments
+            .insert(participant_id.clone(), assignment.clone());
+
         // Initialize participant progress tracking
         let progress = ParticipantProgress {
             participant_id: participant_id.clone(),
@@ -351,12 +355,13 @@ impl MultiSessionManager {
             status: ParticipantStatus::Active,
             notes: Vec::new(),
         };
-        
-        self.participant_progress.insert(participant_id.clone(), progress);
-        
+
+        self.participant_progress
+            .insert(participant_id.clone(), progress);
+
         // Schedule first session
         self.schedule_next_session(&participant_id, experiment_id)?;
-        
+
         Ok(assignment)
     }
 
@@ -368,49 +373,57 @@ impl MultiSessionManager {
     ) -> Result<Option<chrono::DateTime<chrono::Utc>>, String> {
         // Get experiment info first
         let (sessions_len, session_plan, scheduling_rules) = {
-            let experiment = self.experiments.get(experiment_id)
+            let experiment = self
+                .experiments
+                .get(experiment_id)
                 .ok_or("Experiment not found")?;
-            let progress = self.participant_progress.get(participant_id)
+            let progress = self
+                .participant_progress
+                .get(participant_id)
                 .ok_or("Participant not found")?;
-                
+
             let next_session_index = progress.completed_sessions.len();
             if next_session_index >= experiment.sessions.len() {
                 return Ok(None);
             }
-            
-            (experiment.sessions.len(), 
-             experiment.sessions[next_session_index].clone(),
-             experiment.scheduling_rules.clone())
+
+            (
+                experiment.sessions.len(),
+                experiment.sessions[next_session_index].clone(),
+                experiment.scheduling_rules.clone(),
+            )
         };
-        
+
         // Check requirements first (immutable borrow)
         let requirements_met = {
-            let progress = self.participant_progress.get(participant_id)
+            let progress = self
+                .participant_progress
+                .get(participant_id)
                 .ok_or("Participant not found")?;
             self.check_session_requirements(progress, &session_plan)?
         };
-        
+
         if !requirements_met {
             return Err("Session requirements not met".to_string());
         }
-        
+
         // Now get mutable progress
-        let progress = self.participant_progress.get_mut(participant_id)
+        let progress = self
+            .participant_progress
+            .get_mut(participant_id)
             .ok_or("Participant not found")?;
-        
+
         let next_session_index = progress.completed_sessions.len();
         if next_session_index >= sessions_len {
             progress.status = ParticipantStatus::Completed;
             return Ok(None);
         }
-        
+
         // Find available time slot
-        let scheduled_time = self.scheduler.find_available_slot(
-            &scheduling_rules,
-            &session_plan,
-            progress,
-        )?;
-        
+        let scheduled_time =
+            self.scheduler
+                .find_available_slot(&scheduling_rules, &session_plan, progress)?;
+
         // Create scheduled session
         let scheduled_session = ScheduledSession {
             session_id: session_plan.session_id.clone(),
@@ -419,16 +432,16 @@ impl MultiSessionManager {
             reschedule_count: 0,
             confirmed: false,
         };
-        
+
         progress.scheduled_sessions.push(scheduled_session);
-        
+
         // Schedule reminders
         self.scheduler.schedule_reminders(
             participant_id,
             &scheduled_time,
             &scheduling_rules.reminder_settings,
         )?;
-        
+
         Ok(Some(scheduled_time))
     }
 
@@ -444,13 +457,17 @@ impl MultiSessionManager {
     ) -> Result<(), String> {
         // Calculate data quality score first (immutable borrow)
         let data_quality_score = self.calculate_data_quality_score(&performance_data);
-        
-        let progress = self.participant_progress.get_mut(participant_id)
+
+        let progress = self
+            .participant_progress
+            .get_mut(participant_id)
             .ok_or("Participant not found")?;
-        
+
         // Remove from scheduled sessions
-        progress.scheduled_sessions.retain(|s| s.session_id != session_id);
-        
+        progress
+            .scheduled_sessions
+            .retain(|s| s.session_id != session_id);
+
         // Add to completed sessions
         let completed_session = CompletedSession {
             session_id: session_id.to_string(),
@@ -460,21 +477,21 @@ impl MultiSessionManager {
             data_quality_score,
             notes: String::new(),
         };
-        
+
         let completed_sessions_count = progress.completed_sessions.len() + 1;
         progress.completed_sessions.push(completed_session);
-        
+
         // Update experiment last modified
         if let Some(experiment) = self.experiments.get_mut(experiment_id) {
             experiment.last_modified = chrono::Utc::now();
         }
-        
+
         // Check if interim analysis is needed
         self.check_interim_analysis(experiment_id, completed_sessions_count)?;
-        
+
         // Schedule next session if available
         self.schedule_next_session(participant_id, experiment_id)?;
-        
+
         Ok(())
     }
 
@@ -484,19 +501,22 @@ impl MultiSessionManager {
         experiment_id: &str,
         outcome_measure: &str,
     ) -> Result<LongitudinalAnalysis, String> {
-        let experiment = self.experiments.get(experiment_id)
+        let experiment = self
+            .experiments
+            .get(experiment_id)
             .ok_or("Experiment not found")?;
-        
+
         let mut participant_trajectories = HashMap::new();
         let mut session_means = Vec::new();
-        
+
         // Collect data for each participant across sessions
         for (participant_id, assignment) in &experiment.participant_assignments {
             if let Some(progress) = self.participant_progress.get(participant_id) {
                 let mut trajectory = Vec::new();
-                
+
                 for completed_session in &progress.completed_sessions {
-                    if let Some(&value) = completed_session.performance_summary.get(outcome_measure) {
+                    if let Some(&value) = completed_session.performance_summary.get(outcome_measure)
+                    {
                         trajectory.push(SessionDataPoint {
                             session_index: trajectory.len(),
                             value,
@@ -505,45 +525,51 @@ impl MultiSessionManager {
                         });
                     }
                 }
-                
+
                 if !trajectory.is_empty() {
                     participant_trajectories.insert(participant_id.clone(), trajectory);
                 }
             }
         }
-        
+
         // Calculate session-wise statistics
-        let max_sessions = participant_trajectories.values()
+        let max_sessions = participant_trajectories
+            .values()
             .map(|t| t.len())
             .max()
             .unwrap_or(0);
-        
+
         for session_idx in 0..max_sessions {
-            let session_values: Vec<f64> = participant_trajectories.values()
+            let session_values: Vec<f64> = participant_trajectories
+                .values()
                 .filter_map(|trajectory| trajectory.get(session_idx).map(|dp| dp.value))
                 .collect();
-            
+
             if !session_values.is_empty() {
                 let mean = session_values.iter().sum::<f64>() / session_values.len() as f64;
-                let variance = session_values.iter()
+                let variance = session_values
+                    .iter()
                     .map(|x| (x - mean).powi(2))
-                    .sum::<f64>() / (session_values.len() - 1) as f64;
-                
+                    .sum::<f64>()
+                    / (session_values.len() - 1) as f64;
+
                 session_means.push(SessionStatistics {
                     session_index: session_idx,
                     n: session_values.len(),
                     mean,
                     std_dev: variance.sqrt(),
                     min: session_values.iter().fold(f64::INFINITY, |a, &b| a.min(b)),
-                    max: session_values.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b)),
+                    max: session_values
+                        .iter()
+                        .fold(f64::NEG_INFINITY, |a, &b| a.max(b)),
                 });
             }
         }
-        
+
         // Fit learning curves and detect patterns
         let learning_curve = self.fit_learning_curve(&session_means);
         let change_points = self.detect_change_points(&session_means);
-        
+
         Ok(LongitudinalAnalysis {
             outcome_measure: outcome_measure.to_string(),
             participant_trajectories,
@@ -563,14 +589,17 @@ impl MultiSessionManager {
         if sessions.is_empty() {
             return Err("At least one session is required".to_string());
         }
-        
+
         // Check session ordering
         for (i, session) in sessions.iter().enumerate() {
             if session.order != i {
-                return Err(format!("Session {} has incorrect order", session.session_id));
+                return Err(format!(
+                    "Session {} has incorrect order",
+                    session.session_id
+                ));
             }
         }
-        
+
         // Validate session IDs are unique
         let mut session_ids = HashSet::new();
         for session in sessions {
@@ -578,7 +607,7 @@ impl MultiSessionManager {
                 return Err(format!("Duplicate session ID: {}", session.session_id));
             }
         }
-        
+
         Ok(())
     }
 
@@ -594,7 +623,7 @@ impl MultiSessionManager {
                         let time_since = chrono::Utc::now()
                             .signed_duration_since(last_session.completed_at)
                             .num_hours();
-                        
+
                         if time_since < *hours as i64 {
                             return Ok(false);
                         }
@@ -611,64 +640,80 @@ impl MultiSessionManager {
                 }
             }
         }
-        
+
         Ok(true)
     }
 
     fn calculate_data_quality_score(&self, performance_data: &HashMap<String, f64>) -> f64 {
         // Simplified data quality assessment
         let mut score = 1.0;
-        
+
         // Check for missing data
         if performance_data.is_empty() {
             score *= 0.1;
         }
-        
+
         // Check for extreme outliers (simplified)
         for value in performance_data.values() {
             if value.is_nan() || value.is_infinite() {
                 score *= 0.5;
             }
         }
-        
+
         score
     }
 
-    fn check_interim_analysis(&self, experiment_id: &str, completed_sessions: usize) -> Result<(), String> {
-        let experiment = self.experiments.get(experiment_id)
+    fn check_interim_analysis(
+        &self,
+        experiment_id: &str,
+        completed_sessions: usize,
+    ) -> Result<(), String> {
+        let experiment = self
+            .experiments
+            .get(experiment_id)
             .ok_or("Experiment not found")?;
-        
+
         for interim in &experiment.analysis_plan.interim_analyses {
             if interim.scheduled_after_session == completed_sessions {
                 // TODO: Trigger interim analysis
-                println!("Interim analysis triggered after session {}", completed_sessions);
+                println!(
+                    "Interim analysis triggered after session {}",
+                    completed_sessions
+                );
             }
         }
-        
+
         Ok(())
     }
 
     fn fit_learning_curve(&self, session_stats: &[SessionStatistics]) -> LearningCurve {
         // Fit exponential learning curve: y = a * exp(b * x) + c
         // Simplified implementation - would use proper curve fitting
-        
+
         if session_stats.len() < 3 {
             return LearningCurve::default();
         }
-        
-        let x_values: Vec<f64> = session_stats.iter().map(|s| s.session_index as f64).collect();
+
+        let x_values: Vec<f64> = session_stats
+            .iter()
+            .map(|s| s.session_index as f64)
+            .collect();
         let y_values: Vec<f64> = session_stats.iter().map(|s| s.mean).collect();
-        
+
         // Simple linear regression on log-transformed data
         let n = x_values.len() as f64;
         let sum_x = x_values.iter().sum::<f64>();
         let sum_y = y_values.iter().sum::<f64>();
-        let sum_xy = x_values.iter().zip(y_values.iter()).map(|(x, y)| x * y).sum::<f64>();
+        let sum_xy = x_values
+            .iter()
+            .zip(y_values.iter())
+            .map(|(x, y)| x * y)
+            .sum::<f64>();
         let sum_x2 = x_values.iter().map(|x| x * x).sum::<f64>();
-        
+
         let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x);
         let intercept = (sum_y - slope * sum_x) / n;
-        
+
         LearningCurve {
             model_type: "linear".to_string(),
             parameters: vec![intercept, slope],
@@ -680,37 +725,37 @@ impl MultiSessionManager {
     fn detect_change_points(&self, session_stats: &[SessionStatistics]) -> Vec<ChangePoint> {
         // Simplified change point detection
         let mut change_points = Vec::new();
-        
+
         if session_stats.len() < 5 {
             return change_points;
         }
-        
+
         // Look for significant changes in mean or variance
-        for i in 2..session_stats.len()-2 {
+        for i in 2..session_stats.len() - 2 {
             let before: Vec<f64> = session_stats[0..i].iter().map(|s| s.mean).collect();
             let after: Vec<f64> = session_stats[i..].iter().map(|s| s.mean).collect();
-            
+
             let mean_before = before.iter().sum::<f64>() / before.len() as f64;
             let mean_after = after.iter().sum::<f64>() / after.len() as f64;
-            
+
             let change_magnitude = (mean_after - mean_before).abs();
-            let pooled_std = (session_stats[i-1].std_dev + session_stats[i].std_dev) / 2.0;
-            
+            let pooled_std = (session_stats[i - 1].std_dev + session_stats[i].std_dev) / 2.0;
+
             // Simple threshold-based detection
             if change_magnitude > 2.0 * pooled_std && pooled_std > 0.0 {
                 change_points.push(ChangePoint {
                     session_index: i,
-                    change_type: if mean_after > mean_before { 
-                        ChangeType::Improvement 
-                    } else { 
-                        ChangeType::Decline 
+                    change_type: if mean_after > mean_before {
+                        ChangeType::Improvement
+                    } else {
+                        ChangeType::Decline
                     },
                     magnitude: change_magnitude,
                     confidence: 0.8, // Would calculate properly
                 });
             }
         }
-        
+
         change_points
     }
 }
@@ -795,15 +840,13 @@ impl Default for DataRetentionPolicy {
 impl Default for AnalysisPlan {
     fn default() -> Self {
         Self {
-            primary_outcomes: vec![
-                OutcomeMeasure {
-                    name: "accuracy".to_string(),
-                    description: "Overall accuracy score".to_string(),
-                    measure_type: MeasureType::AccuracyScore,
-                    calculation: "correct_responses / total_responses".to_string(),
-                    higher_is_better: true,
-                }
-            ],
+            primary_outcomes: vec![OutcomeMeasure {
+                name: "accuracy".to_string(),
+                description: "Overall accuracy score".to_string(),
+                measure_type: MeasureType::AccuracyScore,
+                calculation: "correct_responses / total_responses".to_string(),
+                higher_is_better: true,
+            }],
             secondary_outcomes: Vec::new(),
             planned_comparisons: Vec::new(),
             interim_analyses: Vec::new(),
@@ -830,17 +873,18 @@ impl ExperimentScheduler {
     ) -> Result<chrono::DateTime<chrono::Utc>, String> {
         // Simplified implementation - would integrate with proper calendar system
         let base_time = chrono::Utc::now() + chrono::Duration::hours(24);
-        
+
         // Apply minimum interval if required
         if let Some(min_hours) = session.minimum_interval_hours {
             if let Some(last_session) = progress.completed_sessions.last() {
-                let min_time = last_session.completed_at + chrono::Duration::hours(min_hours as i64);
+                let min_time =
+                    last_session.completed_at + chrono::Duration::hours(min_hours as i64);
                 if base_time < min_time {
                     return Ok(min_time);
                 }
             }
         }
-        
+
         Ok(base_time)
     }
 
@@ -853,13 +897,16 @@ impl ExperimentScheduler {
         if !reminder_settings.enabled {
             return Ok(());
         }
-        
+
         // Would integrate with notification system
         for hours_before in &reminder_settings.advance_hours {
             let reminder_time = *session_time - chrono::Duration::hours(*hours_before as i64);
-            println!("Reminder scheduled for {} at {}", participant_id, reminder_time);
+            println!(
+                "Reminder scheduled for {} at {}",
+                participant_id, reminder_time
+            );
         }
-        
+
         Ok(())
     }
 }
@@ -872,7 +919,7 @@ mod tests {
     #[test]
     fn test_multi_session_creation() {
         let mut manager = MultiSessionManager::new(PathBuf::from("./test_data"));
-        
+
         let sessions = vec![
             SessionPlan {
                 session_id: "session_1".to_string(),
@@ -903,7 +950,7 @@ mod tests {
                 post_session_procedures: Vec::new(),
             },
         ];
-        
+
         let scheduling_rules = SchedulingRules {
             allow_overlap: false,
             max_concurrent_participants: Some(10),
@@ -920,30 +967,32 @@ mod tests {
                 penalty_for_no_show: None,
             },
         };
-        
-        use crate::experimental_design::{ExperimentalDesign, ExperimentCondition, RandomizationType};
+
+        use crate::experimental_design::{
+            ExperimentCondition, ExperimentalDesign, RandomizationType,
+        };
         let design = ExperimentalDesign::BetweenSubjects {
-            conditions: vec![
-                ExperimentCondition {
-                    id: "control".to_string(),
-                    name: "Control".to_string(),
-                    description: "Standard condition".to_string(),
-                    config: LearnerConfig::default(),
-                    topology: Topology::alphabet(),
-                    parameters: HashMap::new(),
-                },
-            ],
+            conditions: vec![ExperimentCondition {
+                id: "control".to_string(),
+                name: "Control".to_string(),
+                description: "Standard condition".to_string(),
+                config: LearnerConfig::default(),
+                topology: Topology::alphabet(),
+                parameters: HashMap::new(),
+            }],
             randomization: RandomizationType::Simple,
         };
-        
-        let experiment_id = manager.create_experiment(
-            "Test Study".to_string(),
-            "Multi-session learning study".to_string(),
-            design,
-            sessions,
-            scheduling_rules,
-        ).unwrap();
-        
+
+        let experiment_id = manager
+            .create_experiment(
+                "Test Study".to_string(),
+                "Multi-session learning study".to_string(),
+                design,
+                sessions,
+                scheduling_rules,
+            )
+            .unwrap();
+
         assert!(!experiment_id.is_empty());
         assert!(manager.experiments.contains_key(&experiment_id));
     }

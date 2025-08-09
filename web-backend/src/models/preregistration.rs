@@ -10,11 +10,11 @@ pub struct PreRegistrationDb {
     pub researcher_id: String,
     pub title: String,
     pub description: String,
-    
+
     pub registered_at: DateTime<Utc>,
     pub registration_hash: String,
     pub status: String,
-    
+
     // JSON fields
     pub study_metadata: String,
     pub hypotheses: String,
@@ -22,10 +22,10 @@ pub struct PreRegistrationDb {
     pub data_collection_plan: String,
     pub exclusion_criteria: String,
     pub decision_rules: String,
-    
+
     pub version: i32,
     pub parent_id: Option<String>,
-    
+
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -144,9 +144,16 @@ pub struct DataCollectionPlan {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum StoppingRule {
-    FixedSampleSize { n: usize },
-    Sequential { max_n: usize, interim_analyses: Vec<usize> },
-    Adaptive { criteria: String },
+    FixedSampleSize {
+        n: usize,
+    },
+    Sequential {
+        max_n: usize,
+        interim_analyses: Vec<usize>,
+    },
+    Adaptive {
+        criteria: String,
+    },
     None,
 }
 

@@ -149,7 +149,9 @@ pub async fn register(
     .ok();
 
     // Track business metrics for new user signup
-    global_business_metrics().record_user_signup(user_id, true).await; // true for trial by default
+    global_business_metrics()
+        .record_user_signup(user_id, true)
+        .await; // true for trial by default
 
     Ok((
         StatusCode::CREATED,
@@ -585,12 +587,12 @@ pub async fn logout(
     // Log audit event
     // Hash session ID before logging for security
     let session_fingerprint = claims.session_id.as_ref().map(|sid| {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(sid.as_bytes());
         format!("{:x}", hasher.finalize())
     });
-    
+
     AuditService::log_event(
         &state.db_pool,
         Some(user_id),
@@ -640,7 +642,7 @@ pub async fn me(
         id: user_id,
         username: user_row.get("username"),
         email: user_row.get("email"),
-        password_hash: None,  // Never expose password hash in user profile endpoints
+        password_hash: None, // Never expose password hash in user profile endpoints
         apple_user_id: user_row.get("apple_user_id"),
         github_user_id: user_row.get("github_user_id"),
         oauth_provider_id: user_row.get("oauth_provider_id"),

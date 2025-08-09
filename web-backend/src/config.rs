@@ -84,7 +84,11 @@ impl Config {
             log_level: env::var("LOG_LEVEL").unwrap_or_else(|_| "debug".to_string()),
             cors_origin: env::var("CORS_ORIGIN").unwrap_or_else(|_| {
                 // Default to localhost in development, require explicit configuration otherwise
-                if env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()).to_lowercase() == "development" {
+                if env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "development".to_string())
+                    .to_lowercase()
+                    == "development"
+                {
                     "http://localhost:3000".to_string()
                 } else {
                     panic!("CORS_ORIGIN must be explicitly set in non-development environments");
@@ -142,64 +146,88 @@ impl Config {
 
             // OAuth Providers configuration
             // These values are optional in development but required in production
-            apple_client_id: env::var("APPLE_CLIENT_ID")
-                .unwrap_or_else(|_| {
-                    if env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()).to_lowercase() == "production" {
-                        panic!("APPLE_CLIENT_ID must be set in production environment");
-                    }
-                    String::new()  // Empty string for non-production
-                }),
-            apple_team_id: env::var("APPLE_TEAM_ID")
-                .unwrap_or_else(|_| {
-                    if env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()).to_lowercase() == "production" {
-                        panic!("APPLE_TEAM_ID must be set in production environment");
-                    }
-                    String::new()
-                }),
-            apple_key_id: env::var("APPLE_KEY_ID")
-                .unwrap_or_else(|_| {
-                    if env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()).to_lowercase() == "production" {
-                        panic!("APPLE_KEY_ID must be set in production environment");
-                    }
-                    String::new()
-                }),
-            apple_private_key_path: env::var("APPLE_PRIVATE_KEY_PATH")
-                .unwrap_or_else(|_| {
-                    if env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()).to_lowercase() == "production" {
-                        panic!("APPLE_PRIVATE_KEY_PATH must be set in production environment");
-                    }
-                    String::new()
-                }),
-            apple_redirect_uri: env::var("APPLE_REDIRECT_URI")
-                .unwrap_or_else(|_| {
-                    if env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()).to_lowercase() == "production" {
-                        panic!("APPLE_REDIRECT_URI must be set in production environment");
-                    }
-                    String::new()
-                }),
+            apple_client_id: env::var("APPLE_CLIENT_ID").unwrap_or_else(|_| {
+                if env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "development".to_string())
+                    .to_lowercase()
+                    == "production"
+                {
+                    panic!("APPLE_CLIENT_ID must be set in production environment");
+                }
+                String::new() // Empty string for non-production
+            }),
+            apple_team_id: env::var("APPLE_TEAM_ID").unwrap_or_else(|_| {
+                if env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "development".to_string())
+                    .to_lowercase()
+                    == "production"
+                {
+                    panic!("APPLE_TEAM_ID must be set in production environment");
+                }
+                String::new()
+            }),
+            apple_key_id: env::var("APPLE_KEY_ID").unwrap_or_else(|_| {
+                if env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "development".to_string())
+                    .to_lowercase()
+                    == "production"
+                {
+                    panic!("APPLE_KEY_ID must be set in production environment");
+                }
+                String::new()
+            }),
+            apple_private_key_path: env::var("APPLE_PRIVATE_KEY_PATH").unwrap_or_else(|_| {
+                if env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "development".to_string())
+                    .to_lowercase()
+                    == "production"
+                {
+                    panic!("APPLE_PRIVATE_KEY_PATH must be set in production environment");
+                }
+                String::new()
+            }),
+            apple_redirect_uri: env::var("APPLE_REDIRECT_URI").unwrap_or_else(|_| {
+                if env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "development".to_string())
+                    .to_lowercase()
+                    == "production"
+                {
+                    panic!("APPLE_REDIRECT_URI must be set in production environment");
+                }
+                String::new()
+            }),
 
             // GitHub OAuth configuration
-            github_client_id: env::var("GITHUB_CLIENT_ID")
-                .unwrap_or_else(|_| {
-                    if env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()).to_lowercase() == "production" {
-                        panic!("GITHUB_CLIENT_ID must be set in production environment");
-                    }
-                    String::new()
-                }),
-            github_client_secret: env::var("GITHUB_CLIENT_SECRET")
-                .unwrap_or_else(|_| {
-                    if env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()).to_lowercase() == "production" {
-                        panic!("GITHUB_CLIENT_SECRET must be set in production environment");
-                    }
-                    String::new()
-                }),
-            github_redirect_uri: env::var("GITHUB_REDIRECT_URI")
-                .unwrap_or_else(|_| {
-                    if env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()).to_lowercase() == "production" {
-                        panic!("GITHUB_REDIRECT_URI must be set in production environment");
-                    }
-                    String::new()
-                }),
+            github_client_id: env::var("GITHUB_CLIENT_ID").unwrap_or_else(|_| {
+                if env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "development".to_string())
+                    .to_lowercase()
+                    == "production"
+                {
+                    panic!("GITHUB_CLIENT_ID must be set in production environment");
+                }
+                String::new()
+            }),
+            github_client_secret: env::var("GITHUB_CLIENT_SECRET").unwrap_or_else(|_| {
+                if env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "development".to_string())
+                    .to_lowercase()
+                    == "production"
+                {
+                    panic!("GITHUB_CLIENT_SECRET must be set in production environment");
+                }
+                String::new()
+            }),
+            github_redirect_uri: env::var("GITHUB_REDIRECT_URI").unwrap_or_else(|_| {
+                if env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "development".to_string())
+                    .to_lowercase()
+                    == "production"
+                {
+                    panic!("GITHUB_REDIRECT_URI must be set in production environment");
+                }
+                String::new()
+            }),
 
             // TLS/SSL configuration
             tls_domain: env::var("TLS_DOMAIN").ok(),
@@ -232,21 +260,29 @@ impl Config {
         if self.jwt_secret.len() < 64 {
             return Err("JWT secret must be at least 64 characters for production".to_string());
         }
-        
+
         // Check for common weak patterns in JWT secret
         let jwt_lower = self.jwt_secret.to_lowercase();
-        if jwt_lower.contains("secret") || jwt_lower.contains("password") || 
-           jwt_lower.contains("default") || jwt_lower.contains("admin") ||
-           jwt_lower.contains("test") || jwt_lower.contains("demo") {
+        if jwt_lower.contains("secret")
+            || jwt_lower.contains("password")
+            || jwt_lower.contains("default")
+            || jwt_lower.contains("admin")
+            || jwt_lower.contains("test")
+            || jwt_lower.contains("demo")
+        {
             return Err("JWT secret contains weak patterns".to_string());
         }
 
         // Check for any placeholder or default values
-        if self.jwt_secret.contains("placeholder") || 
-           self.jwt_secret.contains("change_me") ||
-           self.jwt_secret.contains("development") ||
-           self.jwt_secret == "development_secret_change_in_production" {
-            return Err("JWT secret contains placeholder or default values not allowed in production".to_string());
+        if self.jwt_secret.contains("placeholder")
+            || self.jwt_secret.contains("change_me")
+            || self.jwt_secret.contains("development")
+            || self.jwt_secret == "development_secret_change_in_production"
+        {
+            return Err(
+                "JWT secret contains placeholder or default values not allowed in production"
+                    .to_string(),
+            );
         }
 
         if self.database_url.starts_with("sqlite://") && !self.database_url.contains("?mode=ro") {
@@ -255,52 +291,67 @@ impl Config {
 
         // Validate OAuth providers configuration in production
         // Check for empty or placeholder values
-        if self.apple_client_id.is_empty() || 
-           self.apple_client_id.contains("placeholder") || 
-           self.apple_client_id.contains("test") {
+        if self.apple_client_id.is_empty()
+            || self.apple_client_id.contains("placeholder")
+            || self.apple_client_id.contains("test")
+        {
             return Err("Apple Client ID must be properly configured for production".to_string());
         }
 
-        if self.apple_team_id.is_empty() || 
-           self.apple_team_id.contains("placeholder") || 
-           self.apple_team_id.contains("test") {
+        if self.apple_team_id.is_empty()
+            || self.apple_team_id.contains("placeholder")
+            || self.apple_team_id.contains("test")
+        {
             return Err("Apple Team ID must be properly configured for production".to_string());
         }
 
-        if self.apple_key_id.is_empty() || 
-           self.apple_key_id.contains("placeholder") || 
-           self.apple_key_id.contains("test") {
+        if self.apple_key_id.is_empty()
+            || self.apple_key_id.contains("placeholder")
+            || self.apple_key_id.contains("test")
+        {
             return Err("Apple Key ID must be properly configured for production".to_string());
         }
 
-        if self.apple_private_key_path.is_empty() || 
-           self.apple_private_key_path.contains("placeholder") || 
-           self.apple_private_key_path.contains("/tmp/") {
-            return Err("Apple private key path must be properly configured for production".to_string());
+        if self.apple_private_key_path.is_empty()
+            || self.apple_private_key_path.contains("placeholder")
+            || self.apple_private_key_path.contains("/tmp/")
+        {
+            return Err(
+                "Apple private key path must be properly configured for production".to_string(),
+            );
         }
-        
+
         // Verify the Apple private key file exists
-        if !self.apple_private_key_path.is_empty() && !std::path::Path::new(&self.apple_private_key_path).exists() {
-            return Err(format!("Apple private key file not found: {}", self.apple_private_key_path));
+        if !self.apple_private_key_path.is_empty()
+            && !std::path::Path::new(&self.apple_private_key_path).exists()
+        {
+            return Err(format!(
+                "Apple private key file not found: {}",
+                self.apple_private_key_path
+            ));
         }
 
         if !self.apple_redirect_uri.starts_with("https://") {
             return Err("Apple redirect URI must use HTTPS in production".to_string());
         }
 
-        if self.github_client_id.is_empty() || 
-           self.github_client_id.contains("placeholder") || 
-           self.github_client_id.contains("test") {
+        if self.github_client_id.is_empty()
+            || self.github_client_id.contains("placeholder")
+            || self.github_client_id.contains("test")
+        {
             return Err("GitHub Client ID must be properly configured for production".to_string());
         }
 
-        if self.github_client_secret.is_empty() || 
-           self.github_client_secret.contains("placeholder") || 
-           self.github_client_secret.contains("test") || 
-           self.github_client_secret.contains("secret") {
-            return Err("GitHub Client Secret must be properly configured for production".to_string());
+        if self.github_client_secret.is_empty()
+            || self.github_client_secret.contains("placeholder")
+            || self.github_client_secret.contains("test")
+            || self.github_client_secret.contains("secret")
+        {
+            return Err(
+                "GitHub Client Secret must be properly configured for production".to_string(),
+            );
         }
-        
+
         // GitHub secrets should be at least 40 characters
         if self.github_client_secret.len() < 40 {
             return Err("GitHub Client Secret appears to be invalid (too short)".to_string());

@@ -1,6 +1,6 @@
-use crate::experimental_design::{ExperimentalDesign, ExperimentCondition};
-use crate::multi_session::MultiSessionExperiment;
 use crate::config::LearnerConfig;
+use crate::experimental_design::{ExperimentCondition, ExperimentalDesign};
+use crate::multi_session::MultiSessionExperiment;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -98,10 +98,10 @@ pub struct ImpactAssessment {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ImpactLevel {
-    Minimal,    // Bug fixes, typos, documentation
-    Minor,      // Small parameter changes, additional features
-    Major,      // Significant protocol changes
-    Breaking,   // Incompatible changes requiring new version
+    Minimal,  // Bug fixes, typos, documentation
+    Minor,    // Small parameter changes, additional features
+    Major,    // Significant protocol changes
+    Breaking, // Incompatible changes requiring new version
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -248,8 +248,18 @@ impl ProtocolVersionControl {
         let main_branch = Branch {
             name: "main".to_string(),
             description: "Main development branch".to_string(),
-            base_version: SemanticVersion { major: 0, minor: 0, patch: 0, pre_release: Some("init".to_string()) },
-            head_version: SemanticVersion { major: 0, minor: 1, patch: 0, pre_release: None },
+            base_version: SemanticVersion {
+                major: 0,
+                minor: 0,
+                patch: 0,
+                pre_release: Some("init".to_string()),
+            },
+            head_version: SemanticVersion {
+                major: 0,
+                minor: 1,
+                patch: 0,
+                pre_release: None,
+            },
             created_by: self.author.clone(),
             created_at: chrono::Utc::now(),
             status: BranchStatus::Active,
@@ -262,7 +272,12 @@ impl ProtocolVersionControl {
             name,
             description,
             base_directory,
-            current_version: SemanticVersion { major: 0, minor: 1, patch: 0, pre_release: None },
+            current_version: SemanticVersion {
+                major: 0,
+                minor: 1,
+                patch: 0,
+                pre_release: None,
+            },
             versions: HashMap::new(),
             branches,
             active_branch: "main".to_string(),
@@ -289,11 +304,18 @@ impl ProtocolVersionControl {
         design: ExperimentalDesign,
         configs: HashMap<String, LearnerConfig>,
     ) -> Result<SemanticVersion, String> {
-        let repo_id = self.current_repo.as_ref().ok_or("No active repository")?.clone();
-        
+        let repo_id = self
+            .current_repo
+            .as_ref()
+            .ok_or("No active repository")?
+            .clone();
+
         // Get current version before mutable borrow
         let current_version = {
-            let repo = self.repositories.get(&repo_id).ok_or("Repository not found")?;
+            let repo = self
+                .repositories
+                .get(&repo_id)
+                .ok_or("Repository not found")?;
             repo.current_version.clone()
         };
 
@@ -323,7 +345,10 @@ impl ProtocolVersionControl {
         self.validate_version(&version)?;
 
         // Now get mutable borrow for insertion
-        let repo = self.repositories.get_mut(&repo_id).ok_or("Repository not found")?;
+        let repo = self
+            .repositories
+            .get_mut(&repo_id)
+            .ok_or("Repository not found")?;
 
         // Store version
         repo.versions.insert(new_version.to_string(), version);
@@ -343,8 +368,15 @@ impl ProtocolVersionControl {
         description: String,
         base_version: Option<SemanticVersion>,
     ) -> Result<(), String> {
-        let repo_id = self.current_repo.as_ref().ok_or("No active repository")?.clone();
-        let repo = self.repositories.get_mut(&repo_id).ok_or("Repository not found")?;
+        let repo_id = self
+            .current_repo
+            .as_ref()
+            .ok_or("No active repository")?
+            .clone();
+        let repo = self
+            .repositories
+            .get_mut(&repo_id)
+            .ok_or("Repository not found")?;
 
         if repo.branches.contains_key(&branch_name) {
             return Err("Branch already exists".to_string());
@@ -369,8 +401,15 @@ impl ProtocolVersionControl {
 
     /// Switch to a different branch
     pub fn switch_branch(&mut self, branch_name: String) -> Result<(), String> {
-        let repo_id = self.current_repo.as_ref().ok_or("No active repository")?.clone();
-        let repo = self.repositories.get_mut(&repo_id).ok_or("Repository not found")?;
+        let repo_id = self
+            .current_repo
+            .as_ref()
+            .ok_or("No active repository")?
+            .clone();
+        let repo = self
+            .repositories
+            .get_mut(&repo_id)
+            .ok_or("Repository not found")?;
 
         if !repo.branches.contains_key(&branch_name) {
             return Err("Branch does not exist".to_string());
@@ -387,26 +426,42 @@ impl ProtocolVersionControl {
         target_branch: String,
         merge_message: String,
     ) -> Result<SemanticVersion, String> {
-        let repo_id = self.current_repo.as_ref().ok_or("No active repository")?.clone();
-        
+        let repo_id = self
+            .current_repo
+            .as_ref()
+            .ok_or("No active repository")?
+            .clone();
+
         // Detect merge conflicts
         let conflicts = self.detect_merge_conflicts(&repo_id, &source_branch, &target_branch)?;
-        
+
         if !conflicts.is_empty() {
-            return Err(format!("Merge conflicts detected: {} conflicts need resolution", conflicts.len()));
+            return Err(format!(
+                "Merge conflicts detected: {} conflicts need resolution",
+                conflicts.len()
+            ));
         }
 
         // Perform merge
-        let merge_changes = self.calculate_merge_changes(&repo_id, &source_branch, &target_branch)?;
-        
+        let merge_changes =
+            self.calculate_merge_changes(&repo_id, &source_branch, &target_branch)?;
+
         // Create merge commit
-        let repo = self.repositories.get(&repo_id).ok_or("Repository not found")?;
-        let source_experiment = repo.branches.get(&source_branch)
+        let repo = self
+            .repositories
+            .get(&repo_id)
+            .ok_or("Repository not found")?;
+        let source_experiment = repo
+            .branches
+            .get(&source_branch)
             .and_then(|b| repo.versions.get(&b.head_version.to_string()))
             .ok_or("Source branch version not found")?;
 
         self.commit(
-            format!("Merge branch '{}' into '{}': {}", source_branch, target_branch, merge_message),
+            format!(
+                "Merge branch '{}' into '{}': {}",
+                source_branch, target_branch, merge_message
+            ),
             merge_changes,
             source_experiment.experiment_snapshot.experiment.clone(),
             source_experiment.experiment_snapshot.design.clone(),
@@ -415,9 +470,21 @@ impl ProtocolVersionControl {
     }
 
     /// Tag a version
-    pub fn tag_version(&mut self, version: SemanticVersion, tag: String, message: String) -> Result<(), String> {
-        let repo_id = self.current_repo.as_ref().ok_or("No active repository")?.clone();
-        let repo = self.repositories.get_mut(&repo_id).ok_or("Repository not found")?;
+    pub fn tag_version(
+        &mut self,
+        version: SemanticVersion,
+        tag: String,
+        message: String,
+    ) -> Result<(), String> {
+        let repo_id = self
+            .current_repo
+            .as_ref()
+            .ok_or("No active repository")?
+            .clone();
+        let repo = self
+            .repositories
+            .get_mut(&repo_id)
+            .ok_or("Repository not found")?;
 
         let version_key = version.to_string();
         if let Some(protocol_version) = repo.versions.get_mut(&version_key) {
@@ -431,11 +498,14 @@ impl ProtocolVersionControl {
     /// Get version history
     pub fn get_version_history(&self) -> Result<Vec<ProtocolVersion>, String> {
         let repo_id = self.current_repo.as_ref().ok_or("No active repository")?;
-        let repo = self.repositories.get(repo_id).ok_or("Repository not found")?;
+        let repo = self
+            .repositories
+            .get(repo_id)
+            .ok_or("Repository not found")?;
 
         let mut versions: Vec<ProtocolVersion> = repo.versions.values().cloned().collect();
         versions.sort_by(|a, b| b.timestamp.cmp(&a.timestamp)); // Most recent first
-        
+
         Ok(versions)
     }
 
@@ -446,10 +516,19 @@ impl ProtocolVersionControl {
         version_b: &SemanticVersion,
     ) -> Result<VersionComparison, String> {
         let repo_id = self.current_repo.as_ref().ok_or("No active repository")?;
-        let repo = self.repositories.get(repo_id).ok_or("Repository not found")?;
+        let repo = self
+            .repositories
+            .get(repo_id)
+            .ok_or("Repository not found")?;
 
-        let ver_a = repo.versions.get(&version_a.to_string()).ok_or("Version A not found")?;
-        let ver_b = repo.versions.get(&version_b.to_string()).ok_or("Version B not found")?;
+        let ver_a = repo
+            .versions
+            .get(&version_a.to_string())
+            .ok_or("Version A not found")?;
+        let ver_b = repo
+            .versions
+            .get(&version_b.to_string())
+            .ok_or("Version B not found")?;
 
         Ok(VersionComparison {
             version_a: version_a.clone(),
@@ -466,9 +545,15 @@ impl ProtocolVersionControl {
         export_path: &PathBuf,
     ) -> Result<Vec<PathBuf>, String> {
         let repo_id = self.current_repo.as_ref().ok_or("No active repository")?;
-        let repo = self.repositories.get(repo_id).ok_or("Repository not found")?;
+        let repo = self
+            .repositories
+            .get(repo_id)
+            .ok_or("Repository not found")?;
 
-        let protocol_version = repo.versions.get(&version.to_string()).ok_or("Version not found")?;
+        let protocol_version = repo
+            .versions
+            .get(&version.to_string())
+            .ok_or("Version not found")?;
 
         std::fs::create_dir_all(export_path)
             .map_err(|e| format!("Failed to create export directory: {}", e))?;
@@ -477,16 +562,18 @@ impl ProtocolVersionControl {
 
         // Export experiment configuration
         let experiment_file = export_path.join("experiment.json");
-        let experiment_json = serde_json::to_string_pretty(&protocol_version.experiment_snapshot.experiment)
-            .map_err(|e| format!("Failed to serialize experiment: {}", e))?;
+        let experiment_json =
+            serde_json::to_string_pretty(&protocol_version.experiment_snapshot.experiment)
+                .map_err(|e| format!("Failed to serialize experiment: {}", e))?;
         std::fs::write(&experiment_file, experiment_json)
             .map_err(|e| format!("Failed to write experiment file: {}", e))?;
         exported_files.push(experiment_file);
 
         // Export design configuration
         let design_file = export_path.join("design.json");
-        let design_json = serde_json::to_string_pretty(&protocol_version.experiment_snapshot.design)
-            .map_err(|e| format!("Failed to serialize design: {}", e))?;
+        let design_json =
+            serde_json::to_string_pretty(&protocol_version.experiment_snapshot.design)
+                .map_err(|e| format!("Failed to serialize design: {}", e))?;
         std::fs::write(&design_file, design_json)
             .map_err(|e| format!("Failed to write design file: {}", e))?;
         exported_files.push(design_file);
@@ -514,7 +601,7 @@ impl ProtocolVersionControl {
     fn create_initial_commit(&mut self, repo_id: &str) -> Result<(), String> {
         // Create minimal experiment for initial commit
         use crate::topology::Topology;
-        
+
         let initial_experiment = MultiSessionExperiment {
             id: "initial".to_string(),
             name: "Initial Protocol".to_string(),
@@ -583,8 +670,13 @@ impl ProtocolVersionControl {
         Ok(())
     }
 
-    fn calculate_new_version(&self, current: &SemanticVersion, changes: &[ProtocolChange]) -> SemanticVersion {
-        let max_impact = changes.iter()
+    fn calculate_new_version(
+        &self,
+        current: &SemanticVersion,
+        changes: &[ProtocolChange],
+    ) -> SemanticVersion {
+        let max_impact = changes
+            .iter()
             .map(|c| &c.impact_assessment.impact_level)
             .max_by_key(|level| match level {
                 ImpactLevel::Minimal => 0,
@@ -624,7 +716,7 @@ impl ProtocolVersionControl {
     ) -> Result<ExperimentSnapshot, String> {
         let snapshot_data = serde_json::to_string(&experiment)
             .map_err(|e| format!("Failed to serialize experiment: {}", e))?;
-        
+
         let checksum = format!("{:x}", md5::compute(snapshot_data));
 
         Ok(ExperimentSnapshot {
@@ -637,7 +729,12 @@ impl ProtocolVersionControl {
         })
     }
 
-    fn generate_commit_hash(&self, snapshot: &ExperimentSnapshot, message: &str, changes: &[ProtocolChange]) -> String {
+    fn generate_commit_hash(
+        &self,
+        snapshot: &ExperimentSnapshot,
+        message: &str,
+        changes: &[ProtocolChange],
+    ) -> String {
         let content = format!("{}{}{:?}", snapshot.checksum, message, changes);
         format!("{:x}", md5::compute(content))
     }
@@ -648,32 +745,53 @@ impl ProtocolVersionControl {
     }
 
     fn save_repository_state(&self, repo_id: &str) -> Result<(), String> {
-        let repo = self.repositories.get(repo_id).ok_or("Repository not found")?;
+        let repo = self
+            .repositories
+            .get(repo_id)
+            .ok_or("Repository not found")?;
         let state_file = repo.base_directory.join(".protocol_repo.json");
-        
+
         let repo_json = serde_json::to_string_pretty(repo)
             .map_err(|e| format!("Failed to serialize repository: {}", e))?;
-        
+
         std::fs::write(state_file, repo_json)
             .map_err(|e| format!("Failed to save repository state: {}", e))
     }
 
-    fn detect_merge_conflicts(&self, _repo_id: &str, _source: &str, _target: &str) -> Result<Vec<MergeConflict>, String> {
+    fn detect_merge_conflicts(
+        &self,
+        _repo_id: &str,
+        _source: &str,
+        _target: &str,
+    ) -> Result<Vec<MergeConflict>, String> {
         // Simplified - in real implementation would compare snapshots
         Ok(Vec::new())
     }
 
-    fn calculate_merge_changes(&self, _repo_id: &str, _source: &str, _target: &str) -> Result<Vec<ProtocolChange>, String> {
+    fn calculate_merge_changes(
+        &self,
+        _repo_id: &str,
+        _source: &str,
+        _target: &str,
+    ) -> Result<Vec<ProtocolChange>, String> {
         // Simplified merge calculation
         Ok(Vec::new())
     }
 
-    fn calculate_diff(&self, _snapshot_a: &ExperimentSnapshot, _snapshot_b: &ExperimentSnapshot) -> Vec<ProtocolChange> {
+    fn calculate_diff(
+        &self,
+        _snapshot_a: &ExperimentSnapshot,
+        _snapshot_b: &ExperimentSnapshot,
+    ) -> Vec<ProtocolChange> {
         // Simplified diff calculation
         Vec::new()
     }
 
-    fn assess_version_impact(&self, _changes_a: &[ProtocolChange], _changes_b: &[ProtocolChange]) -> ImpactSummary {
+    fn assess_version_impact(
+        &self,
+        _changes_a: &[ProtocolChange],
+        _changes_b: &[ProtocolChange],
+    ) -> ImpactSummary {
         ImpactSummary {
             overall_impact: ImpactLevel::Minor,
             breaking_changes: 0,
@@ -683,8 +801,12 @@ impl ProtocolVersionControl {
         }
     }
 
-    fn generate_reproducibility_manifest(&self, version: &ProtocolVersion) -> Result<String, String> {
-        let manifest = format!(r#"
+    fn generate_reproducibility_manifest(
+        &self,
+        version: &ProtocolVersion,
+    ) -> Result<String, String> {
+        let manifest = format!(
+            r#"
 # REPRODUCIBILITY MANIFEST
 
 ## Version Information
@@ -743,13 +865,24 @@ This version has been validated for:
             version.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
             version.status,
             version.message,
-            version.changes.iter()
+            version
+                .changes
+                .iter()
                 .enumerate()
-                .map(|(i, c)| format!("{}. {} - {} ({})", i+1, c.component, c.description, format!("{:?}", c.change_type)))
+                .map(|(i, c)| format!(
+                    "{}. {} - {} ({})",
+                    i + 1,
+                    c.component,
+                    c.description,
+                    format!("{:?}", c.change_type)
+                ))
                 .collect::<Vec<_>>()
                 .join("\n"),
             version.experiment_snapshot.experiment.id,
-            format!("{:?}", version.experiment_snapshot.design).split("::").last().unwrap_or("Unknown"),
+            format!("{:?}", version.experiment_snapshot.design)
+                .split("::")
+                .last()
+                .unwrap_or("Unknown"),
             version.experiment_snapshot.experiment.sessions.len(),
             version.experiment_snapshot.checksum,
             env!("CARGO_PKG_VERSION"),
@@ -791,7 +924,7 @@ mod tests {
         };
 
         let mut vc = ProtocolVersionControl::new(author);
-        
+
         let metadata = RepositoryMetadata {
             research_domain: "Cognitive Psychology".to_string(),
             principal_investigator: "Dr. Test".to_string(),

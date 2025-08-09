@@ -1,16 +1,16 @@
 use axum::{
     extract::State,
-    response::{Html, IntoResponse, Json},
     http::StatusCode,
+    response::{Html, IntoResponse, Json},
 };
+use chrono;
+use serde_json::json;
 use std::sync::Arc;
 use tracing::{info, instrument};
-use serde_json::json;
-use chrono;
 
 use crate::{
     error::AppResult,
-    monitoring::{global_metrics, database::global_database_monitor, otel::OtelMetricsExporter},
+    monitoring::{database::global_database_monitor, global_metrics, otel::OtelMetricsExporter},
     state::AppState,
 };
 
@@ -18,17 +18,19 @@ use crate::{
 #[instrument(level = "info")]
 pub async fn metrics_dashboard_html() -> impl IntoResponse {
     info!("Serving metrics dashboard HTML");
-    
+
     let html_content = include_str!("../../static/dashboard.html");
     Html(html_content)
 }
 
 /// API endpoint for dashboard data (JSON)
 #[instrument(level = "debug")]
-pub async fn dashboard_data(State(state): State<Arc<AppState>>) -> AppResult<Json<serde_json::Value>> {
+pub async fn dashboard_data(
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
     let metrics_snapshot = global_metrics().get_snapshot().await;
     let db_health = global_database_monitor().get_health_metrics().await;
-    let (active_conns, total_conns, conn_errors, conn_timeouts) = 
+    let (active_conns, total_conns, conn_errors, conn_timeouts) =
         global_database_monitor().get_connection_metrics();
 
     // Calculate derived metrics
@@ -52,7 +54,9 @@ pub async fn dashboard_data(State(state): State<Arc<AppState>>) -> AppResult<Jso
     };
 
     let cache_hit_rate = if (metrics_snapshot.cache_hits + metrics_snapshot.cache_misses) > 0 {
-        (metrics_snapshot.cache_hits as f64 / (metrics_snapshot.cache_hits + metrics_snapshot.cache_misses) as f64) * 100.0
+        (metrics_snapshot.cache_hits as f64
+            / (metrics_snapshot.cache_hits + metrics_snapshot.cache_misses) as f64)
+            * 100.0
     } else {
         0.0
     };
@@ -73,7 +77,11 @@ pub async fn dashboard_data(State(state): State<Arc<AppState>>) -> AppResult<Jso
 
     // Slowest endpoints by average response time
     let mut slowest_endpoints: Vec<_> = metrics_snapshot.endpoint_metrics.iter().collect();
-    slowest_endpoints.sort_by(|a, b| b.1.avg_duration_ms.partial_cmp(&a.1.avg_duration_ms).unwrap_or(std::cmp::Ordering::Equal));
+    slowest_endpoints.sort_by(|a, b| {
+        b.1.avg_duration_ms
+            .partial_cmp(&a.1.avg_duration_ms)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let slowest_endpoints: Vec<_> = slowest_endpoints.into_iter().take(10).collect();
 
     let dashboard_data = json!({
@@ -162,7 +170,7 @@ pub async fn dashboard_data(State(state): State<Arc<AppState>>) -> AppResult<Jso
 #[instrument(level = "debug")]
 pub async fn realtime_metrics() -> AppResult<Json<serde_json::Value>> {
     let metrics_snapshot = global_metrics().get_snapshot().await;
-    
+
     let realtime_data = json!({
         "timestamp": chrono::Utc::now(),
         "requests_total": metrics_snapshot.request_count,
@@ -185,7 +193,9 @@ pub async fn realtime_metrics() -> AppResult<Json<serde_json::Value>> {
 
 /// OpenTelemetry metrics export for external systems
 #[instrument(level = "info")]
-pub async fn otel_metrics(State(state): State<Arc<AppState>>) -> AppResult<Json<serde_json::Value>> {
+pub async fn otel_metrics(
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
     let exporter = OtelMetricsExporter::new(
         "learning-system".to_string(),
         env!("CARGO_PKG_VERSION").to_string(),
@@ -212,11 +222,11 @@ pub async fn otel_metrics(State(state): State<Arc<AppState>>) -> AppResult<Json<
 }
 
 /// System information endpoint - restricted to authenticated admins only
-#[instrument(level = "debug")]  
+#[instrument(level = "debug")]
 pub async fn system_info(State(state): State<Arc<AppState>>) -> AppResult<Json<serde_json::Value>> {
     // This endpoint should only be accessible to authenticated admin users
     // The middleware should have already validated this, but we'll add a check here too
-    
+
     // Return only non-sensitive system information
     let system_info = json!({
         "service": {
@@ -243,9 +253,11 @@ pub async fn system_info(State(state): State<Arc<AppState>>) -> AppResult<Json<s
 /// Database performance report
 #[instrument(level = "info")]
 pub async fn database_report() -> AppResult<Json<serde_json::Value>> {
-    let report = global_database_monitor().generate_performance_report().await;
+    let report = global_database_monitor()
+        .generate_performance_report()
+        .await;
     let slow_queries = global_database_monitor().get_slow_queries(20).await;
-    
+
     let db_report = json!({
         "report": report,
         "slow_queries": slow_queries,
@@ -257,7 +269,9 @@ pub async fn database_report() -> AppResult<Json<serde_json::Value>> {
 
 /// Health check with detailed component status
 #[instrument(level = "debug")]
-pub async fn detailed_health(State(state): State<Arc<AppState>>) -> AppResult<Json<serde_json::Value>> {
+pub async fn detailed_health(
+    State(state): State<Arc<AppState>>,
+) -> AppResult<Json<serde_json::Value>> {
     // This would ideally call the existing health check functionality
     // For now, we'll create a basic health summary
     let metrics_snapshot = global_metrics().get_snapshot().await;

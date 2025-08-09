@@ -123,7 +123,10 @@ impl IntoResponse for AppError {
                     "Cache operation failed"
                 );
                 tracing::debug!("Redis error details for {}: {:?}", error_id, e);
-                (StatusCode::INTERNAL_SERVER_ERROR, format!("Cache operation failed. Error ID: {}", error_id))
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Cache operation failed. Error ID: {}", error_id),
+                )
             }
             AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::AuthenticationError(msg) => (StatusCode::UNAUTHORIZED, msg),

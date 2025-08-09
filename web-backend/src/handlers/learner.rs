@@ -451,15 +451,15 @@ pub async fn sessions(
     Ok(Json(sessions))
 }
 
-// Helper function to calculate preferred difficulty based on learner performance  
+// Helper function to calculate preferred difficulty based on learner performance
 fn calculate_preferred_difficulty(response_stats: &sqlx::sqlite::SqliteRow) -> f64 {
     let accuracy = response_stats
         .get::<Option<f64>, _>("accuracy")
         .unwrap_or(0.5);
-    
+
     // Calculate preferred difficulty based on accuracy:
     // - Too easy (>90% accuracy): increase difficulty
-    // - Too hard (<50% accuracy): decrease difficulty  
+    // - Too hard (<50% accuracy): decrease difficulty
     // - Sweet spot (70-85% accuracy): maintain current level
     if accuracy > 0.90 {
         0.7 // Increase difficulty for high performers

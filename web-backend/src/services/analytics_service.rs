@@ -10,13 +10,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use super::privacy::{DifferentialPrivacyEngine, Mechanism};
 use crate::error::AppError;
 use crate::utils::math;
 use crate::utils::statistics::{
     self, analyze_response_times, bootstrap_confidence_interval, comprehensive_outlier_detection,
     one_way_anova, t_test_two_sample, ExGaussianParams, OutlierAnalysis,
 };
-use super::privacy::{DifferentialPrivacyEngine, Mechanism};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PopulationStats {
@@ -76,7 +76,11 @@ impl AnalyticsService {
         }
     }
 
-    pub fn new_with_config(db: Arc<DbPool>, cache: Arc<ConnectionManager>, config: Arc<Config>) -> Self {
+    pub fn new_with_config(
+        db: Arc<DbPool>,
+        cache: Arc<ConnectionManager>,
+        config: Arc<Config>,
+    ) -> Self {
         let epsilon = if config.privacy_epsilon > 0.0 {
             config.privacy_epsilon
         } else {
@@ -421,7 +425,11 @@ impl AnalyticsService {
     // Private helper methods
     fn add_differential_privacy_noise(&self, true_value: f64) -> f64 {
         let mut engine = DifferentialPrivacyEngine::new(self.privacy_epsilon, 1e-9);
-        engine.add_noise(true_value, Mechanism::Laplace { sensitivity: 1.0 }, self.privacy_epsilon)
+        engine.add_noise(
+            true_value,
+            Mechanism::Laplace { sensitivity: 1.0 },
+            self.privacy_epsilon,
+        )
     }
 
     async fn cache_population_stats(&self, stats: &PopulationStats) -> Result<()> {

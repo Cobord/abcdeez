@@ -91,7 +91,7 @@ impl ExtendedTaskGenerator {
             Some(s) => rand::rngs::StdRng::seed_from_u64(s),
             None => rand::rngs::StdRng::from_entropy(),
         };
-        
+
         let mut semantic_attributes = HashMap::new();
 
         // For alphabet, add vowel/consonant categories

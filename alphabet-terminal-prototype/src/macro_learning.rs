@@ -53,7 +53,7 @@ impl MacroDiscoverySystem {
             Some(s) => rand::rngs::StdRng::seed_from_u64(s),
             None => rand::rngs::StdRng::from_entropy(),
         };
-        
+
         let mut system = MacroDiscoverySystem {
             topology,
             discovered_macros: HashMap::new(),

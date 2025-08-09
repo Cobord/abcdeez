@@ -42,10 +42,10 @@ pub async fn get_learning_effectiveness(
             .load(std::sync::atomic::Ordering::Relaxed)
             .into(),
         adaptive_difficulty_effectiveness: 0.85, // Would be calculated from actual data
-        personalization_impact: 0.72, // Would be A/B tested
-        intervention_success_rate: 0.68, // Success rate of learning interventions
+        personalization_impact: 0.72,            // Would be A/B tested
+        intervention_success_rate: 0.68,         // Success rate of learning interventions
     };
-    
+
     Ok(Json(metrics))
 }
 
@@ -54,27 +54,53 @@ pub async fn get_user_journey_analytics(
     State(_state): State<Arc<AppState>>,
 ) -> AppResult<Json<serde_json::Value>> {
     let user_journeys = global_business_metrics().user_journey_data.read().await;
-    
+
     // Aggregate user journey statistics
     let total_users = user_journeys.len();
-    let active_users = user_journeys.values()
-        .filter(|j| matches!(j.lifecycle_stage, crate::monitoring::business::UserLifecycleStage::Active))
+    let active_users = user_journeys
+        .values()
+        .filter(|j| {
+            matches!(
+                j.lifecycle_stage,
+                crate::monitoring::business::UserLifecycleStage::Active
+            )
+        })
         .count();
-    let at_risk_users = user_journeys.values()
-        .filter(|j| matches!(j.lifecycle_stage, crate::monitoring::business::UserLifecycleStage::AtRisk))
+    let at_risk_users = user_journeys
+        .values()
+        .filter(|j| {
+            matches!(
+                j.lifecycle_stage,
+                crate::monitoring::business::UserLifecycleStage::AtRisk
+            )
+        })
         .count();
-    let churned_users = user_journeys.values()
-        .filter(|j| matches!(j.lifecycle_stage, crate::monitoring::business::UserLifecycleStage::Churned))
+    let churned_users = user_journeys
+        .values()
+        .filter(|j| {
+            matches!(
+                j.lifecycle_stage,
+                crate::monitoring::business::UserLifecycleStage::Churned
+            )
+        })
         .count();
 
     let avg_session_count = if total_users > 0 {
-        user_journeys.values().map(|j| j.total_sessions).sum::<u64>() as f64 / total_users as f64
+        user_journeys
+            .values()
+            .map(|j| j.total_sessions)
+            .sum::<u64>() as f64
+            / total_users as f64
     } else {
         0.0
     };
 
     let avg_task_completion = if total_users > 0 {
-        user_journeys.values().map(|j| j.total_tasks_completed).sum::<u64>() as f64 / total_users as f64
+        user_journeys
+            .values()
+            .map(|j| j.total_tasks_completed)
+            .sum::<u64>() as f64
+            / total_users as f64
     } else {
         0.0
     };
@@ -124,7 +150,7 @@ pub async fn get_revenue_metrics(
     State(_state): State<Arc<AppState>>,
 ) -> AppResult<Json<serde_json::Value>> {
     let daily_metrics = global_business_metrics().generate_daily_snapshot().await;
-    
+
     let response = serde_json::json!({
         "revenue_metrics": daily_metrics.revenue_metrics,
         "conversion_metrics": {
@@ -161,7 +187,7 @@ pub async fn export_business_data(
     let dashboard = global_business_metrics().get_business_dashboard().await;
     let daily_metrics = global_business_metrics().generate_daily_snapshot().await;
     let user_journeys = global_business_metrics().user_journey_data.read().await;
-    
+
     // Create comprehensive export
     let export_data = serde_json::json!({
         "export_timestamp": chrono::Utc::now(),

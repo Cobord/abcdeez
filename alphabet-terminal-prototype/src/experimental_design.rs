@@ -52,7 +52,9 @@ pub enum RandomizationType {
     /// Block randomization with specified block size
     Block { block_size: usize },
     /// Stratified randomization based on participant characteristics
-    Stratified { strata: Vec<StratificationCriterion> },
+    Stratified {
+        strata: Vec<StratificationCriterion>,
+    },
     /// Adaptive randomization to balance group sizes
     Adaptive { target_ratio: Vec<f64> },
 }
@@ -118,15 +120,30 @@ impl ExperimentalDesigner {
         participant_characteristics: Option<HashMap<String, String>>,
     ) -> Result<ParticipantAssignment, String> {
         match design {
-            ExperimentalDesign::BetweenSubjects { conditions, randomization } => {
-                self.assign_between_subjects(participant_id, conditions, randomization, participant_characteristics)
-            }
-            ExperimentalDesign::WithinSubjects { conditions, counterbalancing } => {
-                self.assign_within_subjects(participant_id, conditions, counterbalancing)
-            }
-            ExperimentalDesign::Mixed { between_factors, within_factors, counterbalancing } => {
-                self.assign_mixed_design(participant_id, between_factors, within_factors, counterbalancing, participant_characteristics)
-            }
+            ExperimentalDesign::BetweenSubjects {
+                conditions,
+                randomization,
+            } => self.assign_between_subjects(
+                participant_id,
+                conditions,
+                randomization,
+                participant_characteristics,
+            ),
+            ExperimentalDesign::WithinSubjects {
+                conditions,
+                counterbalancing,
+            } => self.assign_within_subjects(participant_id, conditions, counterbalancing),
+            ExperimentalDesign::Mixed {
+                between_factors,
+                within_factors,
+                counterbalancing,
+            } => self.assign_mixed_design(
+                participant_id,
+                between_factors,
+                within_factors,
+                counterbalancing,
+                participant_characteristics,
+            ),
         }
     }
 
@@ -142,9 +159,7 @@ impl ExperimentalDesigner {
         }
 
         let selected_condition = match randomization {
-            RandomizationType::Simple => {
-                conditions.choose(&mut self.rng).unwrap().id.clone()
-            }
+            RandomizationType::Simple => conditions.choose(&mut self.rng).unwrap().id.clone(),
             RandomizationType::Block { block_size } => {
                 self.block_randomization(conditions, *block_size)?
             }
@@ -178,9 +193,7 @@ impl ExperimentalDesigner {
         counterbalancing: &CounterbalancingMethod,
     ) -> Result<ParticipantAssignment, String> {
         let condition_sequence = match counterbalancing {
-            CounterbalancingMethod::Complete => {
-                self.complete_counterbalancing(conditions)?
-            }
+            CounterbalancingMethod::Complete => self.complete_counterbalancing(conditions)?,
             CounterbalancingMethod::LatinSquare => {
                 self.latin_square_counterbalancing(conditions)?
             }
@@ -220,12 +233,13 @@ impl ExperimentalDesigner {
     ) -> Result<ParticipantAssignment, String> {
         // For mixed designs, first assign between-subjects factors
         let between_assignment = self.assign_between_factors(between_factors, &characteristics)?;
-        
+
         // Then generate within-subjects sequence
         let within_sequence = self.generate_within_sequence(within_factors, counterbalancing)?;
-        
+
         // Combine into full condition sequence
-        let condition_sequence = self.combine_between_within_conditions(&between_assignment, &within_sequence);
+        let condition_sequence =
+            self.combine_between_within_conditions(&between_assignment, &within_sequence);
 
         let assignment = ParticipantAssignment {
             participant_id,
@@ -255,7 +269,7 @@ impl ExperimentalDesigner {
         // Create block with equal numbers of each condition
         let mut block = Vec::new();
         let repeats_per_condition = block_size / conditions.len();
-        
+
         for condition in conditions {
             for _ in 0..repeats_per_condition {
                 block.push(condition.id.clone());
@@ -277,13 +291,15 @@ impl ExperimentalDesigner {
         strata: &[StratificationCriterion],
         characteristics: &Option<HashMap<String, String>>,
     ) -> Result<String, String> {
-        let characteristics = characteristics.as_ref()
+        let characteristics = characteristics
+            .as_ref()
             .ok_or("Participant characteristics required for stratified randomization")?;
 
         // Determine stratum for this participant
         let mut stratum_key = String::new();
         for criterion in strata {
-            let value = characteristics.get(&criterion.variable)
+            let value = characteristics
+                .get(&criterion.variable)
                 .ok_or(format!("Missing characteristic: {}", criterion.variable))?;
             stratum_key.push_str(&format!("{}:{};", criterion.variable, value));
         }
@@ -299,7 +315,8 @@ impl ExperimentalDesigner {
 
         // Find condition with minimum assignments in this stratum
         let min_count = stratum_counts.values().min().cloned().unwrap_or(0);
-        let candidates: Vec<_> = conditions.iter()
+        let candidates: Vec<_> = conditions
+            .iter()
             .filter(|c| stratum_counts.get(&c.id).unwrap_or(&0) == &min_count)
             .collect();
 
@@ -341,33 +358,42 @@ impl ExperimentalDesigner {
     }
 
     /// Complete counterbalancing (all possible orders)
-    fn complete_counterbalancing(&mut self, conditions: &[ExperimentCondition]) -> Result<Vec<String>, String> {
+    fn complete_counterbalancing(
+        &mut self,
+        conditions: &[ExperimentCondition],
+    ) -> Result<Vec<String>, String> {
         let condition_ids: Vec<_> = conditions.iter().map(|c| c.id.clone()).collect();
         let all_permutations = Self::generate_permutations(&condition_ids);
-        
+
         let participant_number = self.assignments.len();
         let selected_order = &all_permutations[participant_number % all_permutations.len()];
-        
+
         Ok(selected_order.clone())
     }
 
     /// Latin Square counterbalancing
-    fn latin_square_counterbalancing(&mut self, conditions: &[ExperimentCondition]) -> Result<Vec<String>, String> {
+    fn latin_square_counterbalancing(
+        &mut self,
+        conditions: &[ExperimentCondition],
+    ) -> Result<Vec<String>, String> {
         let n = conditions.len();
         let participant_number = self.assignments.len();
         let row = participant_number % n;
-        
+
         let mut sequence = Vec::new();
         for col in 0..n {
             let condition_index = (row + col) % n;
             sequence.push(conditions[condition_index].id.clone());
         }
-        
+
         Ok(sequence)
     }
 
     /// Balanced Latin Square counterbalancing
-    fn balanced_latin_square_counterbalancing(&mut self, conditions: &[ExperimentCondition]) -> Result<Vec<String>, String> {
+    fn balanced_latin_square_counterbalancing(
+        &mut self,
+        conditions: &[ExperimentCondition],
+    ) -> Result<Vec<String>, String> {
         let n = conditions.len();
         if n % 2 != 0 {
             return Err("Balanced Latin Square requires even number of conditions".to_string());
@@ -375,7 +401,7 @@ impl ExperimentalDesigner {
 
         let participant_number = self.assignments.len();
         let row = participant_number % n;
-        
+
         // Generate balanced Latin square where each condition follows every other exactly once
         let mut sequence = Vec::new();
         for col in 0..n {
@@ -386,24 +412,27 @@ impl ExperimentalDesigner {
             };
             sequence.push(conditions[condition_index].id.clone());
         }
-        
+
         Ok(sequence)
     }
 
     /// Williams Square counterbalancing (controls for first-order carryover)
-    fn williams_square_counterbalancing(&mut self, conditions: &[ExperimentCondition]) -> Result<Vec<String>, String> {
+    fn williams_square_counterbalancing(
+        &mut self,
+        conditions: &[ExperimentCondition],
+    ) -> Result<Vec<String>, String> {
         let n = conditions.len();
         let participant_number = self.assignments.len();
-        
+
         // Williams square construction is complex - simplified implementation
         let mut sequence = Vec::new();
         let offset = participant_number % n;
-        
+
         for i in 0..n {
             let condition_index = (offset + i * (n - 1) / 2) % n;
             sequence.push(conditions[condition_index].id.clone());
         }
-        
+
         Ok(sequence)
     }
 
@@ -419,9 +448,10 @@ impl ExperimentalDesigner {
         for _ in 0..repeat_count {
             sequence.extend(condition_ids.clone());
         }
-        
+
         // Shuffle while maintaining minimum separation
-        for _ in 0..100 { // Max attempts
+        for _ in 0..100 {
+            // Max attempts
             sequence.shuffle(&mut self.rng);
             if self.check_separation_constraint(&sequence, min_separation) {
                 // Trim to desired length
@@ -429,7 +459,7 @@ impl ExperimentalDesigner {
                 return Ok(sequence);
             }
         }
-        
+
         // Fallback to simple shuffle if constraint cannot be satisfied
         let mut simple_sequence = condition_ids;
         simple_sequence.shuffle(&mut self.rng);
@@ -446,7 +476,7 @@ impl ExperimentalDesigner {
         for (i, item) in items.iter().enumerate() {
             let mut remaining = items.to_vec();
             remaining.remove(i);
-            
+
             for mut perm in Self::generate_permutations(&remaining) {
                 perm.insert(0, item.clone());
                 result.push(perm);
@@ -457,7 +487,7 @@ impl ExperimentalDesigner {
 
     fn check_separation_constraint(&self, sequence: &[String], min_separation: usize) -> bool {
         let mut last_positions: HashMap<String, usize> = HashMap::new();
-        
+
         for (pos, condition) in sequence.iter().enumerate() {
             if let Some(&last_pos) = last_positions.get(condition) {
                 if pos - last_pos <= min_separation {
@@ -469,37 +499,54 @@ impl ExperimentalDesigner {
         true
     }
 
-    fn calculate_balancing_info(&self, conditions: &[ExperimentCondition]) -> HashMap<String, serde_json::Value> {
+    fn calculate_balancing_info(
+        &self,
+        conditions: &[ExperimentCondition],
+    ) -> HashMap<String, serde_json::Value> {
         let mut info = HashMap::new();
         let mut counts = HashMap::new();
-        
+
         for assignment in &self.assignments {
             for condition_id in &assignment.condition_sequence {
                 *counts.entry(condition_id.clone()).or_insert(0) += 1;
             }
         }
-        
-        info.insert("condition_counts".to_string(), serde_json::to_value(&counts).unwrap());
-        info.insert("total_assignments".to_string(), serde_json::json!(self.assignments.len()));
-        
+
+        info.insert(
+            "condition_counts".to_string(),
+            serde_json::to_value(&counts).unwrap(),
+        );
+        info.insert(
+            "total_assignments".to_string(),
+            serde_json::json!(self.assignments.len()),
+        );
+
         info
     }
 
-    fn assign_between_factors(&mut self, factors: &[Factor], characteristics: &Option<HashMap<String, String>>) -> Result<HashMap<String, String>, String> {
+    fn assign_between_factors(
+        &mut self,
+        factors: &[Factor],
+        characteristics: &Option<HashMap<String, String>>,
+    ) -> Result<HashMap<String, String>, String> {
         let mut assignment = HashMap::new();
-        
+
         for factor in factors {
             let level = factor.levels.choose(&mut self.rng).unwrap();
             assignment.insert(factor.name.clone(), level.clone());
         }
-        
+
         Ok(assignment)
     }
 
-    fn generate_within_sequence(&mut self, factors: &[Factor], counterbalancing: &CounterbalancingMethod) -> Result<Vec<HashMap<String, String>>, String> {
+    fn generate_within_sequence(
+        &mut self,
+        factors: &[Factor],
+        counterbalancing: &CounterbalancingMethod,
+    ) -> Result<Vec<HashMap<String, String>>, String> {
         // Simplified - generate all combinations of within-subjects factors
         let mut sequences = Vec::new();
-        
+
         // This would need proper combinatorial generation for multiple factors
         if let Some(factor) = factors.first() {
             for level in &factor.levels {
@@ -509,33 +556,38 @@ impl ExperimentalDesigner {
             }
             sequences.shuffle(&mut self.rng);
         }
-        
+
         Ok(sequences)
     }
 
-    fn combine_between_within_conditions(&self, between: &HashMap<String, String>, within: &[HashMap<String, String>]) -> Vec<String> {
+    fn combine_between_within_conditions(
+        &self,
+        between: &HashMap<String, String>,
+        within: &[HashMap<String, String>],
+    ) -> Vec<String> {
         let mut combined = Vec::new();
-        
+
         for within_condition in within {
             let mut full_condition = between.clone();
             full_condition.extend(within_condition.clone());
-            
+
             // Generate condition ID from combination
-            let condition_id = full_condition.iter()
+            let condition_id = full_condition
+                .iter()
                 .map(|(k, v)| format!("{}:{}", k, v))
                 .collect::<Vec<_>>()
                 .join(",");
-            
+
             combined.push(condition_id);
         }
-        
+
         combined
     }
 
     /// Get current assignment statistics
     pub fn get_assignment_statistics(&self) -> HashMap<String, serde_json::Value> {
         let mut stats = HashMap::new();
-        
+
         // Count assignments per condition
         let mut condition_counts: HashMap<String, usize> = HashMap::new();
         for assignment in &self.assignments {
@@ -543,16 +595,29 @@ impl ExperimentalDesigner {
                 *condition_counts.entry(condition.clone()).or_insert(0) += 1;
             }
         }
-        
-        stats.insert("condition_counts".to_string(), serde_json::to_value(&condition_counts).unwrap());
-        stats.insert("total_participants".to_string(), serde_json::json!(self.assignments.len()));
-        stats.insert("assignment_history".to_string(), serde_json::to_value(&self.assignments).unwrap());
-        
+
+        stats.insert(
+            "condition_counts".to_string(),
+            serde_json::to_value(&condition_counts).unwrap(),
+        );
+        stats.insert(
+            "total_participants".to_string(),
+            serde_json::json!(self.assignments.len()),
+        );
+        stats.insert(
+            "assignment_history".to_string(),
+            serde_json::to_value(&self.assignments).unwrap(),
+        );
+
         stats
     }
 
     /// Validate experimental design for statistical power
-    pub fn validate_design(&self, design: &ExperimentalDesign, minimum_n_per_condition: usize) -> Result<ValidationReport, String> {
+    pub fn validate_design(
+        &self,
+        design: &ExperimentalDesign,
+        minimum_n_per_condition: usize,
+    ) -> Result<ValidationReport, String> {
         let mut report = ValidationReport {
             valid: true,
             warnings: Vec::new(),
@@ -563,10 +628,12 @@ impl ExperimentalDesigner {
         match design {
             ExperimentalDesign::BetweenSubjects { conditions, .. } => {
                 if conditions.len() < 2 {
-                    report.errors.push("Between-subjects design requires at least 2 conditions".to_string());
+                    report
+                        .errors
+                        .push("Between-subjects design requires at least 2 conditions".to_string());
                     report.valid = false;
                 }
-                
+
                 let assignments_per_condition = self.assignments.len() / conditions.len();
                 if assignments_per_condition < minimum_n_per_condition {
                     report.warnings.push(format!(
@@ -575,12 +642,17 @@ impl ExperimentalDesigner {
                     ));
                 }
             }
-            ExperimentalDesign::WithinSubjects { conditions, counterbalancing } => {
+            ExperimentalDesign::WithinSubjects {
+                conditions,
+                counterbalancing,
+            } => {
                 if conditions.len() < 2 {
-                    report.errors.push("Within-subjects design requires at least 2 conditions".to_string());
+                    report
+                        .errors
+                        .push("Within-subjects design requires at least 2 conditions".to_string());
                     report.valid = false;
                 }
-                
+
                 match counterbalancing {
                     CounterbalancingMethod::Complete => {
                         let required_participants = Self::factorial(conditions.len());
@@ -591,7 +663,8 @@ impl ExperimentalDesigner {
                             ));
                         }
                     }
-                    CounterbalancingMethod::LatinSquare | CounterbalancingMethod::BalancedLatinSquare => {
+                    CounterbalancingMethod::LatinSquare
+                    | CounterbalancingMethod::BalancedLatinSquare => {
                         if self.assignments.len() % conditions.len() != 0 {
                             report.recommendations.push(format!(
                                 "Latin square designs work best with multiples of {} participants",
@@ -602,9 +675,15 @@ impl ExperimentalDesigner {
                     _ => {}
                 }
             }
-            ExperimentalDesign::Mixed { between_factors, within_factors, .. } => {
+            ExperimentalDesign::Mixed {
+                between_factors,
+                within_factors,
+                ..
+            } => {
                 if between_factors.is_empty() || within_factors.is_empty() {
-                    report.errors.push("Mixed design requires both between and within factors".to_string());
+                    report
+                        .errors
+                        .push("Mixed design requires both between and within factors".to_string());
                     report.valid = false;
                 }
             }
@@ -633,7 +712,7 @@ mod tests {
     #[test]
     fn test_block_randomization() {
         let mut designer = ExperimentalDesigner::new(Some(12345));
-        
+
         let conditions = vec![
             ExperimentCondition {
                 id: "condition_a".to_string(),
@@ -660,11 +739,9 @@ mod tests {
 
         // Assign 8 participants
         for i in 0..8 {
-            let assignment = designer.assign_participant(
-                format!("participant_{}", i),
-                &design,
-                None,
-            ).unwrap();
+            let assignment = designer
+                .assign_participant(format!("participant_{}", i), &design, None)
+                .unwrap();
             assert!(!assignment.condition_sequence.is_empty());
         }
 
@@ -677,7 +754,7 @@ mod tests {
     #[test]
     fn test_latin_square_counterbalancing() {
         let mut designer = ExperimentalDesigner::new(Some(54321));
-        
+
         let conditions = vec![
             ExperimentCondition {
                 id: "A".to_string(),
@@ -713,11 +790,9 @@ mod tests {
         // Assign 3 participants (should get different orders)
         let mut sequences = Vec::new();
         for i in 0..3 {
-            let assignment = designer.assign_participant(
-                format!("participant_{}", i),
-                &design,
-                None,
-            ).unwrap();
+            let assignment = designer
+                .assign_participant(format!("participant_{}", i), &design, None)
+                .unwrap();
             sequences.push(assignment.condition_sequence);
         }
 

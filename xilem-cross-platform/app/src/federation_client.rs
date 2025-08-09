@@ -2,7 +2,7 @@ use crate::federation::*;
 use reqwest::Client;
 use serde_json::Value;
 use std::collections::HashMap;
-use tokio::time::{Duration, timeout};
+use tokio::time::{timeout, Duration};
 
 /// Federation API Client for inter-institutional communication
 /// Handles secure data sharing, protocol synchronization, and network coordination
@@ -48,7 +48,10 @@ impl FederationClient {
     }
 
     /// Discover peer nodes in the federation network
-    pub async fn discover_network(&self, discovery_endpoints: Vec<String>) -> Result<NetworkDiscoveryResult, String> {
+    pub async fn discover_network(
+        &self,
+        discovery_endpoints: Vec<String>,
+    ) -> Result<NetworkDiscoveryResult, String> {
         let mut discovered_nodes = Vec::new();
         let mut network_protocols = Vec::new();
         let mut active_studies = Vec::new();
@@ -56,15 +59,21 @@ impl FederationClient {
         for endpoint in discovery_endpoints {
             match self.query_node_info(&endpoint).await {
                 Ok(node_info) => {
-                    if let Ok(node) = serde_json::from_value::<FederationNode>(node_info["node"].clone()) {
+                    if let Ok(node) =
+                        serde_json::from_value::<FederationNode>(node_info["node"].clone())
+                    {
                         discovered_nodes.push(node);
                     }
-                    
-                    if let Ok(protocols) = serde_json::from_value::<Vec<SharedProtocol>>(node_info["protocols"].clone()) {
+
+                    if let Ok(protocols) = serde_json::from_value::<Vec<SharedProtocol>>(
+                        node_info["protocols"].clone(),
+                    ) {
                         network_protocols.extend(protocols);
                     }
-                    
-                    if let Ok(studies) = serde_json::from_value::<Vec<FederatedStudy>>(node_info["studies"].clone()) {
+
+                    if let Ok(studies) =
+                        serde_json::from_value::<Vec<FederatedStudy>>(node_info["studies"].clone())
+                    {
                         active_studies.extend(studies);
                     }
                 }
@@ -83,7 +92,11 @@ impl FederationClient {
     }
 
     /// Join a federation network
-    pub async fn join_network(&self, coordinator_endpoint: String, local_node: &FederationNode) -> Result<String, String> {
+    pub async fn join_network(
+        &self,
+        coordinator_endpoint: String,
+        local_node: &FederationNode,
+    ) -> Result<String, String> {
         let join_request = serde_json::json!({
             "action": "join_network",
             "node": local_node,
@@ -91,23 +104,31 @@ impl FederationClient {
             "signature": self.sign_request(&local_node.node_id)
         });
 
-        let response = self.send_secure_request(
-            &coordinator_endpoint,
-            "/federation/join",
-            &join_request
-        ).await?;
+        let response = self
+            .send_secure_request(&coordinator_endpoint, "/federation/join", &join_request)
+            .await?;
 
         if response["status"] == "accepted" {
-            Ok(response["network_id"].as_str().unwrap_or("unknown").to_string())
+            Ok(response["network_id"]
+                .as_str()
+                .unwrap_or("unknown")
+                .to_string())
         } else {
-            Err(response["error"].as_str().unwrap_or("Join request rejected").to_string())
+            Err(response["error"]
+                .as_str()
+                .unwrap_or("Join request rejected")
+                .to_string())
         }
     }
 
     /// Share a research protocol with the network
-    pub async fn share_protocol(&self, protocol: &SharedProtocol, target_nodes: Vec<String>) -> Result<Vec<String>, String> {
+    pub async fn share_protocol(
+        &self,
+        protocol: &SharedProtocol,
+        target_nodes: Vec<String>,
+    ) -> Result<Vec<String>, String> {
         let mut successful_shares = Vec::new();
-        
+
         let share_request = serde_json::json!({
             "action": "share_protocol",
             "protocol": protocol,
@@ -118,7 +139,10 @@ impl FederationClient {
 
         for node_id in target_nodes {
             if let Some(endpoint) = self.get_node_endpoint(&node_id).await {
-                match self.send_secure_request(&endpoint, "/federation/protocol", &share_request).await {
+                match self
+                    .send_secure_request(&endpoint, "/federation/protocol", &share_request)
+                    .await
+                {
                     Ok(response) => {
                         if response["status"] == "received" {
                             successful_shares.push(node_id);
@@ -136,10 +160,10 @@ impl FederationClient {
 
     /// Request to join a federated study
     pub async fn request_study_participation(
-        &self, 
-        study_id: String, 
+        &self,
+        study_id: String,
         coordinator_endpoint: String,
-        proposed_contribution: ParticipationProposal
+        proposed_contribution: ParticipationProposal,
     ) -> Result<String, String> {
         let request = serde_json::json!({
             "action": "request_participation",
@@ -150,22 +174,26 @@ impl FederationClient {
             "signature": self.sign_request(&study_id)
         });
 
-        let response = self.send_secure_request(
-            &coordinator_endpoint,
-            "/federation/study/join",
-            &request
-        ).await?;
+        let response = self
+            .send_secure_request(&coordinator_endpoint, "/federation/study/join", &request)
+            .await?;
 
         match response["status"].as_str() {
             Some("pending") => Ok("Participation request submitted for review".to_string()),
             Some("accepted") => Ok("Participation request accepted".to_string()),
-            Some("rejected") => Err(response["reason"].as_str().unwrap_or("Request rejected").to_string()),
+            Some("rejected") => Err(response["reason"]
+                .as_str()
+                .unwrap_or("Request rejected")
+                .to_string()),
             _ => Err("Unexpected response from coordinator".to_string()),
         }
     }
 
     /// Sync data with federation network
-    pub async fn sync_federation_data(&self, network: &FederationNetwork) -> Result<DataSyncResult, String> {
+    pub async fn sync_federation_data(
+        &self,
+        network: &FederationNetwork,
+    ) -> Result<DataSyncResult, String> {
         let mut successful_syncs = Vec::new();
         let mut failed_syncs = Vec::new();
 
@@ -191,7 +219,7 @@ impl FederationClient {
         &self,
         study_id: String,
         aggregates: HashMap<String, serde_json::Value>,
-        target_nodes: Vec<String>
+        target_nodes: Vec<String>,
     ) -> Result<Vec<String>, String> {
         let mut successful_shares = Vec::new();
 
@@ -210,7 +238,10 @@ impl FederationClient {
 
         for node_id in target_nodes {
             if let Some(endpoint) = self.get_node_endpoint(&node_id).await {
-                match self.send_secure_request(&endpoint, "/federation/data/aggregate", &share_request).await {
+                match self
+                    .send_secure_request(&endpoint, "/federation/data/aggregate", &share_request)
+                    .await
+                {
                     Ok(response) => {
                         if response["status"] == "received" {
                             successful_shares.push(node_id);
@@ -231,7 +262,7 @@ impl FederationClient {
         &self,
         study_id: String,
         coordinator_endpoint: String,
-        analysis_proposal: InterimAnalysisProposal
+        analysis_proposal: InterimAnalysisProposal,
     ) -> Result<InterimAnalysisResponse, String> {
         let request = serde_json::json!({
             "action": "coordinate_analysis",
@@ -242,18 +273,23 @@ impl FederationClient {
             "signature": self.sign_request(&study_id)
         });
 
-        let response = self.send_secure_request(
-            &coordinator_endpoint,
-            "/federation/analysis/interim",
-            &request
-        ).await?;
+        let response = self
+            .send_secure_request(
+                &coordinator_endpoint,
+                "/federation/analysis/interim",
+                &request,
+            )
+            .await?;
 
         serde_json::from_value(response)
             .map_err(|e| format!("Failed to parse analysis response: {}", e))
     }
 
     /// Verify compliance across the network
-    pub async fn verify_network_compliance(&self, network: &FederationNetwork) -> Result<NetworkComplianceReport, String> {
+    pub async fn verify_network_compliance(
+        &self,
+        network: &FederationNetwork,
+    ) -> Result<NetworkComplianceReport, String> {
         let mut node_compliance = HashMap::new();
         let mut overall_compliant = true;
 
@@ -289,39 +325,47 @@ impl FederationClient {
 
     async fn query_node_info(&self, endpoint: &str) -> Result<Value, String> {
         let url = format!("{}/federation/info", endpoint);
-        
-        let response = timeout(
-            self.timeout_duration,
-            self.client.get(&url).send()
-        ).await
-        .map_err(|_| "Request timeout".to_string())?
-        .map_err(|e| format!("Network error: {}", e))?;
+
+        let response = timeout(self.timeout_duration, self.client.get(&url).send())
+            .await
+            .map_err(|_| "Request timeout".to_string())?
+            .map_err(|e| format!("Network error: {}", e))?;
 
         if response.status().is_success() {
-            response.json::<Value>().await
+            response
+                .json::<Value>()
+                .await
                 .map_err(|e| format!("Failed to parse response: {}", e))
         } else {
             Err(format!("Server error: {}", response.status()))
         }
     }
 
-    async fn send_secure_request(&self, endpoint: &str, path: &str, payload: &Value) -> Result<Value, String> {
+    async fn send_secure_request(
+        &self,
+        endpoint: &str,
+        path: &str,
+        payload: &Value,
+    ) -> Result<Value, String> {
         let url = format!("{}{}", endpoint, path);
-        
+
         // Encrypt payload
         let encrypted_payload = self.encrypt_payload(payload)?;
-        
+
         let mut attempts = 0;
         while attempts < self.retry_attempts {
             match timeout(
                 self.timeout_duration,
-                self.client.post(&url)
+                self.client
+                    .post(&url)
                     .header("Content-Type", "application/json")
                     .header("X-Federation-Node", &self.local_node_id)
                     .header("X-Encryption-Method", "AES-256-GCM")
                     .json(&encrypted_payload)
-                    .send()
-            ).await {
+                    .send(),
+            )
+            .await
+            {
                 Ok(Ok(response)) => {
                     if response.status().is_success() {
                         match response.json::<Value>().await {
@@ -339,7 +383,7 @@ impl FederationClient {
                     tracing::warn!("Request timeout on attempt {}", attempts + 1);
                 }
             }
-            
+
             attempts += 1;
             if attempts < self.retry_attempts {
                 tokio::time::sleep(Duration::from_millis(1000 * attempts as u64)).await;
@@ -357,12 +401,17 @@ impl FederationClient {
             "signature": self.sign_request(node_id)
         });
 
-        let response = self.send_secure_request(endpoint, "/federation/sync", &sync_request).await?;
-        
+        let response = self
+            .send_secure_request(endpoint, "/federation/sync", &sync_request)
+            .await?;
+
         if response["status"] == "success" {
             Ok(())
         } else {
-            Err(response["error"].as_str().unwrap_or("Sync failed").to_string())
+            Err(response["error"]
+                .as_str()
+                .unwrap_or("Sync failed")
+                .to_string())
         }
     }
 
@@ -379,18 +428,23 @@ impl FederationClient {
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
 
-        let response = self.send_secure_request(
-            &node.api_endpoint,
-            "/federation/compliance",
-            &compliance_request
-        ).await?;
+        let response = self
+            .send_secure_request(
+                &node.api_endpoint,
+                "/federation/compliance",
+                &compliance_request,
+            )
+            .await?;
 
         Ok(response["compliant"].as_bool().unwrap_or(false))
     }
 
-    fn apply_anonymization(&self, data: &HashMap<String, serde_json::Value>) -> Result<HashMap<String, serde_json::Value>, String> {
+    fn apply_anonymization(
+        &self,
+        data: &HashMap<String, serde_json::Value>,
+    ) -> Result<HashMap<String, serde_json::Value>, String> {
         let mut anonymized = HashMap::new();
-        
+
         for (key, value) in data {
             // Apply anonymization rules based on data type
             let anonymized_value = match key.as_str() {
@@ -399,7 +453,7 @@ impl FederationClient {
                 "demographics" => self.anonymize_demographics(value)?,
                 _ => value.clone(), // Keep aggregate statistics as-is
             };
-            
+
             if !anonymized_value.is_null() {
                 anonymized.insert(key.clone(), anonymized_value);
             }
@@ -408,7 +462,10 @@ impl FederationClient {
         Ok(anonymized)
     }
 
-    fn generalize_timestamps(&self, value: &serde_json::Value) -> Result<serde_json::Value, String> {
+    fn generalize_timestamps(
+        &self,
+        value: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         // Generalize timestamps to date only (remove time component)
         if let Some(timestamp_str) = value.as_str() {
             if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(timestamp_str) {
@@ -419,11 +476,14 @@ impl FederationClient {
         Ok(value.clone())
     }
 
-    fn anonymize_demographics(&self, value: &serde_json::Value) -> Result<serde_json::Value, String> {
+    fn anonymize_demographics(
+        &self,
+        value: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         // Convert specific ages to age ranges, remove precise locations, etc.
         if let Some(obj) = value.as_object() {
             let mut anonymized = serde_json::Map::new();
-            
+
             for (k, v) in obj {
                 match k.as_str() {
                     "age" => {
@@ -435,19 +495,25 @@ impl FederationClient {
                                 51..=65 => "51-65",
                                 _ => "65+",
                             };
-                            anonymized.insert(k.clone(), serde_json::Value::String(age_range.to_string()));
+                            anonymized.insert(
+                                k.clone(),
+                                serde_json::Value::String(age_range.to_string()),
+                            );
                         }
                     }
                     "location" => {
                         // Generalize to country or region only
-                        anonymized.insert(k.clone(), serde_json::Value::String("Anonymized".to_string()));
+                        anonymized.insert(
+                            k.clone(),
+                            serde_json::Value::String("Anonymized".to_string()),
+                        );
                     }
                     _ => {
                         anonymized.insert(k.clone(), v.clone());
                     }
                 }
             }
-            
+
             return Ok(serde_json::Value::Object(anonymized));
         }
         Ok(value.clone())

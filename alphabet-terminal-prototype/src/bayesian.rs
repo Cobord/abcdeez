@@ -43,7 +43,7 @@ impl<'de> serde::Deserialize<'de> for BayesianLearnerModel {
         }
 
         let data = BayesianLearnerModelData::deserialize(deserializer)?;
-        
+
         use rand::SeedableRng;
         Ok(BayesianLearnerModel {
             node_positions: data.node_positions,
@@ -117,9 +117,11 @@ impl PosteriorDistribution {
         // Confidence = 1 - H(current) / H(prior) where H is entropy
         // For Gaussian: H = 0.5 * ln(2πe * σ²)
         const PRIOR_VARIANCE: f64 = 1.0; // Initial uncertainty
-        let current_entropy = 0.5 * (2.0 * std::f64::consts::PI * std::f64::consts::E * self.variance).ln();
-        let prior_entropy = 0.5 * (2.0 * std::f64::consts::PI * std::f64::consts::E * PRIOR_VARIANCE).ln();
-        
+        let current_entropy =
+            0.5 * (2.0 * std::f64::consts::PI * std::f64::consts::E * self.variance).ln();
+        let prior_entropy =
+            0.5 * (2.0 * std::f64::consts::PI * std::f64::consts::E * PRIOR_VARIANCE).ln();
+
         // Confidence as normalized entropy reduction
         self.confidence = if prior_entropy > 0.0 {
             (1.0 - (current_entropy / prior_entropy)).max(0.0).min(1.0)
@@ -132,23 +134,23 @@ impl PosteriorDistribution {
         // KL divergence between two Gaussians
         // KL(P||Q) = 0.5 * [log(σ²_Q/σ²_P) + σ²_P/σ²_Q + (μ_P - μ_Q)²/σ²_Q - 1]
         // Using log-domain calculations for numerical stability
-        
+
         // Ensure minimum variance to prevent division by zero
         const MIN_VARIANCE: f64 = 1e-10;
         let var_p = self.variance.max(MIN_VARIANCE);
         let var_q = other.variance.max(MIN_VARIANCE);
-        
+
         // Check for extreme variance ratios that could cause overflow
         let variance_ratio = var_p / var_q;
         if variance_ratio > 1e10 || variance_ratio < 1e-10 {
             // Return a large but finite value for extreme cases
             return 100.0;
         }
-        
+
         // Use log-domain calculation for better stability
         let log_variance_ratio = var_q.ln() - var_p.ln();
         let mean_diff_squared = (self.mean - other.mean).powi(2);
-        
+
         // KL divergence formula with improved numerical stability
         0.5 * (log_variance_ratio + variance_ratio + mean_diff_squared / var_q - 1.0)
     }
@@ -240,7 +242,7 @@ impl BayesianLearnerModel {
             Some(s) => rand::rngs::StdRng::seed_from_u64(s),
             None => rand::rngs::StdRng::from_entropy(),
         };
-        
+
         BayesianLearnerModel {
             node_positions,
             operation_proficiencies,
@@ -258,7 +260,7 @@ impl BayesianLearnerModel {
     pub fn calculate_eig(&mut self, task: &crate::tasks::Task) -> f64 {
         // Use adaptive sampling for better convergence
         let (eig, _samples_used) = self.adaptive_monte_carlo_eig(task);
-        
+
         // Bound EIG by the entropy of the specific parameters being queried
         // Information gain for a single task cannot exceed the entropy of the parameters it informs about
         let task_entropy = self.calculate_task_specific_entropy(task);
@@ -825,17 +827,17 @@ impl BayesianLearnerModel {
         // Ensure entropy is non-negative for numerical robustness in tests
         entropy.max(0.0)
     }
-    
+
     /// Calculate entropy for parameters relevant to a specific task
     fn calculate_task_specific_entropy(&self, task: &crate::tasks::Task) -> f64 {
         let mut entropy = 0.0;
-        
+
         // Add entropy of operation proficiency for this task
         let op_key = format!("{:?}", task.operation);
         if let Some(prof) = self.operation_proficiencies.get(&op_key) {
             entropy += prof.entropy();
         }
-        
+
         // Add entropy of relevant node positions based on task type
         match &task.task_type {
             crate::tasks::TaskType::PairwiseOrder { a, b } => {
@@ -846,15 +848,19 @@ impl BayesianLearnerModel {
                     entropy += pos_b.entropy();
                 }
             }
-            crate::tasks::TaskType::Successor { item } 
+            crate::tasks::TaskType::Successor { item }
             | crate::tasks::TaskType::Predecessor { item } => {
                 if let Some(pos) = self.get_node_position(item) {
                     entropy += pos.entropy();
                     // Also include adjacent node uncertainty
                     if let Some(node) = self.topology.get_node_by_label(item) {
                         if let Some(adj_id) = match &task.task_type {
-                            crate::tasks::TaskType::Successor { .. } => self.topology.get_successor(&node.id),
-                            crate::tasks::TaskType::Predecessor { .. } => self.topology.get_predecessor(&node.id),
+                            crate::tasks::TaskType::Successor { .. } => {
+                                self.topology.get_successor(&node.id)
+                            }
+                            crate::tasks::TaskType::Predecessor { .. } => {
+                                self.topology.get_predecessor(&node.id)
+                            }
                             _ => None,
                         } {
                             if let Some(adj_node) = self.topology.get_node_by_id(&adj_id) {
@@ -887,7 +893,7 @@ impl BayesianLearnerModel {
                 }
             }
         }
-        
+
         entropy.max(0.0)
     }
 }
@@ -901,7 +907,7 @@ pub struct MonteCarloEIG {
 impl MonteCarloEIG {
     pub fn new(samples: usize) -> Self {
         use rand::SeedableRng;
-        MonteCarloEIG { 
+        MonteCarloEIG {
             samples,
             rng: rand::rngs::StdRng::from_entropy(),
         }
@@ -1024,7 +1030,11 @@ impl ModelComparisonMetrics {
         let w1 = ((-0.5) * (a1 - m)).exp();
         let w2 = ((-0.5) * (a2 - m)).exp();
         let denom = w1 + w2;
-        if denom.is_finite() && denom > 0.0 { w1 / denom } else { 0.5 }
+        if denom.is_finite() && denom > 0.0 {
+            w1 / denom
+        } else {
+            0.5
+        }
     }
 
     /// Evidence ratio for model comparison
@@ -1207,7 +1217,10 @@ impl BayesianLearnerModel {
     }
 
     /// Posterior Predictive Check: Generate replicated data and compare with observed
-    pub fn posterior_predictive_check(&mut self, n_replications: usize) -> PosteriorPredictiveCheck {
+    pub fn posterior_predictive_check(
+        &mut self,
+        n_replications: usize,
+    ) -> PosteriorPredictiveCheck {
         // Use the seeded RNG instead of thread_rng
         let mut replicated_data = Vec::new();
 

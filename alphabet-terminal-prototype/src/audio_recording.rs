@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Audio Recording and Think-Aloud Protocol System
 /// Provides cross-platform audio recording with think-aloud protocol integration
@@ -128,11 +128,11 @@ pub enum CognitiveProcessType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConfidenceLevel {
-    VeryLow,    // "I have no idea"
-    Low,        // "I'm not sure"
-    Medium,     // "I think..."
-    High,       // "I'm pretty sure"
-    VeryHigh,   // "I know this"
+    VeryLow,  // "I have no idea"
+    Low,      // "I'm not sure"
+    Medium,   // "I think..."
+    High,     // "I'm pretty sure"
+    VeryHigh, // "I know this"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -257,7 +257,11 @@ impl AudioRecorder {
     }
 
     /// Start a new audio recording session
-    pub fn start_session(&mut self, session_id: String, participant_id: String) -> Result<(), String> {
+    pub fn start_session(
+        &mut self,
+        session_id: String,
+        participant_id: String,
+    ) -> Result<(), String> {
         if self.session.is_some() {
             return Err("Session already active".to_string());
         }
@@ -313,17 +317,17 @@ impl AudioRecorder {
 
         // Initialize platform-specific recorder
         self.initialize_recorder()?;
-        
+
         {
             let mut recording_active = self.recording_active.lock().unwrap();
             *recording_active = true;
         }
-        
+
         // Start recording thread
         let buffer = Arc::clone(&self.audio_buffer);
         let active_flag = Arc::clone(&self.recording_active);
         let config = self.recorder_config.clone();
-        
+
         thread::spawn(move || {
             Self::recording_thread(buffer, active_flag, config);
         });
@@ -346,7 +350,7 @@ impl AudioRecorder {
 
         // Process recorded audio
         let audio_file = self.save_audio_buffer()?;
-        
+
         // Add to session
         if let Some(ref mut session) = self.session {
             session.audio_files.push(audio_file.clone());
@@ -369,7 +373,7 @@ impl AudioRecorder {
     pub fn finalize_session(mut self) -> Result<AudioSession, String> {
         if let Some(mut session) = self.session.take() {
             session.end_time = Some(chrono::Utc::now());
-            
+
             // Process any remaining audio
             if *self.recording_active.lock().unwrap() {
                 self.stop_recording()?;
@@ -377,7 +381,7 @@ impl AudioRecorder {
 
             // Perform final quality assessment
             self.assess_recording_quality(&mut session);
-            
+
             // Generate transcripts if needed
             self.generate_transcripts(&mut session)?;
 
@@ -402,8 +406,9 @@ impl AudioRecorder {
         for sample in &recent_samples {
             let rms = Self::calculate_rms(&sample.data);
             volume_levels.push(rms);
-            
-            if rms < 0.01 { // Silence threshold
+
+            if rms < 0.01 {
+                // Silence threshold
                 silence_count += 1;
             }
         }
@@ -423,9 +428,14 @@ impl AudioRecorder {
         AudioMetrics {
             current_volume: average_volume,
             silence_percentage,
-            recording_duration: chrono::Utc::now().signed_duration_since(
-                self.session.as_ref().map(|s| s.start_time).unwrap_or_else(chrono::Utc::now)
-            ).num_seconds() as f64,
+            recording_duration: chrono::Utc::now()
+                .signed_duration_since(
+                    self.session
+                        .as_ref()
+                        .map(|s| s.start_time)
+                        .unwrap_or_else(chrono::Utc::now),
+                )
+                .num_seconds() as f64,
             buffer_status: BufferStatus {
                 current_size: recent_samples.len(),
                 max_size: 10000, // Config-based
@@ -505,7 +515,7 @@ impl AudioRecorder {
             {
                 let mut buffer_guard = buffer.lock().unwrap();
                 buffer_guard.push_back(sample);
-                
+
                 // Keep buffer size manageable
                 while buffer_guard.len() > config.buffer_size {
                     buffer_guard.pop_front();
@@ -527,13 +537,16 @@ impl AudioRecorder {
         }
 
         let session_id = self.session.as_ref().unwrap().session_id.clone();
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
         let filename = format!("{}_{}.wav", session_id, timestamp);
         let file_path = self.output_directory.join(filename);
 
         // Write audio data to file (simplified)
         let duration_ms = samples.len() as u64 * 10; // Approximate based on sample rate
-        
+
         // Calculate quality metrics
         let quality_score = self.calculate_quality_score(&samples);
 
@@ -564,11 +577,11 @@ impl AudioRecorder {
         for sample in samples {
             let rms = Self::calculate_rms(&sample.data);
             total_rms += rms;
-            
+
             if rms < 0.005 {
                 silence_count += 1;
             }
-            
+
             // Check for clipping
             if sample.data.iter().any(|&x| x.abs() > 0.95) {
                 clipping_count += 1;
@@ -580,7 +593,11 @@ impl AudioRecorder {
         let clipping_ratio = clipping_count as f32 / samples.len() as f32;
 
         // Quality score based on signal level, silence, and clipping
-        let signal_quality = if avg_rms > 0.1 && avg_rms < 0.8 { 1.0 } else { 0.5 };
+        let signal_quality = if avg_rms > 0.1 && avg_rms < 0.8 {
+            1.0
+        } else {
+            0.5
+        };
         let silence_penalty = (1.0 - silence_ratio).max(0.3);
         let clipping_penalty = (1.0 - clipping_ratio * 2.0).max(0.0);
 
@@ -605,7 +622,7 @@ impl AudioRecorder {
         for audio_file in &session.audio_files {
             total_snr += 20.0; // Placeholder SNR calculation
             total_silence += audio_file.quality_score * 0.1; // Rough silence estimate
-            
+
             if audio_file.quality_score < 0.7 {
                 has_clipping = true;
             }
@@ -616,9 +633,10 @@ impl AudioRecorder {
             session.metadata.recording_quality.signal_to_noise_ratio = total_snr / file_count;
             session.metadata.recording_quality.silence_percentage = total_silence / file_count;
             session.metadata.recording_quality.clipping_detected = has_clipping;
-            
-            session.metadata.recording_quality.overall_quality = 
-                if session.metadata.recording_quality.signal_to_noise_ratio > 15.0 && !has_clipping {
+
+            session.metadata.recording_quality.overall_quality =
+                if session.metadata.recording_quality.signal_to_noise_ratio > 15.0 && !has_clipping
+                {
                     QualityRating::Excellent
                 } else if session.metadata.recording_quality.signal_to_noise_ratio > 10.0 {
                     QualityRating::Good
@@ -637,12 +655,13 @@ impl AudioRecorder {
         // - Google Speech-to-Text API
         // - Azure Cognitive Services
         // - Local ASR models like Whisper
-        
+
         for audio_file in &session.audio_files {
             let transcript = Transcript {
                 text: "[Automatic transcription would be generated here]".to_string(),
                 start_time: audio_file.start_timestamp,
-                end_time: audio_file.start_timestamp + chrono::Duration::milliseconds(audio_file.duration_ms as i64),
+                end_time: audio_file.start_timestamp
+                    + chrono::Duration::milliseconds(audio_file.duration_ms as i64),
                 confidence: 0.8,
                 speaker_id: Some(session.participant_id.clone()),
                 language: "en-US".to_string(),
@@ -650,7 +669,7 @@ impl AudioRecorder {
                     engine: "placeholder".to_string(),
                 },
             };
-            
+
             session.transcripts.push(transcript);
         }
 
@@ -662,7 +681,7 @@ impl AudioRecorder {
         for segment in &mut session.think_aloud_segments {
             // Analyze transcript for cognitive processes and emotions
             let text = segment.transcript.to_lowercase();
-            
+
             // Simple keyword-based analysis (would be more sophisticated)
             if text.contains("i think") || text.contains("maybe") || text.contains("probably") {
                 segment.confidence_level = Some(ConfidenceLevel::Medium);
@@ -697,16 +716,25 @@ impl AudioRecorder {
                     process_type: CognitiveProcessType::ProblemSolving,
                     confidence: 0.8,
                     evidence_text: segment.transcript.clone(),
-                    duration: segment.end_time.signed_duration_since(segment.start_time).to_std().unwrap_or(Duration::from_secs(0)),
+                    duration: segment
+                        .end_time
+                        .signed_duration_since(segment.start_time)
+                        .to_std()
+                        .unwrap_or(Duration::from_secs(0)),
                 });
             }
 
-            if text.contains("pattern") || text.contains("similar") || text.contains("like before") {
+            if text.contains("pattern") || text.contains("similar") || text.contains("like before")
+            {
                 segment.cognitive_processes.push(CognitiveProcess {
                     process_type: CognitiveProcessType::PatternRecognition,
                     confidence: 0.7,
                     evidence_text: segment.transcript.clone(),
-                    duration: segment.end_time.signed_duration_since(segment.start_time).to_std().unwrap_or(Duration::from_secs(0)),
+                    duration: segment
+                        .end_time
+                        .signed_duration_since(segment.start_time)
+                        .to_std()
+                        .unwrap_or(Duration::from_secs(0)),
                 });
             }
         }
@@ -765,70 +793,100 @@ pub struct ThinkAloudAnalyzer {
 impl ThinkAloudAnalyzer {
     pub fn new() -> Self {
         let mut keyword_patterns = HashMap::new();
-        keyword_patterns.insert(ThinkAloudType::Planning, vec![
-            "i need to".to_string(),
-            "first i'll".to_string(),
-            "let me plan".to_string(),
-            "what should i".to_string(),
-        ]);
-        keyword_patterns.insert(ThinkAloudType::Execution, vec![
-            "now i'll".to_string(),
-            "clicking on".to_string(),
-            "i'm doing".to_string(),
-            "typing".to_string(),
-        ]);
-        keyword_patterns.insert(ThinkAloudType::Monitoring, vec![
-            "that doesn't look".to_string(),
-            "wait".to_string(),
-            "hmm".to_string(),
-            "checking".to_string(),
-        ]);
-        keyword_patterns.insert(ThinkAloudType::Struggle, vec![
-            "i don't know".to_string(),
-            "this is hard".to_string(),
-            "confused".to_string(),
-            "stuck".to_string(),
-        ]);
-        keyword_patterns.insert(ThinkAloudType::Insight, vec![
-            "oh i see".to_string(),
-            "aha".to_string(),
-            "now i get it".to_string(),
-            "makes sense".to_string(),
-        ]);
+        keyword_patterns.insert(
+            ThinkAloudType::Planning,
+            vec![
+                "i need to".to_string(),
+                "first i'll".to_string(),
+                "let me plan".to_string(),
+                "what should i".to_string(),
+            ],
+        );
+        keyword_patterns.insert(
+            ThinkAloudType::Execution,
+            vec![
+                "now i'll".to_string(),
+                "clicking on".to_string(),
+                "i'm doing".to_string(),
+                "typing".to_string(),
+            ],
+        );
+        keyword_patterns.insert(
+            ThinkAloudType::Monitoring,
+            vec![
+                "that doesn't look".to_string(),
+                "wait".to_string(),
+                "hmm".to_string(),
+                "checking".to_string(),
+            ],
+        );
+        keyword_patterns.insert(
+            ThinkAloudType::Struggle,
+            vec![
+                "i don't know".to_string(),
+                "this is hard".to_string(),
+                "confused".to_string(),
+                "stuck".to_string(),
+            ],
+        );
+        keyword_patterns.insert(
+            ThinkAloudType::Insight,
+            vec![
+                "oh i see".to_string(),
+                "aha".to_string(),
+                "now i get it".to_string(),
+                "makes sense".to_string(),
+            ],
+        );
 
         let mut emotion_patterns = HashMap::new();
-        emotion_patterns.insert(EmotionType::Frustration, vec![
-            "frustrated".to_string(),
-            "annoying".to_string(),
-            "ugh".to_string(),
-            "this sucks".to_string(),
-        ]);
-        emotion_patterns.insert(EmotionType::Confidence, vec![
-            "i know".to_string(),
-            "definitely".to_string(),
-            "sure about".to_string(),
-            "confident".to_string(),
-        ]);
-        emotion_patterns.insert(EmotionType::Confusion, vec![
-            "confused".to_string(),
-            "not sure".to_string(),
-            "don't understand".to_string(),
-            "unclear".to_string(),
-        ]);
+        emotion_patterns.insert(
+            EmotionType::Frustration,
+            vec![
+                "frustrated".to_string(),
+                "annoying".to_string(),
+                "ugh".to_string(),
+                "this sucks".to_string(),
+            ],
+        );
+        emotion_patterns.insert(
+            EmotionType::Confidence,
+            vec![
+                "i know".to_string(),
+                "definitely".to_string(),
+                "sure about".to_string(),
+                "confident".to_string(),
+            ],
+        );
+        emotion_patterns.insert(
+            EmotionType::Confusion,
+            vec![
+                "confused".to_string(),
+                "not sure".to_string(),
+                "don't understand".to_string(),
+                "unclear".to_string(),
+            ],
+        );
 
         let mut cognitive_patterns = HashMap::new();
-        cognitive_patterns.insert(CognitiveProcessType::ProblemSolving, vec![
-            "let me think".to_string(),
-            "what if".to_string(),
-            "try this".to_string(),
-            "approach".to_string(),
-        ]);
-        cognitive_patterns.insert(CognitiveProcessType::PatternRecognition, vec![
-            "pattern".to_string(),
-            "similar to".to_string(),
-            "like before".to_string(),
-            "reminds me".to_string(),
-        ]);
+        cognitive_patterns.insert(
+            CognitiveProcessType::ProblemSolving,
+            vec![
+                "let me think".to_string(),
+                "what if".to_string(),
+                "try this".to_string(),
+                "approach".to_string(),
+            ],
+        );
+        cognitive_patterns.insert(
+            CognitiveProcessType::PatternRecognition,
+            vec![
+                "pattern".to_string(),
+                "similar to".to_string(),
+                "like before".to_string(),
+                "reminds me".to_string(),
+            ],
+        );
 
         Self {
             keyword_patterns,
@@ -837,24 +895,27 @@ impl ThinkAloudAnalyzer {
         }
     }
 
-    pub fn analyze_segment(&self, text: &str) -> (ThinkAloudType, Vec<EmotionalMarker>, Vec<CognitiveProcess>) {
+    pub fn analyze_segment(
+        &self,
+        text: &str,
+    ) -> (ThinkAloudType, Vec<EmotionalMarker>, Vec<CognitiveProcess>) {
         let text_lower = text.to_lowercase();
-        
+
         // Determine primary think-aloud type
         let segment_type = self.classify_think_aloud_type(&text_lower);
-        
+
         // Extract emotional markers
         let emotions = self.extract_emotions(&text_lower, text);
-        
+
         // Extract cognitive processes
         let cognitive = self.extract_cognitive_processes(&text_lower, text);
-        
+
         (segment_type, emotions, cognitive)
     }
 
     fn classify_think_aloud_type(&self, text: &str) -> ThinkAloudType {
         let mut scores = HashMap::new();
-        
+
         for (think_type, patterns) in &self.keyword_patterns {
             let mut score = 0;
             for pattern in patterns {
@@ -866,8 +927,9 @@ impl ThinkAloudAnalyzer {
                 scores.insert(think_type.clone(), score);
             }
         }
-        
-        scores.into_iter()
+
+        scores
+            .into_iter()
             .max_by_key(|(_, score)| *score)
             .map(|(think_type, _)| think_type)
             .unwrap_or(ThinkAloudType::Execution)
@@ -875,7 +937,7 @@ impl ThinkAloudAnalyzer {
 
     fn extract_emotions(&self, text_lower: &str, original_text: &str) -> Vec<EmotionalMarker> {
         let mut emotions = Vec::new();
-        
+
         for (emotion_type, patterns) in &self.emotion_patterns {
             for pattern in patterns {
                 if text_lower.contains(pattern) {
@@ -889,13 +951,17 @@ impl ThinkAloudAnalyzer {
                 }
             }
         }
-        
+
         emotions
     }
 
-    fn extract_cognitive_processes(&self, text_lower: &str, original_text: &str) -> Vec<CognitiveProcess> {
+    fn extract_cognitive_processes(
+        &self,
+        text_lower: &str,
+        original_text: &str,
+    ) -> Vec<CognitiveProcess> {
         let mut processes = Vec::new();
-        
+
         for (process_type, patterns) in &self.cognitive_patterns {
             for pattern in patterns {
                 if text_lower.contains(pattern) {
@@ -909,7 +975,7 @@ impl ThinkAloudAnalyzer {
                 }
             }
         }
-        
+
         processes
     }
 }
@@ -925,7 +991,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let config = RecorderConfig::default();
         let recorder = AudioRecorder::new(temp_dir.path().to_path_buf(), config);
-        
+
         assert!(recorder.session.is_none());
         assert!(!*recorder.recording_active.lock().unwrap());
     }
@@ -935,11 +1001,13 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let config = RecorderConfig::default();
         let mut recorder = AudioRecorder::new(temp_dir.path().to_path_buf(), config);
-        
+
         // Start session
-        recorder.start_session("test_session".to_string(), "test_participant".to_string()).unwrap();
+        recorder
+            .start_session("test_session".to_string(), "test_participant".to_string())
+            .unwrap();
         assert!(recorder.session.is_some());
-        
+
         // Session should contain correct IDs
         let session = recorder.session.as_ref().unwrap();
         assert_eq!(session.session_id, "test_session");
@@ -950,17 +1018,17 @@ mod tests {
     #[should_panic(expected = "assertion failed: !cognitive.is_empty()")]
     fn test_think_aloud_analyzer() {
         let analyzer = ThinkAloudAnalyzer::new();
-        
+
         let (segment_type, emotions, cognitive) = analyzer.analyze_segment(
-            "I think I need to click here first, but I'm not sure if that's right"
+            "I think I need to click here first, but I'm not sure if that's right",
         );
-        
+
         // Should detect planning/thinking
         assert!(matches!(segment_type, ThinkAloudType::Planning));
-        
+
         // Should detect uncertainty emotion
         assert!(!emotions.is_empty());
-        
+
         // Should detect problem solving
         assert!(!cognitive.is_empty());
     }
@@ -970,28 +1038,24 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let config = RecorderConfig::default();
         let recorder = AudioRecorder::new(temp_dir.path().to_path_buf(), config);
-        
+
         // Test with good quality samples
-        let good_samples = vec![
-            AudioSample {
-                timestamp: Instant::now(),
-                data: vec![0.1, -0.1, 0.2, -0.2], // Good signal level
-                sample_rate: 44100,
-            }
-        ];
-        
+        let good_samples = vec![AudioSample {
+            timestamp: Instant::now(),
+            data: vec![0.1, -0.1, 0.2, -0.2], // Good signal level
+            sample_rate: 44100,
+        }];
+
         let quality = recorder.calculate_quality_score(&good_samples);
         assert!(quality > 0.5);
-        
+
         // Test with poor quality (silence)
-        let poor_samples = vec![
-            AudioSample {
-                timestamp: Instant::now(),
-                data: vec![0.0, 0.0, 0.0, 0.0], // Silence
-                sample_rate: 44100,
-            }
-        ];
-        
+        let poor_samples = vec![AudioSample {
+            timestamp: Instant::now(),
+            data: vec![0.0, 0.0, 0.0, 0.0], // Silence
+            sample_rate: 44100,
+        }];
+
         let poor_quality = recorder.calculate_quality_score(&poor_samples);
         assert!(poor_quality < quality);
     }
@@ -1002,7 +1066,7 @@ mod tests {
         let rms = AudioRecorder::calculate_rms(&data);
         assert!(rms > 0.0);
         assert!(rms < 1.0);
-        
+
         let silence = vec![0.0, 0.0, 0.0, 0.0];
         let silence_rms = AudioRecorder::calculate_rms(&silence);
         assert_eq!(silence_rms, 0.0);

@@ -1,8 +1,6 @@
-
-
 use serde::{Deserialize, Serialize};
 
-use statrs::distribution::{Normal, ContinuousCDF};
+use statrs::distribution::{ContinuousCDF, Normal};
 
 /// Power Analysis and Effect Size Monitoring for Research Design
 /// Provides comprehensive statistical power calculations and real-time monitoring
@@ -41,16 +39,16 @@ pub struct EffectSize {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EffectSizeMeasure {
-    CohenD,      // Standardized mean difference
-    HedgeG,      // Bias-corrected Cohen's d
-    GlassD,      // Uses control group SD only
-    EtaSquared,  // Proportion of variance explained (ANOVA)
+    CohenD,     // Standardized mean difference
+    HedgeG,     // Bias-corrected Cohen's d
+    GlassD,     // Uses control group SD only
+    EtaSquared, // Proportion of variance explained (ANOVA)
     PartialEtaSquared,
     OmegaSquared, // Less biased than eta squared
-    CohensF,     // Effect size for ANOVA
-    R,           // Correlation coefficient
-    RSquared,    // Coefficient of determination
-    CramersV,    // Effect size for chi-square
+    CohensF,      // Effect size for ANOVA
+    R,            // Correlation coefficient
+    RSquared,     // Coefficient of determination
+    CramersV,     // Effect size for chi-square
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,22 +125,17 @@ impl PowerAnalyzer {
         power: f64,
     ) -> Result<usize, String> {
         match test_type {
-            StatisticalTestType::OneSampleTTest => {
-                self.one_sample_t_test_n(effect_size, power)
-            }
-            StatisticalTestType::IndependentTTest => {
-                self.independent_t_test_n(effect_size, power)
-            }
-            StatisticalTestType::PairedTTest => {
-                self.paired_t_test_n(effect_size, power)
-            }
+            StatisticalTestType::OneSampleTTest => self.one_sample_t_test_n(effect_size, power),
+            StatisticalTestType::IndependentTTest => self.independent_t_test_n(effect_size, power),
+            StatisticalTestType::PairedTTest => self.paired_t_test_n(effect_size, power),
             StatisticalTestType::OneWayANOVA => {
                 self.one_way_anova_n(effect_size, power, 3) // Default 3 groups
             }
-            StatisticalTestType::Correlation => {
-                self.correlation_n(effect_size, power)
-            }
-            _ => Err(format!("Power analysis not implemented for {:?}", test_type)),
+            StatisticalTestType::Correlation => self.correlation_n(effect_size, power),
+            _ => Err(format!(
+                "Power analysis not implemented for {:?}",
+                test_type
+            )),
         }
     }
 
@@ -160,16 +153,15 @@ impl PowerAnalyzer {
             StatisticalTestType::IndependentTTest => {
                 self.independent_t_test_power(effect_size, sample_size)
             }
-            StatisticalTestType::PairedTTest => {
-                self.paired_t_test_power(effect_size, sample_size)
-            }
+            StatisticalTestType::PairedTTest => self.paired_t_test_power(effect_size, sample_size),
             StatisticalTestType::OneWayANOVA => {
                 self.one_way_anova_power(effect_size, sample_size, 3)
             }
-            StatisticalTestType::Correlation => {
-                self.correlation_power(effect_size, sample_size)
-            }
-            _ => Err(format!("Power calculation not implemented for {:?}", test_type)),
+            StatisticalTestType::Correlation => self.correlation_power(effect_size, sample_size),
+            _ => Err(format!(
+                "Power calculation not implemented for {:?}",
+                test_type
+            )),
         }
     }
 
@@ -178,7 +170,7 @@ impl PowerAnalyzer {
         let normal = Normal::new(0.0, 1.0).unwrap();
         let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
         let z_beta = normal.inverse_cdf(power);
-        
+
         let n = ((z_alpha + z_beta) / effect_size).powi(2);
         Ok(n.ceil() as usize)
     }
@@ -188,7 +180,7 @@ impl PowerAnalyzer {
         let normal = Normal::new(0.0, 1.0).unwrap();
         let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
         let z_beta = normal.inverse_cdf(power);
-        
+
         // For equal group sizes
         let n_per_group = 2.0 * ((z_alpha + z_beta) / effect_size).powi(2);
         Ok((n_per_group.ceil() as usize).max(2))
@@ -201,12 +193,17 @@ impl PowerAnalyzer {
     }
 
     /// One-way ANOVA sample size calculation
-    fn one_way_anova_n(&self, effect_size: f64, power: f64, groups: usize) -> Result<usize, String> {
+    fn one_way_anova_n(
+        &self,
+        effect_size: f64,
+        power: f64,
+        groups: usize,
+    ) -> Result<usize, String> {
         // Simplified calculation using Cohen's f
         let f_squared = effect_size.powi(2);
         let normal = Normal::new(0.0, 1.0).unwrap();
         let z_beta = normal.inverse_cdf(power);
-        
+
         // Approximate sample size per group
         let n_per_group = ((z_beta + 2.0).powi(2)) / f_squared + groups as f64;
         Ok((n_per_group.ceil() as usize * groups).max(groups * 3))
@@ -217,11 +214,11 @@ impl PowerAnalyzer {
         let normal = Normal::new(0.0, 1.0).unwrap();
         let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
         let z_beta = normal.inverse_cdf(power);
-        
+
         // Fisher's Z transformation
         let z_r = 0.5 * ((1.0 + effect_size) / (1.0 - effect_size)).ln();
         let n = ((z_alpha + z_beta) / z_r).powi(2) + 3.0;
-        
+
         Ok(n.ceil() as usize)
     }
 
@@ -230,7 +227,7 @@ impl PowerAnalyzer {
         let normal = Normal::new(0.0, 1.0).unwrap();
         let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
         let ncp = effect_size * (n as f64).sqrt(); // Non-centrality parameter
-        
+
         let power = 1.0 - normal.cdf(z_alpha - ncp) + normal.cdf(-z_alpha - ncp);
         Ok(power.min(1.0).max(0.0))
     }
@@ -241,7 +238,7 @@ impl PowerAnalyzer {
         let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
         // Correct formula for independent t-test: d * sqrt(n / 4) for equal group sizes
         let ncp = effect_size * ((total_n as f64) / 4.0).sqrt();
-        
+
         let power = 1.0 - normal.cdf(z_alpha - ncp) + normal.cdf(-z_alpha - ncp);
         Ok(power.min(1.0).max(0.0))
     }
@@ -252,16 +249,21 @@ impl PowerAnalyzer {
     }
 
     /// One-way ANOVA power calculation
-    fn one_way_anova_power(&self, effect_size: f64, total_n: usize, groups: usize) -> Result<f64, String> {
+    fn one_way_anova_power(
+        &self,
+        effect_size: f64,
+        total_n: usize,
+        groups: usize,
+    ) -> Result<f64, String> {
         let _n_per_group = total_n / groups;
         let f_squared = effect_size.powi(2);
         let ncp = f_squared * total_n as f64;
-        
+
         // Simplified approximation - would need F-distribution for exact calculation
         let normal = Normal::new(0.0, 1.0).unwrap();
         let critical_f = 2.5; // Approximate F-critical for α = 0.05
         let power = 1.0 - normal.cdf((critical_f - ncp.sqrt()) / (2.0 * ncp).sqrt());
-        
+
         Ok(power.min(1.0).max(0.0))
     }
 
@@ -269,28 +271,29 @@ impl PowerAnalyzer {
     fn correlation_power(&self, r: f64, n: usize) -> Result<f64, String> {
         let normal = Normal::new(0.0, 1.0).unwrap();
         let z_alpha = normal.inverse_cdf(1.0 - self.alpha / 2.0);
-        
+
         // Fisher's Z transformation
         let z_r = 0.5 * ((1.0 + r) / (1.0 - r)).ln();
         let se = 1.0 / ((n - 3) as f64).sqrt();
         let ncp = z_r / se;
-        
+
         let power = 1.0 - normal.cdf(z_alpha - ncp) + normal.cdf(-z_alpha - ncp);
         Ok(power.min(1.0).max(0.0))
     }
 
     /// Generate comprehensive power analysis report
-    pub fn analyze_design(&self, 
+    pub fn analyze_design(
+        &self,
         test_type: StatisticalTestType,
         expected_effect_size: f64,
         current_n: Option<usize>,
     ) -> PowerAnalysis {
         let mut recommendations = Vec::new();
-        
+
         // Calculate power for different sample sizes
         let sample_sizes = vec![10, 20, 30, 50, 80, 100, 150, 200, 300, 500];
         let mut adequate_n = None;
-        
+
         for n in sample_sizes {
             if let Ok(power) = self.calculate_power(test_type.clone(), expected_effect_size, n) {
                 if power >= 0.8 && adequate_n.is_none() {
@@ -299,34 +302,43 @@ impl PowerAnalyzer {
                 }
             }
         }
-        
+
         let recommended_n = adequate_n.unwrap_or(200); // Fallback
-        
+
         // Current power if sample size is provided
         let current_power = current_n
-            .and_then(|n| self.calculate_power(test_type.clone(), expected_effect_size, n).ok())
+            .and_then(|n| {
+                self.calculate_power(test_type.clone(), expected_effect_size, n)
+                    .ok()
+            })
             .unwrap_or(0.0);
-        
+
         // Generate recommendations
         if current_power < 0.5 {
             recommendations.push("Very low statistical power detected. Consider increasing sample size significantly.".to_string());
         } else if current_power < 0.8 {
-            recommendations.push(format!("Power is below conventional threshold (0.8). Consider increasing to N = {}", recommended_n));
+            recommendations.push(format!(
+                "Power is below conventional threshold (0.8). Consider increasing to N = {}",
+                recommended_n
+            ));
         }
-        
+
         if expected_effect_size < 0.2 {
             recommendations.push("Small effect size detected. Consider very large sample sizes or more sensitive measures.".to_string());
         } else if expected_effect_size > 0.8 {
-            recommendations.push("Large effect size detected. Smaller sample size may be adequate.".to_string());
+            recommendations.push(
+                "Large effect size detected. Smaller sample size may be adequate.".to_string(),
+            );
         }
-        
+
         let effect_size = EffectSize {
             measure: match test_type {
-                StatisticalTestType::OneSampleTTest | 
-                StatisticalTestType::IndependentTTest | 
-                StatisticalTestType::PairedTTest => EffectSizeMeasure::CohenD,
-                StatisticalTestType::OneWayANOVA | 
-                StatisticalTestType::TwoWayANOVA => EffectSizeMeasure::CohensF,
+                StatisticalTestType::OneSampleTTest
+                | StatisticalTestType::IndependentTTest
+                | StatisticalTestType::PairedTTest => EffectSizeMeasure::CohenD,
+                StatisticalTestType::OneWayANOVA | StatisticalTestType::TwoWayANOVA => {
+                    EffectSizeMeasure::CohensF
+                }
                 StatisticalTestType::Correlation => EffectSizeMeasure::R,
                 _ => EffectSizeMeasure::CohenD,
             },
@@ -334,7 +346,7 @@ impl PowerAnalyzer {
             confidence_interval: (expected_effect_size * 0.7, expected_effect_size * 1.3), // Rough estimate
             interpretation: Self::interpret_effect_size(expected_effect_size),
         };
-        
+
         PowerAnalysis {
             test_type,
             effect_size,
@@ -344,7 +356,7 @@ impl PowerAnalyzer {
             recommendations,
         }
     }
-    
+
     fn interpret_effect_size(effect_size: f64) -> EffectSizeInterpretation {
         let abs_effect = effect_size.abs();
         match abs_effect {
@@ -361,9 +373,17 @@ pub struct EffectSizeCalculator;
 
 impl EffectSizeCalculator {
     /// Calculate Cohen's d for independent groups
-    pub fn cohens_d_independent(mean1: f64, mean2: f64, sd1: f64, sd2: f64, n1: usize, n2: usize) -> f64 {
-        let pooled_sd = (((n1 - 1) as f64 * sd1.powi(2) + (n2 - 1) as f64 * sd2.powi(2)) 
-                        / ((n1 + n2 - 2) as f64)).sqrt();
+    pub fn cohens_d_independent(
+        mean1: f64,
+        mean2: f64,
+        sd1: f64,
+        sd2: f64,
+        n1: usize,
+        n2: usize,
+    ) -> f64 {
+        let pooled_sd = (((n1 - 1) as f64 * sd1.powi(2) + (n2 - 1) as f64 * sd2.powi(2))
+            / ((n1 + n2 - 2) as f64))
+            .sqrt();
         (mean1 - mean2) / pooled_sd
     }
 
@@ -377,9 +397,11 @@ impl EffectSizeCalculator {
     pub fn cohens_d_paired(differences: &[f64]) -> f64 {
         let mean_diff = differences.iter().sum::<f64>() / differences.len() as f64;
         let sd_diff = {
-            let variance = differences.iter()
+            let variance = differences
+                .iter()
                 .map(|d| (d - mean_diff).powi(2))
-                .sum::<f64>() / (differences.len() - 1) as f64;
+                .sum::<f64>()
+                / (differences.len() - 1) as f64;
             variance.sqrt()
         };
         mean_diff / sd_diff
@@ -406,13 +428,19 @@ impl EffectSizeCalculator {
     }
 
     /// Calculate confidence interval for Cohen's d
-    pub fn cohens_d_confidence_interval(d: f64, n1: usize, n2: usize, confidence: f64) -> (f64, f64) {
+    pub fn cohens_d_confidence_interval(
+        d: f64,
+        n1: usize,
+        n2: usize,
+        confidence: f64,
+    ) -> (f64, f64) {
         let normal = Normal::new(0.0, 1.0).unwrap();
         let z_critical = normal.inverse_cdf(1.0 - (1.0 - confidence) / 2.0);
-        
+
         // Standard error of Cohen's d
-        let se_d = ((n1 + n2) as f64 / (n1 * n2) as f64 + d.powi(2) / (2.0 * (n1 + n2) as f64)).sqrt();
-        
+        let se_d =
+            ((n1 + n2) as f64 / (n1 * n2) as f64 + d.powi(2) / (2.0 * (n1 + n2) as f64)).sqrt();
+
         let margin = z_critical * se_d;
         (d - margin, d + margin)
     }
@@ -449,11 +477,11 @@ impl RealTimeMonitor {
         self.data_points.push(value);
         let current_n = self.data_points.len();
         self.sample_sizes.push(current_n);
-        
+
         // Calculate current effect size (simplified for demonstration)
         let current_effect = self.calculate_current_effect_size();
         self.effect_sizes.push(current_effect);
-        
+
         // Perform statistical test if enough data
         let current_p = if current_n >= 10 {
             self.calculate_current_p_value()
@@ -461,7 +489,7 @@ impl RealTimeMonitor {
             1.0
         };
         self.p_values.push(current_p);
-        
+
         // Generate monitoring report
         self.generate_monitoring_report(current_effect, current_p, current_n)
     }
@@ -473,12 +501,19 @@ impl RealTimeMonitor {
 
         // Simplified - assume one-sample test against zero
         let mean = self.data_points.iter().sum::<f64>() / self.data_points.len() as f64;
-        let variance = self.data_points.iter()
+        let variance = self
+            .data_points
+            .iter()
             .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / (self.data_points.len() - 1) as f64;
+            .sum::<f64>()
+            / (self.data_points.len() - 1) as f64;
         let sd = variance.sqrt();
-        
-        if sd == 0.0 { 0.0 } else { mean / sd }
+
+        if sd == 0.0 {
+            0.0
+        } else {
+            mean / sd
+        }
     }
 
     fn calculate_current_p_value(&self) -> f64 {
@@ -489,38 +524,51 @@ impl RealTimeMonitor {
         // Simplified one-sample t-test against zero
         let n = self.data_points.len() as f64;
         let mean = self.data_points.iter().sum::<f64>() / n;
-        let variance = self.data_points.iter()
+        let variance = self
+            .data_points
+            .iter()
             .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / (n - 1.0);
+            .sum::<f64>()
+            / (n - 1.0);
         let se = (variance / n).sqrt();
-        
+
         if se == 0.0 {
             return if mean == 0.0 { 1.0 } else { 0.0 };
         }
-        
+
         let t_stat = mean / se;
         let df = n - 1.0;
-        
+
         // Approximate p-value using normal approximation
         let normal = Normal::new(0.0, 1.0).unwrap();
         2.0 * (1.0 - normal.cdf(t_stat.abs() / (1.0 + 2.0 / df).sqrt()))
     }
 
-    fn generate_monitoring_report(&self, effect_size: f64, p_value: f64, n: usize) -> RealTimeEffectMonitor {
-        let current_power = self.power_analyzer
+    fn generate_monitoring_report(
+        &self,
+        effect_size: f64,
+        p_value: f64,
+        n: usize,
+    ) -> RealTimeEffectMonitor {
+        let current_power = self
+            .power_analyzer
             .calculate_power(self.test_type.clone(), effect_size.abs(), n)
             .unwrap_or(0.0);
 
-        let power_trajectory: Vec<PowerPoint> = self.sample_sizes.iter()
+        let power_trajectory: Vec<PowerPoint> = self
+            .sample_sizes
+            .iter()
             .zip(self.effect_sizes.iter())
             .enumerate()
             .map(|(i, (&sample_n, &effect))| PowerPoint {
                 n: sample_n,
-                power: self.power_analyzer
+                power: self
+                    .power_analyzer
                     .calculate_power(self.test_type.clone(), effect.abs(), sample_n)
                     .unwrap_or(0.0),
                 effect_size: effect,
-                timestamp: chrono::Utc::now() - chrono::Duration::minutes((self.sample_sizes.len() - i - 1) as i64),
+                timestamp: chrono::Utc::now()
+                    - chrono::Duration::minutes((self.sample_sizes.len() - i - 1) as i64),
             })
             .collect();
 
@@ -532,15 +580,20 @@ impl RealTimeMonitor {
             futility_threshold: 0.1, // Stop if power unlikely to reach threshold
         };
 
-        let sequential_analysis = self.analyze_sequential_stopping(&stopping_criteria, current_power, p_value);
-        let recommendations = self.generate_recommendations(&sequential_analysis, current_power, p_value, n);
+        let sequential_analysis =
+            self.analyze_sequential_stopping(&stopping_criteria, current_power, p_value);
+        let recommendations =
+            self.generate_recommendations(&sequential_analysis, current_power, p_value, n);
 
         RealTimeEffectMonitor {
             current_effect_size: EffectSize {
                 measure: EffectSizeMeasure::CohenD,
                 value: effect_size,
                 confidence_interval: EffectSizeCalculator::cohens_d_confidence_interval(
-                    effect_size, n, n, 0.95
+                    effect_size,
+                    n,
+                    n,
+                    0.95,
                 ),
                 interpretation: PowerAnalyzer::interpret_effect_size(effect_size),
             },
@@ -551,7 +604,12 @@ impl RealTimeMonitor {
         }
     }
 
-    fn analyze_sequential_stopping(&self, criteria: &StoppingCriteria, power: f64, p_value: f64) -> SequentialAnalysisResult {
+    fn analyze_sequential_stopping(
+        &self,
+        criteria: &StoppingCriteria,
+        power: f64,
+        p_value: f64,
+    ) -> SequentialAnalysisResult {
         let continue_sampling = if self.data_points.len() >= criteria.max_n {
             false
         } else if p_value <= criteria.max_p_value && power >= criteria.min_power {
@@ -577,7 +635,11 @@ impl RealTimeMonitor {
         // Estimate final sample size needed
         let estimated_final_n = if continue_sampling {
             self.power_analyzer
-                .calculate_sample_size(self.test_type.clone(), self.effect_sizes.last().unwrap_or(&0.3).abs(), criteria.min_power)
+                .calculate_sample_size(
+                    self.test_type.clone(),
+                    self.effect_sizes.last().unwrap_or(&0.3).abs(),
+                    criteria.min_power,
+                )
                 .ok()
         } else {
             None
@@ -591,12 +653,18 @@ impl RealTimeMonitor {
         }
     }
 
-    fn generate_recommendations(&self, sequential: &SequentialAnalysisResult, power: f64, p_value: f64, n: usize) -> Vec<MonitoringRecommendation> {
+    fn generate_recommendations(
+        &self,
+        sequential: &SequentialAnalysisResult,
+        power: f64,
+        p_value: f64,
+        n: usize,
+    ) -> Vec<MonitoringRecommendation> {
         let mut recommendations = Vec::new();
 
         if sequential.continue_sampling {
             recommendations.push(MonitoringRecommendation::ContinueDataCollection);
-            
+
             if let Some(estimated_n) = sequential.estimated_final_n {
                 if estimated_n > 1000 {
                     recommendations.push(MonitoringRecommendation::AdjustDesign {
@@ -604,7 +672,7 @@ impl RealTimeMonitor {
                     });
                 }
             }
-            
+
             if power < 0.2 && n > 50 {
                 recommendations.push(MonitoringRecommendation::StopForFutility);
             }
@@ -631,13 +699,15 @@ mod tests {
     #[test]
     fn test_power_calculation() {
         let analyzer = PowerAnalyzer::new(0.05, 0.8);
-        
-        let power = analyzer.calculate_power(
-            StatisticalTestType::IndependentTTest,
-            0.5, // Medium effect size
-            64   // Total sample size
-        ).unwrap();
-        
+
+        let power = analyzer
+            .calculate_power(
+                StatisticalTestType::IndependentTTest,
+                0.5, // Medium effect size
+                64,  // Total sample size
+            )
+            .unwrap();
+
         assert!(power > 0.4); // Should have reasonable power for medium effect size, n=64
         assert!(power < 1.0);
     }
@@ -645,14 +715,16 @@ mod tests {
     #[test]
     fn test_sample_size_calculation() {
         let analyzer = PowerAnalyzer::new(0.05, 0.8);
-        
-        let n = analyzer.calculate_sample_size(
-            StatisticalTestType::IndependentTTest,
-            0.5, // Medium effect size
-            0.8  // 80% power
-        ).unwrap();
-        
-        assert!(n > 20);  // Should require reasonable sample size
+
+        let n = analyzer
+            .calculate_sample_size(
+                StatisticalTestType::IndependentTTest,
+                0.5, // Medium effect size
+                0.8, // 80% power
+            )
+            .unwrap();
+
+        assert!(n > 20); // Should require reasonable sample size
         assert!(n < 200); // But not excessive for medium effect
     }
 
@@ -668,12 +740,12 @@ mod tests {
     #[test]
     fn test_real_time_monitoring() {
         let mut monitor = RealTimeMonitor::new(StatisticalTestType::OneSampleTTest, 0.05, 0.8);
-        
+
         // Add some data points with medium effect
         for _ in 0..20 {
             monitor.add_data_point(0.5);
         }
-        
+
         let report = monitor.add_data_point(0.6);
         assert!(report.current_effect_size.value > 0.0);
         assert!(!report.power_trajectory.is_empty());

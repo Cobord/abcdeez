@@ -16,30 +16,30 @@ pub struct BusinessMetricsCollector {
     pub weekly_active_users: Arc<AtomicU64>,
     pub monthly_active_users: Arc<AtomicU64>,
     pub user_retention_rate: Arc<AtomicF64>,
-    
+
     // Learning effectiveness metrics
     pub average_session_duration: Arc<AtomicF64>, // in minutes
     pub task_completion_rate: Arc<AtomicF64>,
     pub accuracy_rate: Arc<AtomicF64>,
     pub learning_velocity: Arc<AtomicF64>, // tasks per hour
-    
+
     // Content engagement metrics
     pub tasks_attempted: Arc<AtomicU64>,
     pub tasks_completed: Arc<AtomicU64>,
     pub hints_requested: Arc<AtomicU64>,
     pub interventions_triggered: Arc<AtomicU64>,
-    
+
     // Conversion and growth metrics
     pub new_user_signups: Arc<AtomicU64>,
     pub trial_to_paid_conversion: Arc<AtomicF64>,
     pub user_churn_rate: Arc<AtomicF64>,
     pub customer_lifetime_value: Arc<AtomicF64>,
-    
+
     // Platform health metrics
     pub error_impact_score: Arc<AtomicF64>, // business impact of errors
     pub feature_adoption_rate: Arc<AtomicF64>,
     pub user_satisfaction_score: Arc<AtomicF64>,
-    
+
     // Time-series data storage
     pub daily_snapshots: Arc<RwLock<Vec<DailyBusinessMetrics>>>,
     pub user_journey_data: Arc<RwLock<HashMap<Uuid, UserJourneyMetrics>>>,
@@ -148,24 +148,31 @@ impl BusinessMetricsCollector {
     /// Record a new user signup
     pub async fn record_user_signup(&self, user_id: Uuid, trial: bool) {
         self.new_user_signups.fetch_add(1, Ordering::Relaxed);
-        
+
         // Initialize user journey tracking
         let mut user_journeys = self.user_journey_data.write().await;
-        user_journeys.insert(user_id, UserJourneyMetrics {
+        user_journeys.insert(
             user_id,
-            first_session: Utc::now(),
-            last_session: Utc::now(),
-            total_sessions: 0,
-            total_tasks_attempted: 0,
-            total_tasks_completed: 0,
-            current_streak: 0,
-            longest_streak: 0,
-            learning_path_progress: 0.0,
-            skill_improvements: HashMap::new(),
-            subscription_tier: if trial { "trial".to_string() } else { "free".to_string() },
-            lifecycle_stage: UserLifecycleStage::Trial,
-        });
-        
+            UserJourneyMetrics {
+                user_id,
+                first_session: Utc::now(),
+                last_session: Utc::now(),
+                total_sessions: 0,
+                total_tasks_attempted: 0,
+                total_tasks_completed: 0,
+                current_streak: 0,
+                longest_streak: 0,
+                learning_path_progress: 0.0,
+                skill_improvements: HashMap::new(),
+                subscription_tier: if trial {
+                    "trial".to_string()
+                } else {
+                    "free".to_string()
+                },
+                lifecycle_stage: UserLifecycleStage::Trial,
+            },
+        );
+
         tracing::info!(
             user_id = %user_id,
             trial = trial,
@@ -174,23 +181,33 @@ impl BusinessMetricsCollector {
     }
 
     /// Record a learning session
-    pub async fn record_learning_session(&self, user_id: Uuid, duration_minutes: f64, tasks_attempted: u64, tasks_completed: u64) {
+    pub async fn record_learning_session(
+        &self,
+        user_id: Uuid,
+        duration_minutes: f64,
+        tasks_attempted: u64,
+        tasks_completed: u64,
+    ) {
         // Update global metrics
-        self.tasks_attempted.fetch_add(tasks_attempted, Ordering::Relaxed);
-        self.tasks_completed.fetch_add(tasks_completed, Ordering::Relaxed);
-        
+        self.tasks_attempted
+            .fetch_add(tasks_attempted, Ordering::Relaxed);
+        self.tasks_completed
+            .fetch_add(tasks_completed, Ordering::Relaxed);
+
         // Update running averages
         let current_avg = f64::from_bits(self.average_session_duration.load(Ordering::Relaxed));
         let new_avg = (current_avg + duration_minutes) / 2.0; // Simplified moving average
-        self.average_session_duration.store(new_avg.to_bits(), Ordering::Relaxed);
-        
+        self.average_session_duration
+            .store(new_avg.to_bits(), Ordering::Relaxed);
+
         if tasks_attempted > 0 {
             let completion_rate = tasks_completed as f64 / tasks_attempted as f64;
             let current_rate = f64::from_bits(self.task_completion_rate.load(Ordering::Relaxed));
             let new_rate = (current_rate + completion_rate) / 2.0;
-            self.task_completion_rate.store(new_rate.to_bits(), Ordering::Relaxed);
+            self.task_completion_rate
+                .store(new_rate.to_bits(), Ordering::Relaxed);
         }
-        
+
         // Update user journey data
         let mut user_journeys = self.user_journey_data.write().await;
         if let Some(journey) = user_journeys.get_mut(&user_id) {
@@ -198,18 +215,18 @@ impl BusinessMetricsCollector {
             journey.total_sessions += 1;
             journey.total_tasks_attempted += tasks_attempted;
             journey.total_tasks_completed += tasks_completed;
-            
+
             if tasks_completed > 0 {
                 journey.current_streak += 1;
                 journey.longest_streak = journey.longest_streak.max(journey.current_streak);
             } else if tasks_attempted > 0 {
                 journey.current_streak = 0; // Reset streak on failed attempts
             }
-            
+
             // Update lifecycle stage based on activity
             journey.lifecycle_stage = self.determine_lifecycle_stage(journey);
         }
-        
+
         tracing::debug!(
             user_id = %user_id,
             duration_minutes = duration_minutes,
@@ -220,40 +237,56 @@ impl BusinessMetricsCollector {
     }
 
     /// Record task performance
-    pub async fn record_task_performance(&self, user_id: Uuid, task_type: &str, correct: bool, response_time_ms: u64, hint_used: bool) {
+    pub async fn record_task_performance(
+        &self,
+        user_id: Uuid,
+        task_type: &str,
+        correct: bool,
+        response_time_ms: u64,
+        hint_used: bool,
+    ) {
         if correct {
             self.tasks_completed.fetch_add(1, Ordering::Relaxed);
         }
         self.tasks_attempted.fetch_add(1, Ordering::Relaxed);
-        
+
         if hint_used {
             self.hints_requested.fetch_add(1, Ordering::Relaxed);
         }
-        
+
         // Update accuracy rate
         let total_completed = self.tasks_completed.load(Ordering::Relaxed) as f64;
         let total_attempted = self.tasks_attempted.load(Ordering::Relaxed) as f64;
         if total_attempted > 0.0 {
             let accuracy = total_completed / total_attempted;
-            self.accuracy_rate.store(accuracy.to_bits(), Ordering::Relaxed);
+            self.accuracy_rate
+                .store(accuracy.to_bits(), Ordering::Relaxed);
         }
-        
+
         // Update learning velocity (tasks per hour)
         let velocity = total_attempted / (Utc::now().timestamp() as f64 / 3600.0); // Simplified
-        self.learning_velocity.store(velocity.to_bits(), Ordering::Relaxed);
-        
+        self.learning_velocity
+            .store(velocity.to_bits(), Ordering::Relaxed);
+
         // Update user-specific skill tracking
         let mut user_journeys = self.user_journey_data.write().await;
         if let Some(journey) = user_journeys.get_mut(&user_id) {
             let skill_improvement = if correct {
-                if response_time_ms < 3000 { 0.1 } else { 0.05 }
+                if response_time_ms < 3000 {
+                    0.1
+                } else {
+                    0.05
+                }
             } else {
                 -0.02
             };
-            
-            *journey.skill_improvements.entry(task_type.to_string()).or_insert(0.0) += skill_improvement;
+
+            *journey
+                .skill_improvements
+                .entry(task_type.to_string())
+                .or_insert(0.0) += skill_improvement;
         }
-        
+
         tracing::debug!(
             user_id = %user_id,
             task_type = task_type,
@@ -265,7 +298,12 @@ impl BusinessMetricsCollector {
     }
 
     /// Record business event (subscription, churn, etc.)
-    pub async fn record_business_event(&self, user_id: Uuid, event_type: BusinessEventType, value: f64) {
+    pub async fn record_business_event(
+        &self,
+        user_id: Uuid,
+        event_type: BusinessEventType,
+        value: f64,
+    ) {
         match event_type {
             BusinessEventType::Subscription { tier } => {
                 let mut user_journeys = self.user_journey_data.write().await;
@@ -273,13 +311,16 @@ impl BusinessMetricsCollector {
                     journey.subscription_tier = tier;
                     journey.lifecycle_stage = UserLifecycleStage::Active;
                 }
-                
+
                 // Update conversion rate
                 let total_signups = self.new_user_signups.load(Ordering::Relaxed) as f64;
                 if total_signups > 0.0 {
-                    let current_conversions = f64::from_bits(self.trial_to_paid_conversion.load(Ordering::Relaxed)) * total_signups;
+                    let current_conversions =
+                        f64::from_bits(self.trial_to_paid_conversion.load(Ordering::Relaxed))
+                            * total_signups;
                     let new_conversion_rate = (current_conversions + 1.0) / total_signups;
-                    self.trial_to_paid_conversion.store(new_conversion_rate.to_bits(), Ordering::Relaxed);
+                    self.trial_to_paid_conversion
+                        .store(new_conversion_rate.to_bits(), Ordering::Relaxed);
                 }
             }
             BusinessEventType::Churn => {
@@ -287,26 +328,31 @@ impl BusinessMetricsCollector {
                 if let Some(journey) = user_journeys.get_mut(&user_id) {
                     journey.lifecycle_stage = UserLifecycleStage::Churned;
                 }
-                
+
                 // Update churn rate (simplified)
                 let current_churn = f64::from_bits(self.user_churn_rate.load(Ordering::Relaxed));
                 let new_churn = (current_churn + 0.01).min(1.0); // Increment churn
-                self.user_churn_rate.store(new_churn.to_bits(), Ordering::Relaxed);
+                self.user_churn_rate
+                    .store(new_churn.to_bits(), Ordering::Relaxed);
             }
             BusinessEventType::Revenue => {
                 // Update customer lifetime value
-                let current_clv = f64::from_bits(self.customer_lifetime_value.load(Ordering::Relaxed));
+                let current_clv =
+                    f64::from_bits(self.customer_lifetime_value.load(Ordering::Relaxed));
                 let new_clv = current_clv + value;
-                self.customer_lifetime_value.store(new_clv.to_bits(), Ordering::Relaxed);
+                self.customer_lifetime_value
+                    .store(new_clv.to_bits(), Ordering::Relaxed);
             }
             BusinessEventType::SatisfactionScore => {
                 // Update user satisfaction (value should be 1-5 scale)
-                let current_score = f64::from_bits(self.user_satisfaction_score.load(Ordering::Relaxed));
+                let current_score =
+                    f64::from_bits(self.user_satisfaction_score.load(Ordering::Relaxed));
                 let new_score = (current_score + value) / 2.0; // Moving average
-                self.user_satisfaction_score.store(new_score.to_bits(), Ordering::Relaxed);
+                self.user_satisfaction_score
+                    .store(new_score.to_bits(), Ordering::Relaxed);
             }
         }
-        
+
         tracing::info!(
             user_id = %user_id,
             event_type = ?event_type,
@@ -319,13 +365,15 @@ impl BusinessMetricsCollector {
     pub async fn generate_daily_snapshot(&self) -> DailyBusinessMetrics {
         let daily_active = self.calculate_daily_active_users().await;
         let total_sessions = self.calculate_daily_sessions().await;
-        
+
         DailyBusinessMetrics {
             date: Utc::now(),
             active_users: daily_active,
             new_signups: self.new_user_signups.load(Ordering::Relaxed),
             total_sessions,
-            average_session_duration_minutes: f64::from_bits(self.average_session_duration.load(Ordering::Relaxed)),
+            average_session_duration_minutes: f64::from_bits(
+                self.average_session_duration.load(Ordering::Relaxed),
+            ),
             task_completion_rate: f64::from_bits(self.task_completion_rate.load(Ordering::Relaxed)),
             user_retention_rate: f64::from_bits(self.user_retention_rate.load(Ordering::Relaxed)),
             revenue_metrics: self.calculate_revenue_metrics().await,
@@ -340,12 +388,22 @@ impl BusinessMetricsCollector {
                 daily_active_users: self.daily_active_users.load(Ordering::Relaxed),
                 weekly_active_users: self.weekly_active_users.load(Ordering::Relaxed),
                 monthly_active_users: self.monthly_active_users.load(Ordering::Relaxed),
-                user_retention_rate: f64::from_bits(self.user_retention_rate.load(Ordering::Relaxed)),
-                task_completion_rate: f64::from_bits(self.task_completion_rate.load(Ordering::Relaxed)),
+                user_retention_rate: f64::from_bits(
+                    self.user_retention_rate.load(Ordering::Relaxed),
+                ),
+                task_completion_rate: f64::from_bits(
+                    self.task_completion_rate.load(Ordering::Relaxed),
+                ),
                 learning_velocity: f64::from_bits(self.learning_velocity.load(Ordering::Relaxed)),
-                customer_lifetime_value: f64::from_bits(self.customer_lifetime_value.load(Ordering::Relaxed)),
-                trial_to_paid_conversion: f64::from_bits(self.trial_to_paid_conversion.load(Ordering::Relaxed)),
-                user_satisfaction_score: f64::from_bits(self.user_satisfaction_score.load(Ordering::Relaxed)),
+                customer_lifetime_value: f64::from_bits(
+                    self.customer_lifetime_value.load(Ordering::Relaxed),
+                ),
+                trial_to_paid_conversion: f64::from_bits(
+                    self.trial_to_paid_conversion.load(Ordering::Relaxed),
+                ),
+                user_satisfaction_score: f64::from_bits(
+                    self.user_satisfaction_score.load(Ordering::Relaxed),
+                ),
             },
             trends: self.calculate_trends().await,
             alerts: self.generate_business_alerts().await,
@@ -356,7 +414,7 @@ impl BusinessMetricsCollector {
     // Helper methods
     fn determine_lifecycle_stage(&self, journey: &UserJourneyMetrics) -> UserLifecycleStage {
         let days_since_last_session = (Utc::now() - journey.last_session).num_days();
-        
+
         match journey.subscription_tier.as_str() {
             "trial" => {
                 if days_since_last_session > 7 {
@@ -391,15 +449,17 @@ impl BusinessMetricsCollector {
     async fn calculate_daily_active_users(&self) -> u64 {
         let user_journeys = self.user_journey_data.read().await;
         let today = Utc::now().date_naive();
-        
-        user_journeys.values()
+
+        user_journeys
+            .values()
             .filter(|journey| journey.last_session.date_naive() == today)
             .count() as u64
     }
 
     async fn calculate_daily_sessions(&self) -> u64 {
         let user_journeys = self.user_journey_data.read().await;
-        user_journeys.values()
+        user_journeys
+            .values()
             .map(|journey| journey.total_sessions)
             .sum()
     }
@@ -407,7 +467,8 @@ impl BusinessMetricsCollector {
     async fn calculate_revenue_metrics(&self) -> RevenueMetrics {
         // Simplified revenue calculations
         let user_journeys = self.user_journey_data.read().await;
-        let paid_users = user_journeys.values()
+        let paid_users = user_journeys
+            .values()
             .filter(|j| j.subscription_tier != "trial" && j.subscription_tier != "free")
             .count() as f64;
 
@@ -415,8 +476,8 @@ impl BusinessMetricsCollector {
             mrr: paid_users * 29.99, // Assuming $29.99/month
             arr: paid_users * 29.99 * 12.0,
             new_revenue: paid_users * 29.99,
-            churn_revenue: 0.0, // Would need historical data
-            expansion_revenue: 0.0, // Would need upgrade tracking
+            churn_revenue: 0.0,              // Would need historical data
+            expansion_revenue: 0.0,          // Would need upgrade tracking
             customer_acquisition_cost: 50.0, // Assumed CAC
         }
     }
@@ -424,7 +485,7 @@ impl BusinessMetricsCollector {
     async fn calculate_engagement_metrics(&self) -> EngagementMetrics {
         let user_journeys = self.user_journey_data.read().await;
         let total_users = user_journeys.len() as f64;
-        
+
         if total_users == 0.0 {
             return EngagementMetrics {
                 tasks_per_session: 0.0,
@@ -435,11 +496,20 @@ impl BusinessMetricsCollector {
             };
         }
 
-        let avg_tasks_per_session = user_journeys.values()
-            .map(|j| if j.total_sessions > 0 { j.total_tasks_attempted as f64 / j.total_sessions as f64 } else { 0.0 })
-            .sum::<f64>() / total_users;
+        let avg_tasks_per_session = user_journeys
+            .values()
+            .map(|j| {
+                if j.total_sessions > 0 {
+                    j.total_tasks_attempted as f64 / j.total_sessions as f64
+                } else {
+                    0.0
+                }
+            })
+            .sum::<f64>()
+            / total_users;
 
-        let single_session_users = user_journeys.values()
+        let single_session_users = user_journeys
+            .values()
             .filter(|j| j.total_sessions <= 1)
             .count() as f64;
 
@@ -447,7 +517,9 @@ impl BusinessMetricsCollector {
             tasks_per_session: avg_tasks_per_session,
             bounce_rate: single_session_users / total_users,
             feature_usage: HashMap::new(), // Would need feature tracking
-            user_feedback_score: f64::from_bits(self.user_satisfaction_score.load(Ordering::Relaxed)),
+            user_feedback_score: f64::from_bits(
+                self.user_satisfaction_score.load(Ordering::Relaxed),
+            ),
             support_ticket_volume: 0, // Would need support system integration
         }
     }
@@ -465,7 +537,8 @@ impl BusinessMetricsCollector {
             TrendData {
                 metric: "Task Completion Rate".to_string(),
                 current_value: f64::from_bits(self.task_completion_rate.load(Ordering::Relaxed)),
-                previous_value: f64::from_bits(self.task_completion_rate.load(Ordering::Relaxed)) * 0.95,
+                previous_value: f64::from_bits(self.task_completion_rate.load(Ordering::Relaxed))
+                    * 0.95,
                 change_percent: 5.0,
                 trend_direction: TrendDirection::Up,
             },
@@ -474,7 +547,7 @@ impl BusinessMetricsCollector {
 
     async fn generate_business_alerts(&self) -> Vec<BusinessAlert> {
         let mut alerts = Vec::new();
-        
+
         // Check for concerning metrics
         let churn_rate = f64::from_bits(self.user_churn_rate.load(Ordering::Relaxed));
         if churn_rate > 0.1 {

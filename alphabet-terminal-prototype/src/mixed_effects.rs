@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use statrs::distribution::{StudentsT, ContinuousCDF};
+use statrs::distribution::{ContinuousCDF, StudentsT};
 use statrs::statistics::Statistics;
+use std::collections::HashMap;
 
 /// Mixed-Effects Modeling for Repeated Measures Analysis
 /// Handles hierarchical data structures with both fixed and random effects
@@ -70,8 +70,8 @@ pub struct DataStructure {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BalanceType {
-    Balanced,        // Equal observations per subject
-    Unbalanced,      // Varying observations per subject
+    Balanced,           // Equal observations per subject
+    Unbalanced,         // Varying observations per subject
     SeverelyUnbalanced, // Large variation in observations
 }
 
@@ -87,9 +87,9 @@ pub struct ConvergenceInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EstimationMethod {
-    ReML,      // Restricted Maximum Likelihood
-    ML,        // Maximum Likelihood
-    Bayesian,  // Bayesian estimation
+    ReML,     // Restricted Maximum Likelihood
+    ML,       // Maximum Likelihood
+    Bayesian, // Bayesian estimation
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,7 +99,7 @@ pub struct ModelFitStatistics {
     pub log_likelihood: f64,
     pub deviance: f64,
     pub marginal_r_squared: f64,    // Fixed effects only
-    pub conditional_r_squared: f64,  // Fixed + random effects
+    pub conditional_r_squared: f64, // Fixed + random effects
     pub icc: f64,                   // Intraclass correlation
     pub variance_explained: VarianceExplained,
 }
@@ -277,11 +277,11 @@ pub enum ComparisonType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EvidenceStrength {
-    NoEvidence,    // BF < 3
-    Weak,         // 3 <= BF < 10
-    Moderate,     // 10 <= BF < 30
-    Strong,       // 30 <= BF < 100
-    VeryStrong,   // BF >= 100
+    NoEvidence, // BF < 3
+    Weak,       // 3 <= BF < 10
+    Moderate,   // 10 <= BF < 30
+    Strong,     // 30 <= BF < 100
+    VeryStrong, // BF >= 100
 }
 
 /// Main mixed-effects modeling engine
@@ -372,7 +372,10 @@ impl MixedEffectsAnalyzer {
         }
 
         // Check for sufficient variation in grouping factors
-        let unique_subjects = data.subject_ids.iter().collect::<std::collections::HashSet<_>>();
+        let unique_subjects = data
+            .subject_ids
+            .iter()
+            .collect::<std::collections::HashSet<_>>();
         if unique_subjects.len() < 3 {
             return Err("Need at least 3 subjects for mixed-effects modeling".to_string());
         }
@@ -387,37 +390,42 @@ impl MixedEffectsAnalyzer {
         random_structure: &[RandomEffectSpec],
     ) -> Result<MixedEffectsModel, String> {
         let data_structure = self.analyze_data_structure(data);
-        
+
         // Initialize fixed effects (simplified - would parse formula)
-        let fixed_effects = vec![
-            FixedEffect {
-                variable_name: "Intercept".to_string(),
-                coefficient: 0.0,
-                standard_error: 0.0,
-                t_value: 0.0,
-                p_value: 1.0,
-                confidence_interval: (0.0, 0.0),
-                effect_type: EffectType::Intercept,
-            }
-        ];
+        let fixed_effects = vec![FixedEffect {
+            variable_name: "Intercept".to_string(),
+            coefficient: 0.0,
+            standard_error: 0.0,
+            t_value: 0.0,
+            p_value: 1.0,
+            confidence_interval: (0.0, 0.0),
+            effect_type: EffectType::Intercept,
+        }];
 
         // Initialize random effects structure
         let mut random_effects = Vec::new();
         for spec in random_structure {
             let mut variance_components = HashMap::new();
-            variance_components.insert("Intercept".to_string(), VarianceComponent {
-                component_name: "Intercept".to_string(),
-                variance: 1.0, // Initial value
-                standard_deviation: 1.0,
-                confidence_interval: (0.0, 2.0),
-                proportion_of_total: 0.5,
-            });
+            variance_components.insert(
+                "Intercept".to_string(),
+                VarianceComponent {
+                    component_name: "Intercept".to_string(),
+                    variance: 1.0, // Initial value
+                    standard_deviation: 1.0,
+                    confidence_interval: (0.0, 2.0),
+                    proportion_of_total: 0.5,
+                },
+            );
 
             random_effects.push(RandomEffect {
                 grouping_factor: spec.grouping_factor.clone(),
                 variance_components,
                 correlation_matrix: vec![vec![1.0]], // Identity for now
-                n_groups: data.subject_ids.iter().collect::<std::collections::HashSet<_>>().len(),
+                n_groups: data
+                    .subject_ids
+                    .iter()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len(),
                 group_effects: HashMap::new(),
             });
         }
@@ -522,47 +530,55 @@ impl MixedEffectsAnalyzer {
     fn expectation_step(&self, model: &mut MixedEffectsModel, data: &MixedEffectsData) {
         // Simplified E-step: predict random effects
         // In practice, this would involve matrix operations on the mixed model equations
-        
+
         for random_effect in &mut model.random_effects {
             let mut group_effects = HashMap::new();
-            
+
             // Calculate group-specific effects (simplified)
             let unique_groups: std::collections::HashSet<_> = data.subject_ids.iter().collect();
             for group in unique_groups {
                 // Get observations for this group
-                let group_observations: Vec<f64> = data.subject_ids.iter()
+                let group_observations: Vec<f64> = data
+                    .subject_ids
+                    .iter()
                     .zip(&data.observations)
                     .filter(|(id, _)| *id == group)
                     .map(|(_, obs)| *obs)
                     .collect();
 
                 if !group_observations.is_empty() {
-                    let group_mean = group_observations.iter().sum::<f64>() / group_observations.len() as f64;
-                    let overall_mean = data.observations.iter().sum::<f64>() / data.observations.len() as f64;
+                    let group_mean =
+                        group_observations.iter().sum::<f64>() / group_observations.len() as f64;
+                    let overall_mean =
+                        data.observations.iter().sum::<f64>() / data.observations.len() as f64;
                     let group_effect = group_mean - overall_mean;
-                    
+
                     group_effects.insert(group.clone(), vec![group_effect]);
                 }
             }
-            
+
             random_effect.group_effects = group_effects;
         }
     }
 
     fn maximization_step(&self, model: &mut MixedEffectsModel, data: &MixedEffectsData) -> f64 {
         // Simplified M-step: update fixed effect estimates
-        
+
         // Update intercept (overall mean)
         let overall_mean = data.observations.iter().sum::<f64>() / data.observations.len() as f64;
-        
-        if let Some(intercept) = model.fixed_effects.iter_mut().find(|fe| fe.variable_name == "Intercept") {
+
+        if let Some(intercept) = model
+            .fixed_effects
+            .iter_mut()
+            .find(|fe| fe.variable_name == "Intercept")
+        {
             intercept.coefficient = overall_mean;
             intercept.standard_error = self.calculate_standard_error_intercept(data);
             intercept.t_value = intercept.coefficient / intercept.standard_error;
-            
+
             let t_dist = StudentsT::new(0.0, 1.0, data.observations.len() as f64 - 1.0).unwrap();
             intercept.p_value = 2.0 * (1.0 - t_dist.cdf(intercept.t_value.abs()));
-            
+
             let t_critical = t_dist.inverse_cdf(1.0 - self.alpha_level / 2.0);
             let margin = t_critical * intercept.standard_error;
             intercept.confidence_interval = (
@@ -580,34 +596,42 @@ impl MixedEffectsAnalyzer {
 
     fn calculate_standard_error_intercept(&self, data: &MixedEffectsData) -> f64 {
         let n = data.observations.len() as f64;
-        let variance = data.observations.iter()
+        let variance = data
+            .observations
+            .iter()
             .map(|x| {
                 let mean = data.observations.iter().sum::<f64>() / n;
                 (x - mean).powi(2)
             })
-            .sum::<f64>() / (n - 1.0);
-        
+            .sum::<f64>()
+            / (n - 1.0);
+
         (variance / n).sqrt()
     }
 
     fn update_variance_components(&self, model: &mut MixedEffectsModel, data: &MixedEffectsData) {
         for random_effect in &mut model.random_effects {
-            if let Some(intercept_component) = random_effect.variance_components.get_mut("Intercept") {
+            if let Some(intercept_component) =
+                random_effect.variance_components.get_mut("Intercept")
+            {
                 // Calculate between-group variance
-                let group_effects: Vec<f64> = random_effect.group_effects
+                let group_effects: Vec<f64> = random_effect
+                    .group_effects
                     .values()
                     .filter_map(|effects| effects.get(0))
                     .cloned()
                     .collect();
 
                 if !group_effects.is_empty() {
-                    let between_variance = group_effects.iter()
+                    let between_variance = group_effects
+                        .iter()
                         .map(|&effect| effect.powi(2))
-                        .sum::<f64>() / group_effects.len() as f64;
+                        .sum::<f64>()
+                        / group_effects.len() as f64;
 
                     intercept_component.variance = between_variance.max(0.01); // Prevent negative variance
                     intercept_component.standard_deviation = intercept_component.variance.sqrt();
-                    
+
                     // Simple confidence interval (would use likelihood profiling in practice)
                     intercept_component.confidence_interval = (
                         intercept_component.variance * 0.5,
@@ -621,22 +645,29 @@ impl MixedEffectsAnalyzer {
     fn calculate_log_likelihood(&self, model: &MixedEffectsModel, data: &MixedEffectsData) -> f64 {
         // Simplified log-likelihood calculation
         let fitted_values = self.calculate_fitted_values(model, data);
-        let residuals: Vec<f64> = data.observations.iter()
+        let residuals: Vec<f64> = data
+            .observations
+            .iter()
             .zip(&fitted_values)
             .map(|(obs, fitted)| obs - fitted)
             .collect();
 
-        let residual_variance = residuals.iter()
-            .map(|r| r.powi(2))
-            .sum::<f64>() / residuals.len() as f64;
+        let residual_variance =
+            residuals.iter().map(|r| r.powi(2)).sum::<f64>() / residuals.len() as f64;
 
         let n = data.observations.len() as f64;
-        -0.5 * n * (2.0 * std::f64::consts::PI * residual_variance).ln() - 
-        0.5 * residuals.iter().map(|r| r.powi(2)).sum::<f64>() / residual_variance
+        -0.5 * n * (2.0 * std::f64::consts::PI * residual_variance).ln()
+            - 0.5 * residuals.iter().map(|r| r.powi(2)).sum::<f64>() / residual_variance
     }
 
-    fn calculate_fitted_values(&self, model: &MixedEffectsModel, data: &MixedEffectsData) -> Vec<f64> {
-        let intercept = model.fixed_effects.iter()
+    fn calculate_fitted_values(
+        &self,
+        model: &MixedEffectsModel,
+        data: &MixedEffectsData,
+    ) -> Vec<f64> {
+        let intercept = model
+            .fixed_effects
+            .iter()
             .find(|fe| fe.variable_name == "Intercept")
             .map(|fe| fe.coefficient)
             .unwrap_or(0.0);
@@ -659,21 +690,30 @@ impl MixedEffectsAnalyzer {
 
     fn calculate_residuals(&self, model: &MixedEffectsModel, data: &MixedEffectsData) -> Vec<f64> {
         let fitted_values = self.calculate_fitted_values(model, data);
-        data.observations.iter()
+        data.observations
+            .iter()
             .zip(&fitted_values)
             .map(|(obs, fitted)| obs - fitted)
             .collect()
     }
 
-    fn calculate_model_fit(&self, model: &MixedEffectsModel, data: &MixedEffectsData) -> ModelFitStatistics {
-        let log_likelihood = model.convergence_info.as_ref()
+    fn calculate_model_fit(
+        &self,
+        model: &MixedEffectsModel,
+        data: &MixedEffectsData,
+    ) -> ModelFitStatistics {
+        let log_likelihood = model
+            .convergence_info
+            .as_ref()
             .map(|ci| ci.final_log_likelihood)
             .unwrap_or(0.0);
 
-        let n_params = model.fixed_effects.len() + 
-                      model.random_effects.iter()
-                          .map(|re| re.variance_components.len())
-                          .sum::<usize>();
+        let n_params = model.fixed_effects.len()
+            + model
+                .random_effects
+                .iter()
+                .map(|re| re.variance_components.len())
+                .sum::<usize>();
 
         let n_obs = data.observations.len() as f64;
         let aic = -2.0 * log_likelihood + 2.0 * n_params as f64;
@@ -689,7 +729,9 @@ impl MixedEffectsAnalyzer {
         let marginal_r_squared = conditional_r_squared * 0.7; // Approximation
 
         // Intraclass correlation
-        let random_variance = model.random_effects.first()
+        let random_variance = model
+            .random_effects
+            .first()
             .and_then(|re| re.variance_components.get("Intercept"))
             .map(|vc| vc.variance)
             .unwrap_or(0.0);
@@ -714,7 +756,11 @@ impl MixedEffectsAnalyzer {
         }
     }
 
-    fn conduct_hypothesis_tests(&self, model: &MixedEffectsModel, _data: &MixedEffectsData) -> Vec<HypothesisTest> {
+    fn conduct_hypothesis_tests(
+        &self,
+        model: &MixedEffectsModel,
+        _data: &MixedEffectsData,
+    ) -> Vec<HypothesisTest> {
         let mut tests = Vec::new();
 
         // Test fixed effects
@@ -733,7 +779,11 @@ impl MixedEffectsAnalyzer {
         tests
     }
 
-    fn check_mixed_model_assumptions(&self, model: &MixedEffectsModel, _data: &MixedEffectsData) -> AssumptionChecks {
+    fn check_mixed_model_assumptions(
+        &self,
+        model: &MixedEffectsModel,
+        _data: &MixedEffectsData,
+    ) -> AssumptionChecks {
         // Check normality of residuals
         let normality = if !model.residuals.is_empty() {
             let shapiro_result = self.shapiro_wilk_test(&model.residuals);
@@ -784,7 +834,11 @@ impl MixedEffectsAnalyzer {
         }
     }
 
-    fn calculate_effect_sizes(&self, model: &MixedEffectsModel, _data: &MixedEffectsData) -> Vec<EffectSizeEstimate> {
+    fn calculate_effect_sizes(
+        &self,
+        model: &MixedEffectsModel,
+        _data: &MixedEffectsData,
+    ) -> Vec<EffectSizeEstimate> {
         let mut effect_sizes = Vec::new();
 
         for fixed_effect in &model.fixed_effects {
@@ -826,11 +880,11 @@ impl MixedEffectsAnalyzer {
         let n = data.len() as f64;
         let mean = data.iter().sum::<f64>() / n;
         let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0);
-        
+
         // Simplified W statistic
         let w = 0.9 + 0.1 * (-variance).exp(); // Placeholder calculation
         let p_value = if w > 0.95 { 0.5 } else { 0.01 };
-        
+
         (w, p_value)
     }
 }
@@ -864,15 +918,21 @@ mod tests {
     fn test_mixed_effects_data_structure() {
         let data = MixedEffectsData {
             observations: vec![1.0, 2.0, 3.0, 2.5, 3.5, 4.0],
-            subject_ids: vec!["S1".to_string(), "S1".to_string(), "S1".to_string(),
-                             "S2".to_string(), "S2".to_string(), "S2".to_string()],
+            subject_ids: vec![
+                "S1".to_string(),
+                "S1".to_string(),
+                "S1".to_string(),
+                "S2".to_string(),
+                "S2".to_string(),
+                "S2".to_string(),
+            ],
             predictors: HashMap::new(),
             grouping_factors: HashMap::new(),
         };
 
         let analyzer = MixedEffectsAnalyzer::new();
         let structure = analyzer.analyze_data_structure(&data);
-        
+
         assert_eq!(structure.n_observations, 6);
         assert_eq!(structure.n_subjects, 2);
         assert!(matches!(structure.balance_type, BalanceType::Balanced));
@@ -882,7 +942,12 @@ mod tests {
     fn test_model_initialization() {
         let data = MixedEffectsData {
             observations: vec![1.0, 2.0, 3.0, 4.0],
-            subject_ids: vec!["S1".to_string(), "S1".to_string(), "S2".to_string(), "S2".to_string()],
+            subject_ids: vec![
+                "S1".to_string(),
+                "S1".to_string(),
+                "S2".to_string(),
+                "S2".to_string(),
+            ],
             predictors: HashMap::new(),
             grouping_factors: HashMap::new(),
         };
@@ -894,7 +959,7 @@ mod tests {
 
         let analyzer = MixedEffectsAnalyzer::new();
         let model = analyzer.initialize_model(&data, "y ~ 1 + (1|Subject)", &random_spec);
-        
+
         assert!(model.is_ok());
         let model = model.unwrap();
         assert_eq!(model.fixed_effects.len(), 1);
@@ -905,9 +970,17 @@ mod tests {
     fn test_simple_mixed_model_fit() {
         let data = MixedEffectsData {
             observations: vec![1.0, 1.5, 2.0, 3.0, 3.5, 4.0, 5.0, 5.5, 6.0], // Three groups with different means
-            subject_ids: vec!["S1".to_string(), "S1".to_string(), "S1".to_string(),
-                             "S2".to_string(), "S2".to_string(), "S2".to_string(),
-                             "S3".to_string(), "S3".to_string(), "S3".to_string()],
+            subject_ids: vec![
+                "S1".to_string(),
+                "S1".to_string(),
+                "S1".to_string(),
+                "S2".to_string(),
+                "S2".to_string(),
+                "S2".to_string(),
+                "S3".to_string(),
+                "S3".to_string(),
+                "S3".to_string(),
+            ],
             predictors: HashMap::new(),
             grouping_factors: HashMap::new(),
         };
@@ -919,13 +992,13 @@ mod tests {
 
         let analyzer = MixedEffectsAnalyzer::new();
         let result = analyzer.fit_model(&data, "y ~ 1 + (1|Subject)", &random_spec);
-        
+
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.model.fitted);
         assert!(result.model.convergence_info.is_some());
         assert!(result.model.model_fit.is_some());
-        
+
         // Check that ICC is reasonable (should be > 0 for grouped data)
         let icc = result.model.model_fit.unwrap().icc;
         assert!(icc > 0.0 && icc < 1.0);
@@ -935,7 +1008,7 @@ mod tests {
     fn test_assumption_checking() {
         let analyzer = MixedEffectsAnalyzer::new();
         let residuals = vec![0.1, -0.2, 0.15, -0.1, 0.05, -0.05];
-        
+
         let (w_stat, p_value) = analyzer.shapiro_wilk_test(&residuals);
         assert!(w_stat >= 0.0 && w_stat <= 1.0);
         assert!(p_value >= 0.0 && p_value <= 1.0);
@@ -944,11 +1017,26 @@ mod tests {
     #[test]
     fn test_effect_size_interpretation() {
         let analyzer = MixedEffectsAnalyzer::new();
-        
-        assert!(matches!(analyzer.interpret_effect_size(0.05), EffectSizeInterpretation::Negligible));
-        assert!(matches!(analyzer.interpret_effect_size(0.2), EffectSizeInterpretation::Small));
-        assert!(matches!(analyzer.interpret_effect_size(0.4), EffectSizeInterpretation::Medium));
-        assert!(matches!(analyzer.interpret_effect_size(0.7), EffectSizeInterpretation::Large));
-        assert!(matches!(analyzer.interpret_effect_size(0.9), EffectSizeInterpretation::VeryLarge));
+
+        assert!(matches!(
+            analyzer.interpret_effect_size(0.05),
+            EffectSizeInterpretation::Negligible
+        ));
+        assert!(matches!(
+            analyzer.interpret_effect_size(0.2),
+            EffectSizeInterpretation::Small
+        ));
+        assert!(matches!(
+            analyzer.interpret_effect_size(0.4),
+            EffectSizeInterpretation::Medium
+        ));
+        assert!(matches!(
+            analyzer.interpret_effect_size(0.7),
+            EffectSizeInterpretation::Large
+        ));
+        assert!(matches!(
+            analyzer.interpret_effect_size(0.9),
+            EffectSizeInterpretation::VeryLarge
+        ));
     }
 }

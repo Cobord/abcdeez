@@ -1,13 +1,11 @@
+use crate::audio_recorder::{create_audio_file_path, AudioConfig, AudioRecorder};
 use chrono::{DateTime, Utc};
+use graph_learning_core::{ConsentTemplate, IRBApplication, IRBComplianceGenerator, StudySummary};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 use uuid::Uuid;
-use crate::audio_recorder::{AudioRecorder, AudioConfig, create_audio_file_path};
-use graph_learning_core::{
-    IRBComplianceGenerator, StudySummary, ConsentTemplate, IRBApplication,
-};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioSession {
@@ -23,10 +21,17 @@ pub struct AudioSession {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AudioRecordingState {
     Idle,
-    Recording { start_time: DateTime<Utc>, duration: Duration },
-    Paused { total_duration: Duration },
+    Recording {
+        start_time: DateTime<Utc>,
+        duration: Duration,
+    },
+    Paused {
+        total_duration: Duration,
+    },
     Processing,
-    Completed { file_path: String },
+    Completed {
+        file_path: String,
+    },
     Error(String),
 }
 
@@ -294,7 +299,7 @@ impl ResearchController {
         let session_id = session.id.clone();
         self.active_session = Some(session);
         self.current_experiment = Some(experiment_type);
-        
+
         Ok(session_id)
     }
 
@@ -324,7 +329,7 @@ impl ResearchController {
 
     pub fn calculate_metrics(&self, session: &ResearchSession) -> ResearchMetrics {
         let data_points = &session.data_points;
-        
+
         if data_points.is_empty() {
             return ResearchMetrics {
                 learning_rate: 0.0,
@@ -348,8 +353,8 @@ impl ResearchController {
         }
 
         let learning_rate = if learning_curve.len() > 1 {
-            let first_half = &learning_curve[..learning_curve.len()/2];
-            let second_half = &learning_curve[learning_curve.len()/2..];
+            let first_half = &learning_curve[..learning_curve.len() / 2];
+            let second_half = &learning_curve[learning_curve.len() / 2..];
             let first_avg: f64 = first_half.iter().sum::<f64>() / first_half.len() as f64;
             let second_avg: f64 = second_half.iter().sum::<f64>() / second_half.len() as f64;
             (second_avg - first_avg).max(0.0)
@@ -361,12 +366,13 @@ impl ResearchController {
             .iter()
             .map(|dp| dp.response_time_ms as f64)
             .collect();
-        
+
         let mean_rt = response_times.iter().sum::<f64>() / response_times.len() as f64;
         let variance = response_times
             .iter()
             .map(|rt| (rt - mean_rt).powi(2))
-            .sum::<f64>() / response_times.len() as f64;
+            .sum::<f64>()
+            / response_times.len() as f64;
         let std_dev = variance.sqrt();
         let consistency = 1.0 - (std_dev / mean_rt).min(1.0);
 
@@ -398,9 +404,10 @@ impl ResearchController {
             }
             ExportFormat::Csv => {
                 let mut csv_lines = vec![
-                    "session_id,experiment_type,trial,stimulus,response,correct,rt_ms,timestamp".to_string()
+                    "session_id,experiment_type,trial,stimulus,response,correct,rt_ms,timestamp"
+                        .to_string(),
                 ];
-                
+
                 for session in &self.sessions {
                     for (i, dp) in session.data_points.iter().enumerate() {
                         csv_lines.push(format!(
@@ -416,7 +423,7 @@ impl ResearchController {
                         ));
                     }
                 }
-                
+
                 Ok(csv_lines.join("\n"))
             }
             _ => Err("Unsupported export format".to_string()),
@@ -444,45 +451,45 @@ impl ResearchAnalyzer {
 
     pub fn analyze_learning_curves(&self) -> HashMap<String, Vec<f64>> {
         let mut curves = HashMap::new();
-        
+
         for session in &self.sessions {
             let window_size = 10;
             let mut session_curve = Vec::new();
-            
+
             for window in session.data_points.windows(window_size) {
-                let accuracy = window.iter().filter(|dp| dp.correct).count() as f64 
-                    / window_size as f64;
+                let accuracy =
+                    window.iter().filter(|dp| dp.correct).count() as f64 / window_size as f64;
                 session_curve.push(accuracy);
             }
-            
+
             curves.insert(session.id.clone(), session_curve);
         }
-        
+
         curves
     }
 
     pub fn analyze_retention(&self, delay_minutes: u64) -> f64 {
         let mut retention_scores = Vec::new();
-        
+
         for session in &self.sessions {
             if let Some(end_time) = session.end_time {
-                let delayed_points: Vec<&DataPoint> = session.data_points
+                let delayed_points: Vec<&DataPoint> = session
+                    .data_points
                     .iter()
                     .filter(|dp| {
                         let diff = dp.timestamp.signed_duration_since(end_time);
                         diff.num_minutes() >= delay_minutes as i64
                     })
                     .collect();
-                
+
                 if !delayed_points.is_empty() {
-                    let accuracy = delayed_points.iter()
-                        .filter(|dp| dp.correct)
-                        .count() as f64 / delayed_points.len() as f64;
+                    let accuracy = delayed_points.iter().filter(|dp| dp.correct).count() as f64
+                        / delayed_points.len() as f64;
                     retention_scores.push(accuracy);
                 }
             }
         }
-        
+
         if retention_scores.is_empty() {
             0.0
         } else {
@@ -493,42 +500,54 @@ impl ResearchAnalyzer {
     pub fn compare_conditions(&self) -> HashMap<String, ResearchMetrics> {
         let mut condition_metrics = HashMap::new();
         let mut condition_sessions: HashMap<String, Vec<&ResearchSession>> = HashMap::new();
-        
+
         for session in &self.sessions {
             condition_sessions
                 .entry(session.condition.name.clone())
                 .or_insert_with(Vec::new)
                 .push(session);
         }
-        
+
         for (condition_name, sessions) in condition_sessions {
             let mut all_metrics = Vec::new();
-            
+
             for session in sessions {
                 let controller = ResearchController::new(session.participant_id.clone());
                 all_metrics.push(controller.calculate_metrics(session));
             }
-            
+
             if !all_metrics.is_empty() {
                 let avg_metrics = ResearchMetrics {
-                    learning_rate: all_metrics.iter().map(|m| m.learning_rate).sum::<f64>() 
+                    learning_rate: all_metrics.iter().map(|m| m.learning_rate).sum::<f64>()
                         / all_metrics.len() as f64,
-                    retention_score: all_metrics.iter().map(|m| m.retention_score).sum::<f64>() 
+                    retention_score: all_metrics.iter().map(|m| m.retention_score).sum::<f64>()
                         / all_metrics.len() as f64,
-                    interference_index: all_metrics.iter().map(|m| m.interference_index).sum::<f64>() 
+                    interference_index: all_metrics
+                        .iter()
+                        .map(|m| m.interference_index)
+                        .sum::<f64>()
                         / all_metrics.len() as f64,
-                    cognitive_load_estimate: all_metrics.iter().map(|m| m.cognitive_load_estimate).sum::<f64>() 
+                    cognitive_load_estimate: all_metrics
+                        .iter()
+                        .map(|m| m.cognitive_load_estimate)
+                        .sum::<f64>()
                         / all_metrics.len() as f64,
-                    performance_consistency: all_metrics.iter().map(|m| m.performance_consistency).sum::<f64>() 
+                    performance_consistency: all_metrics
+                        .iter()
+                        .map(|m| m.performance_consistency)
+                        .sum::<f64>()
                         / all_metrics.len() as f64,
-                    adaptation_effectiveness: all_metrics.iter().map(|m| m.adaptation_effectiveness).sum::<f64>() 
+                    adaptation_effectiveness: all_metrics
+                        .iter()
+                        .map(|m| m.adaptation_effectiveness)
+                        .sum::<f64>()
                         / all_metrics.len() as f64,
                 };
-                
+
                 condition_metrics.insert(condition_name, avg_metrics);
             }
         }
-        
+
         condition_metrics
     }
 
@@ -559,7 +578,7 @@ impl ResearchAnalyzer {
 
         let session_id = Uuid::new_v4().to_string();
         let file_path = create_audio_file_path(&self.participant_id, &session_id);
-        
+
         // Start recording
         if let Some(ref mut recorder) = self.audio_recorder {
             if let Err(e) = recorder.start_recording(file_path.clone()) {
@@ -600,23 +619,26 @@ impl ResearchAnalyzer {
 
         if let Some(mut session) = self.current_audio_session.take() {
             session.end_time = Some(Utc::now());
-            
+
             let file_path = session.file_path.clone().unwrap_or_else(|| {
                 create_audio_file_path(&self.participant_id, &session.session_id)
-                    .to_string_lossy().to_string()
+                    .to_string_lossy()
+                    .to_string()
             });
-            
-            self.recording_state = AudioRecordingState::Completed { 
-                file_path: file_path.clone() 
+
+            self.recording_state = AudioRecordingState::Completed {
+                file_path: file_path.clone(),
             };
-            
+
             // Calculate a basic quality score based on duration
-            let duration = session.end_time.unwrap()
+            let duration = session
+                .end_time
+                .unwrap()
                 .signed_duration_since(session.start_time)
                 .num_seconds() as f64;
-            
+
             session.quality_score = Some(if duration > 5.0 { 0.9 } else { 0.7 });
-            
+
             Ok(session)
         } else {
             Err("No active audio recording session".to_string())
@@ -626,16 +648,20 @@ impl ResearchAnalyzer {
     pub fn toggle_audio_recording(&mut self) -> Result<String, String> {
         match &self.recording_state {
             AudioRecordingState::Idle => self.start_audio_recording(),
-            AudioRecordingState::Recording { .. } => {
-                self.stop_audio_recording().map(|session| format!("Recording stopped: {}", session.session_id))
-            }
+            AudioRecordingState::Recording { .. } => self
+                .stop_audio_recording()
+                .map(|session| format!("Recording stopped: {}", session.session_id)),
             _ => Err("Cannot toggle recording in current state".to_string()),
         }
     }
 
     // Sensor management methods
     pub fn toggle_sensor(&mut self, sensor_type: &SensorType) -> Result<bool, String> {
-        if let Some(sensor) = self.connected_sensors.iter_mut().find(|s| s.sensor_type == *sensor_type) {
+        if let Some(sensor) = self
+            .connected_sensors
+            .iter_mut()
+            .find(|s| s.sensor_type == *sensor_type)
+        {
             sensor.enabled = !sensor.enabled;
             sensor.status = if sensor.enabled {
                 SensorStatus::Connected
@@ -650,9 +676,10 @@ impl ResearchAnalyzer {
 
     pub fn get_recording_duration(&self) -> Duration {
         match &self.recording_state {
-            AudioRecordingState::Recording { start_time, .. } => {
-                Utc::now().signed_duration_since(*start_time).to_std().unwrap_or_default()
-            }
+            AudioRecordingState::Recording { start_time, .. } => Utc::now()
+                .signed_duration_since(*start_time)
+                .to_std()
+                .unwrap_or_default(),
             AudioRecordingState::Paused { total_duration } => *total_duration,
             _ => Duration::from_secs(0),
         }
@@ -680,13 +707,14 @@ impl ResearchAnalyzer {
     pub fn update_audio_config(&mut self, sample_rate: u32, channels: u16) -> Result<(), String> {
         self.audio_config.sample_rate = sample_rate;
         self.audio_config.channels = channels;
-        
+
         // If recorder exists, reinitialize it with new config
         if let Some(ref mut recorder) = self.audio_recorder {
-            recorder.initialize(self.audio_config.clone())
+            recorder
+                .initialize(self.audio_config.clone())
                 .map_err(|e| format!("Failed to update audio config: {}", e))?;
         }
-        
+
         Ok(())
     }
 
@@ -710,7 +738,7 @@ impl ResearchAnalyzer {
         self.initialize_irb_generator()?;
 
         let application_id = Uuid::new_v4().to_string();
-        
+
         // Create the IRB application status
         let application_status = IRBApplicationStatus {
             application_id: application_id.clone(),
@@ -770,7 +798,7 @@ impl ResearchAnalyzer {
         self.initialize_irb_generator()?;
 
         let document_id = Uuid::new_v4().to_string();
-        
+
         let content = format!(
             "INFORMED CONSENT FORM\n\nStudy Title: {}\n\nYou are being invited to participate in a research study.\n\nPURPOSE:\nThis study aims to understand learning processes and cognitive performance.\n\nPROCEDURES:\n{}\n\nRISKS:\n{}\n\nBENEFITS:\n{}\n\nCONFIDENTIALITY:\nYour identity and data will be kept confidential. All data will be anonymized and stored securely.\n\nVOLUNTARY PARTICIPATION:\nYour participation is voluntary. You may withdraw at any time without penalty.\n\nCONTACT INFORMATION:\nIf you have questions, please contact the research team.\n\nI have read and understood the information provided. I agree to participate in this study.\n\nParticipant Signature: _________________ Date: _________\n\nResearcher Signature: _________________ Date: _________",
             study_title,
@@ -795,7 +823,7 @@ impl ResearchAnalyzer {
 
     pub fn generate_data_management_plan(&mut self, study_title: String) -> Result<String, String> {
         let document_id = Uuid::new_v4().to_string();
-        
+
         let content = format!(
             "DATA MANAGEMENT PLAN\n\nStudy: {}\n\nDATA COLLECTION:\n• Audio recordings (if enabled) stored locally with encryption\n• Response time data collected during tasks\n• Physiological sensor data (if enabled)\n• All data anonymized with participant IDs\n\nDATA STORAGE:\n• Local encrypted storage during collection\n• Secure cloud backup with institutional approval\n• Data retention for 7 years as per research standards\n\nDATA SECURITY:\n• AES-256 encryption for all stored data\n• Secure transmission protocols (HTTPS/TLS)\n• Access controls with authentication\n• Regular security audits\n\nDATA SHARING:\n• Anonymized data may be shared for research purposes\n• Participants can request data deletion\n• Compliance with GDPR and local privacy laws\n\nDATA DESTRUCTION:\n• Automatic deletion after retention period\n• Secure deletion protocols for sensitive data\n• Audit trail of all data access and modifications",
             study_title
@@ -823,11 +851,18 @@ impl ResearchAnalyzer {
         &self.generated_documents
     }
 
-    pub fn update_application_status(&mut self, application_id: &str, status: IRBStatus) -> Result<(), String> {
-        if let Some(application) = self.pending_irb_applications.iter_mut()
-            .find(|app| app.application_id == application_id) {
+    pub fn update_application_status(
+        &mut self,
+        application_id: &str,
+        status: IRBStatus,
+    ) -> Result<(), String> {
+        if let Some(application) = self
+            .pending_irb_applications
+            .iter_mut()
+            .find(|app| app.application_id == application_id)
+        {
             application.status = status.clone();
-            
+
             match status {
                 IRBStatus::Submitted => {
                     application.submitted_date = Some(Utc::now());
@@ -838,7 +873,7 @@ impl ResearchAnalyzer {
                 }
                 _ => {}
             }
-            
+
             Ok(())
         } else {
             Err("Application not found".to_string())
@@ -846,23 +881,26 @@ impl ResearchAnalyzer {
     }
 
     pub fn export_irb_document(&mut self, document_id: &str) -> Result<String, String> {
-        if let Some(document) = self.generated_documents.iter_mut()
-            .find(|doc| doc.document_id == document_id) {
-            
-            let filename = format!("{}_{}.txt", 
+        if let Some(document) = self
+            .generated_documents
+            .iter_mut()
+            .find(|doc| doc.document_id == document_id)
+        {
+            let filename = format!(
+                "{}_{}.txt",
                 document.title.replace(" ", "_").replace(":", ""),
                 document.document_id[..8].to_string()
             );
-            
+
             // Create IRB documents directory
             std::fs::create_dir_all("irb_documents").map_err(|e| e.to_string())?;
             let file_path = format!("irb_documents/{}", filename);
-            
+
             std::fs::write(&file_path, &document.content).map_err(|e| e.to_string())?;
-            
+
             document.file_path = Some(file_path.clone());
             document.status = DocumentStatus::Approved;
-            
+
             Ok(file_path)
         } else {
             Err("Document not found".to_string())

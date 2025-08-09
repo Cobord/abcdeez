@@ -227,13 +227,15 @@ pub async fn submit_response(
     .map_err(|e| AppError::DatabaseError(e))?;
 
     // Track business metrics for task performance
-    global_business_metrics().record_task_performance(
-        claims.sub,
-        &response.task_type,
-        is_correct,
-        response.response_time_ms as u64,
-        response.hint_level.is_some(),
-    ).await;
+    global_business_metrics()
+        .record_task_performance(
+            claims.sub,
+            &response.task_type,
+            is_correct,
+            response.response_time_ms as u64,
+            response.hint_level.is_some(),
+        )
+        .await;
 
     // Update learner model with the response
     let learner_service =

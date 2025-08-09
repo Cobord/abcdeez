@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
-use tracing::{debug, info, warn, instrument};
 
 /// Comprehensive audit trail system for research compliance and data integrity
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,10 +26,10 @@ pub struct AuditConfiguration {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AuditLevel {
-    Minimal,     // Only critical events
-    Standard,    // Common events for compliance
-    Detailed,    // All events for research
-    Forensic,    // Everything including debug info
+    Minimal,  // Only critical events
+    Standard, // Common events for compliance
+    Detailed, // All events for research
+    Forensic, // Everything including debug info
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,9 +141,9 @@ impl AuditTrailManager {
     #[instrument(level = "info", fields(session_id = %session_id))]
     pub fn start_session(&mut self, session_id: String) {
         info!(session_id = %session_id, "Starting audit session");
-        
+
         self.session_id = Some(session_id.clone());
-        
+
         let event_id = self.log_event(
             EventType::SystemEvent,
             Actor {
@@ -162,7 +162,7 @@ impl AuditTrailManager {
             Outcome::Success,
             HashMap::new(),
         );
-        
+
         info!(
             session_id = %session_id,
             event_id = %event_id,
@@ -188,7 +188,7 @@ impl AuditTrailManager {
         details: HashMap<String, String>,
     ) -> String {
         let event_id = Uuid::new_v4().to_string();
-        
+
         debug!(
             event_id = %event_id,
             actor_type = ?actor.actor_type,
@@ -344,7 +344,10 @@ impl AuditTrailManager {
         self.events
             .iter()
             .filter(|event| {
-                event.session_context.as_ref().map_or(false, |s| s == session_id)
+                event
+                    .session_context
+                    .as_ref()
+                    .map_or(false, |s| s == session_id)
             })
             .collect()
     }
@@ -359,7 +362,9 @@ impl AuditTrailManager {
     pub fn get_events_by_type(&self, event_type: &EventType) -> Vec<&AuditEvent> {
         self.events
             .iter()
-            .filter(|event| std::mem::discriminant(&event.event_type) == std::mem::discriminant(event_type))
+            .filter(|event| {
+                std::mem::discriminant(&event.event_type) == std::mem::discriminant(event_type)
+            })
             .collect()
     }
 
@@ -369,14 +374,20 @@ impl AuditTrailManager {
 
     pub fn generate_compliance_report(&self) -> String {
         let total_events = self.events.len();
-        let successful_operations = self.events.iter()
+        let successful_operations = self
+            .events
+            .iter()
             .filter(|e| matches!(e.outcome, Outcome::Success))
             .count();
-        let failed_operations = self.events.iter()
+        let failed_operations = self
+            .events
+            .iter()
             .filter(|e| matches!(e.outcome, Outcome::Failure | Outcome::Error))
             .count();
-        
-        let unique_users = self.events.iter()
+
+        let unique_users = self
+            .events
+            .iter()
             .filter(|e| matches!(e.actor.actor_type, ActorType::User | ActorType::Participant))
             .map(|e| &e.actor.id)
             .collect::<std::collections::HashSet<_>>()
@@ -422,13 +433,9 @@ mod tests {
     #[test]
     fn test_event_logging() {
         let mut audit = AuditTrailManager::new(None);
-        
-        let event_id = audit.log_user_action(
-            "user123",
-            "button_click",
-            "submit_button",
-            Outcome::Success,
-        );
+
+        let event_id =
+            audit.log_user_action("user123", "button_click", "submit_button", Outcome::Success);
 
         assert_eq!(audit.events.len(), 1);
         assert!(!event_id.is_empty());
@@ -439,9 +446,9 @@ mod tests {
     fn test_session_filtering() {
         let mut audit = AuditTrailManager::new(None);
         audit.start_session("session1".to_string());
-        
+
         audit.log_user_action("user1", "action1", "resource1", Outcome::Success);
-        
+
         let events = audit.get_events_for_session("session1");
         assert!(events.len() >= 1); // At least the session start event
     }

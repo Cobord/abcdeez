@@ -56,7 +56,7 @@ impl SeedManager {
     pub fn generate_experiment_seed(&mut self, experiment_id: String, description: String) -> u64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let seed = if let Some(master) = self.master_seed {
             let mut hasher = DefaultHasher::new();
             master.hash(&mut hasher);
@@ -64,7 +64,10 @@ impl SeedManager {
             hasher.finish()
         } else {
             use std::time::{SystemTime, UNIX_EPOCH};
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64
         };
 
         let experiment_seed = ExperimentSeed {
@@ -75,8 +78,9 @@ impl SeedManager {
             description,
         };
 
-        self.experiment_seeds.insert(experiment_id.clone(), experiment_seed);
-        
+        self.experiment_seeds
+            .insert(experiment_id.clone(), experiment_seed);
+
         self.log_randomization_event(
             seed,
             "generate_experiment_seed".to_string(),
@@ -89,14 +93,23 @@ impl SeedManager {
         seed
     }
 
-    pub fn generate_session_seed(&mut self, session_id: String, experiment_id: String, participant_id: String) -> u64 {
-        let parent_seed = self.experiment_seeds.get(&experiment_id)
+    pub fn generate_session_seed(
+        &mut self,
+        session_id: String,
+        experiment_id: String,
+        participant_id: String,
+    ) -> u64 {
+        let parent_seed = self
+            .experiment_seeds
+            .get(&experiment_id)
             .map(|es| es.seed)
-            .unwrap_or_else(|| self.generate_experiment_seed(experiment_id.clone(), "Auto-generated".to_string()));
+            .unwrap_or_else(|| {
+                self.generate_experiment_seed(experiment_id.clone(), "Auto-generated".to_string())
+            });
 
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         parent_seed.hash(&mut hasher);
         session_id.hash(&mut hasher);
@@ -113,7 +126,7 @@ impl SeedManager {
         };
 
         self.session_seeds.insert(session_id.clone(), session_seed);
-        
+
         self.log_randomization_event(
             seed,
             "generate_session_seed".to_string(),
@@ -145,17 +158,24 @@ impl SeedManager {
             participant_id,
             outcome,
         };
-        
+
         self.randomization_log.push(event);
     }
 
-    pub fn get_reproducibility_manifest(&self, experiment_id: &str) -> Option<ReproducibilityManifest> {
+    pub fn get_reproducibility_manifest(
+        &self,
+        experiment_id: &str,
+    ) -> Option<ReproducibilityManifest> {
         if let Some(experiment_seed) = self.experiment_seeds.get(experiment_id) {
-            let session_seeds: Vec<_> = self.session_seeds.values()
+            let session_seeds: Vec<_> = self
+                .session_seeds
+                .values()
                 .filter(|ss| ss.experiment_id == experiment_id)
                 .collect();
 
-            let randomization_events: Vec<_> = self.randomization_log.iter()
+            let randomization_events: Vec<_> = self
+                .randomization_log
+                .iter()
                 .filter(|event| event.experiment_id == experiment_id)
                 .collect();
 

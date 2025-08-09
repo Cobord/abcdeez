@@ -1,10 +1,10 @@
 use axum::{extract::State, Json};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tracing::{error, warn, debug};
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
+use tracing::{debug, error, warn};
 
 use crate::{
     error::{AppError, AppResult},
@@ -116,13 +116,13 @@ pub async fn enhanced_health_check(
 
     // Enhanced health status determination
     let overall_status = determine_enhanced_health_status(
-        &db_status, 
-        &cache_status, 
+        &db_status,
+        &cache_status,
         &db_pool_stats,
         &disk_usage,
         &external_deps,
-        error_rate, 
-        cpu_usage
+        error_rate,
+        cpu_usage,
     );
 
     let health = EnhancedSystemHealth {
@@ -163,12 +163,17 @@ pub async fn enhanced_health_check(
         HealthStatus::Healthy => {
             debug!(
                 "System health HEALTHY - uptime: {}s, active_sessions: {}, db_pool_util: {:.1}%",
-                health.uptime_seconds, health.application_metrics.active_sessions, db_pool_stats.utilization_percent
+                health.uptime_seconds,
+                health.application_metrics.active_sessions,
+                db_pool_stats.utilization_percent
             );
         }
     }
 
-    debug!("Enhanced health check completed in {}ms", start_time.elapsed().as_millis());
+    debug!(
+        "Enhanced health check completed in {}ms",
+        start_time.elapsed().as_millis()
+    );
 
     Ok(Json(health))
 }
@@ -296,7 +301,10 @@ async fn check_database_health_detailed(state: &AppState) -> ComponentStatus {
         // Read operation
         ("SELECT COUNT(*) FROM users LIMIT 1", "table access"),
         // Check if migrations are up to date (simplified)
-        ("SELECT name FROM sqlite_master WHERE type='table' AND name='users'", "schema integrity"),
+        (
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='users'",
+            "schema integrity",
+        ),
     ];
 
     let mut total_time = 0u64;
@@ -304,7 +312,7 @@ async fn check_database_health_detailed(state: &AppState) -> ComponentStatus {
 
     for (query, test_name) in tests {
         let test_start = Instant::now();
-        
+
         match sqlx::query(query).fetch_optional(&state.db_pool).await {
             Ok(_) => {
                 let test_time = test_start.elapsed().as_millis() as u64;
@@ -319,10 +327,14 @@ async fn check_database_health_detailed(state: &AppState) -> ComponentStatus {
     }
 
     let response_time = start.elapsed().as_millis() as u64;
-    
+
     if error_details.is_empty() {
         ComponentStatus {
-            status: if response_time > 2000 { HealthStatus::Degraded } else { HealthStatus::Healthy },
+            status: if response_time > 2000 {
+                HealthStatus::Degraded
+            } else {
+                HealthStatus::Healthy
+            },
             response_time_ms: response_time,
             last_error: None,
             last_check: Utc::now(),
@@ -412,12 +424,16 @@ fn determine_enhanced_health_status(
     }
 
     if db_pool_stats.utilization_percent > 95.0 {
-        error!("Critical database pool utilization: {:.1}%", db_pool_stats.utilization_percent);
+        error!(
+            "Critical database pool utilization: {:.1}%",
+            db_pool_stats.utilization_percent
+        );
         return HealthStatus::Unhealthy;
     }
 
     // Count unhealthy external dependencies
-    let unhealthy_deps = external_deps.iter()
+    let unhealthy_deps = external_deps
+        .iter()
         .filter(|(_, status)| matches!(status.status, HealthStatus::Unhealthy))
         .count();
 
@@ -448,23 +464,38 @@ fn determine_enhanced_health_status(
         return HealthStatus::Degraded;
     }
     if db_status.response_time_ms > 1000 {
-        warn!("System degraded: slow DB response: {}ms", db_status.response_time_ms);
+        warn!(
+            "System degraded: slow DB response: {}ms",
+            db_status.response_time_ms
+        );
         return HealthStatus::Degraded;
     }
     if disk_usage.usage_percent > 85.0 {
-        warn!("System degraded: high disk usage: {:.1}%", disk_usage.usage_percent);
+        warn!(
+            "System degraded: high disk usage: {:.1}%",
+            disk_usage.usage_percent
+        );
         return HealthStatus::Degraded;
     }
     if db_pool_stats.utilization_percent > 80.0 {
-        warn!("System degraded: high DB pool utilization: {:.1}%", db_pool_stats.utilization_percent);
+        warn!(
+            "System degraded: high DB pool utilization: {:.1}%",
+            db_pool_stats.utilization_percent
+        );
         return HealthStatus::Degraded;
     }
     if db_pool_stats.connection_errors > 10 {
-        warn!("System degraded: DB connection errors: {}", db_pool_stats.connection_errors);
+        warn!(
+            "System degraded: DB connection errors: {}",
+            db_pool_stats.connection_errors
+        );
         return HealthStatus::Degraded;
     }
     if db_pool_stats.avg_acquire_time_ms > 500 {
-        warn!("System degraded: slow DB acquire time: {}ms", db_pool_stats.avg_acquire_time_ms);
+        warn!(
+            "System degraded: slow DB acquire time: {}ms",
+            db_pool_stats.avg_acquire_time_ms
+        );
         return HealthStatus::Degraded;
     }
 
@@ -475,9 +506,9 @@ async fn get_database_pool_stats(state: &AppState) -> DatabasePoolStats {
     // Note: SQLx doesn't expose detailed pool metrics directly
     // This is a simplified implementation that would need enhancement
     // based on the specific database pool implementation
-    
+
     let pool = &state.db_pool;
-    
+
     // Try to get basic pool information
     // These values would need to be tracked separately in a real implementation
     let max_connections = std::env::var("DB_MAX_CONNECTIONS")
@@ -491,13 +522,13 @@ async fn get_database_pool_stats(state: &AppState) -> DatabasePoolStats {
         .active_connections
         .load(std::sync::atomic::Ordering::Relaxed)
         .max(0) as u32;
-    
+
     let idle_connections = if max_connections > active_connections {
         max_connections - active_connections
     } else {
         0
     };
-    
+
     let utilization_percent = if max_connections > 0 {
         (active_connections as f32 / max_connections as f32) * 100.0
     } else {
@@ -522,15 +553,11 @@ async fn get_database_pool_stats(state: &AppState) -> DatabasePoolStats {
 async fn get_disk_usage() -> DiskUsageStats {
     // Simplified disk usage implementation
     // In production, you'd use proper system APIs or libraries like sysinfo
-    
+
     #[cfg(unix)]
     {
         // Try to parse /proc/mounts and /proc/diskstats for basic info
-        if let Ok(output) = std::process::Command::new("df")
-            .arg("/")
-            .arg("-h")
-            .output() 
-        {
+        if let Ok(output) = std::process::Command::new("df").arg("/").arg("-h").output() {
             if let Ok(output_str) = String::from_utf8(output.stdout) {
                 // Parse df output (simplified)
                 for line in output_str.lines().skip(1) {
@@ -538,7 +565,7 @@ async fn get_disk_usage() -> DiskUsageStats {
                     if parts.len() >= 5 && parts[5] == "/" {
                         if let (Ok(total_kb), Ok(used_kb)) = (
                             parts[1].trim_end_matches('K').parse::<f64>(),
-                            parts[2].trim_end_matches('K').parse::<f64>()
+                            parts[2].trim_end_matches('K').parse::<f64>(),
                         ) {
                             let total_gb = total_kb / (1024.0 * 1024.0);
                             let used_gb = used_kb / (1024.0 * 1024.0);
@@ -548,7 +575,7 @@ async fn get_disk_usage() -> DiskUsageStats {
                             } else {
                                 0.0
                             };
-                            
+
                             return DiskUsageStats {
                                 total_space_gb: total_gb,
                                 free_space_gb: free_gb,
@@ -584,7 +611,7 @@ async fn check_external_dependencies(state: &AppState) -> HashMap<String, Compon
 
     // Add other external dependencies as needed
     // Example: External API endpoints, other databases, message queues, etc.
-    
+
     // Placeholder for external API checks
     // deps.insert("auth_service".to_string(), check_auth_service().await);
     // deps.insert("analytics_api".to_string(), check_analytics_api().await);
@@ -594,10 +621,10 @@ async fn check_external_dependencies(state: &AppState) -> HashMap<String, Compon
 
 async fn get_application_health_metrics(state: &AppState) -> ApplicationHealthMetrics {
     let metrics = crate::monitoring::global_metrics().get_snapshot().await;
-    
+
     // Calculate active sessions (simplified - would need proper tracking)
     let active_sessions = metrics.session_creations.saturating_sub(
-        metrics.uptime_seconds / 1800 // Estimate session expiry
+        metrics.uptime_seconds / 1800, // Estimate session expiry
     );
 
     // Calculate recent rates (per minute over last 5 minutes)
@@ -626,31 +653,41 @@ async fn get_application_health_metrics(state: &AppState) -> ApplicationHealthMe
         active_learners: metrics.learner_updates, // Simplified
         recent_task_generation_rate,
         avg_response_time_ms,
-        successful_authentications_last_hour: if auth_success_rate > 0.0 { metrics.auth_successes } else { 0 },
+        successful_authentications_last_hour: if auth_success_rate > 0.0 {
+            metrics.auth_successes
+        } else {
+            0
+        },
         failed_authentications_last_hour: metrics.auth_failures,
         websocket_connections: metrics.active_connections, // Includes all connections
-        background_job_queue_size: 0, // Would need job queue integration
+        background_job_queue_size: 0,                      // Would need job queue integration
     }
 }
 
 async fn get_circuit_breaker_status(_state: &AppState) -> HashMap<String, CircuitBreakerHealth> {
     let mut breakers = HashMap::new();
-    
+
     // Placeholder for circuit breaker status
     // In a real implementation, you'd check the state of your circuit breakers
-    breakers.insert("database".to_string(), CircuitBreakerHealth {
-        state: "closed".to_string(),
-        failure_count: 0,
-        last_failure_time: None,
-        success_rate_percent: 100.0,
-    });
+    breakers.insert(
+        "database".to_string(),
+        CircuitBreakerHealth {
+            state: "closed".to_string(),
+            failure_count: 0,
+            last_failure_time: None,
+            success_rate_percent: 100.0,
+        },
+    );
 
-    breakers.insert("cache".to_string(), CircuitBreakerHealth {
-        state: "closed".to_string(),
-        failure_count: 0,
-        last_failure_time: None,
-        success_rate_percent: 100.0,
-    });
+    breakers.insert(
+        "cache".to_string(),
+        CircuitBreakerHealth {
+            state: "closed".to_string(),
+            failure_count: 0,
+            last_failure_time: None,
+            success_rate_percent: 100.0,
+        },
+    );
 
     breakers
 }

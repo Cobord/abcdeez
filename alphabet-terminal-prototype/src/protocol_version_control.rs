@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, Utc};
-use sha2::{Sha256, Digest};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
 
 /// Protocol Version Control System for Experimental Design Reproducibility
 /// Provides comprehensive versioning, change tracking, and collaboration features
@@ -299,11 +299,11 @@ pub struct DiffSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ChangeMagnitude {
-    Trivial,    // Minor parameter adjustments
-    Minor,      // Single section modifications
-    Moderate,   // Multiple section changes
-    Major,      // Fundamental design changes
-    Extensive,  // Complete protocol overhaul
+    Trivial,   // Minor parameter adjustments
+    Minor,     // Single section modifications
+    Moderate,  // Multiple section changes
+    Major,     // Fundamental design changes
+    Extensive, // Complete protocol overhaul
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -516,18 +516,21 @@ pub struct BusinessRule {
 impl ProtocolVersionManager {
     pub fn new(repository_name: String, created_by: String) -> Self {
         let repository_id = format!("repo_{}", Utc::now().timestamp());
-        
+
         let mut branches = HashMap::new();
-        branches.insert("main".to_string(), ProtocolBranch {
-            branch_name: "main".to_string(),
-            base_version: "initial".to_string(),
-            head_version: "initial".to_string(),
-            author: created_by.clone(),
-            created_at: Utc::now(),
-            description: "Main development branch".to_string(),
-            status: BranchStatus::Active,
-            merge_conflicts: Vec::new(),
-        });
+        branches.insert(
+            "main".to_string(),
+            ProtocolBranch {
+                branch_name: "main".to_string(),
+                base_version: "initial".to_string(),
+                head_version: "initial".to_string(),
+                author: created_by.clone(),
+                created_at: Utc::now(),
+                description: "Main development branch".to_string(),
+                status: BranchStatus::Active,
+                merge_conflicts: Vec::new(),
+            },
+        );
 
         let repository = ProtocolVersionControl {
             repository_id,
@@ -539,7 +542,10 @@ impl ProtocolVersionManager {
                 collaborators: Vec::new(),
                 access_control: AccessControl {
                     require_approval: true,
-                    protected_sections: vec!["experimental_design".to_string(), "analysis_pipeline".to_string()],
+                    protected_sections: vec![
+                        "experimental_design".to_string(),
+                        "analysis_pipeline".to_string(),
+                    ],
                     minimum_reviewers: 1,
                     auto_approval_roles: vec![CollaboratorRole::Owner],
                 },
@@ -568,8 +574,14 @@ impl ProtocolVersionManager {
         };
 
         let validation_rules = ValidationRuleSet {
-            required_sections: ["experimental_design", "randomization_settings", "data_collection_params"]
-                .iter().map(|s| s.to_string()).collect(),
+            required_sections: [
+                "experimental_design",
+                "randomization_settings",
+                "data_collection_params",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
             cross_validation_rules: Vec::new(),
             format_validators: HashMap::new(),
             business_rules: Vec::new(),
@@ -591,9 +603,12 @@ impl ProtocolVersionManager {
     ) -> Result<String, String> {
         // Validate the protocol snapshot
         let validation_results = self.validate_protocol(&protocol_snapshot)?;
-        
+
         if !validation_results.is_valid {
-            return Err(format!("Protocol validation failed: {:?}", validation_results.errors));
+            return Err(format!(
+                "Protocol validation failed: {:?}",
+                validation_results.errors
+            ));
         }
 
         // Generate version hash
@@ -601,7 +616,9 @@ impl ProtocolVersionManager {
         let version_number = self.generate_version_number(&protocol_id);
 
         // Determine parent hash
-        let parent_hash = self.repository.protocols
+        let parent_hash = self
+            .repository
+            .protocols
             .get(&protocol_id)
             .and_then(|history| history.versions.last())
             .map(|v| v.version_hash.clone());
@@ -629,7 +646,9 @@ impl ProtocolVersionManager {
         };
 
         // Add to protocol history
-        let protocol_history = self.repository.protocols
+        let protocol_history = self
+            .repository
+            .protocols
             .entry(protocol_id.clone())
             .or_insert_with(|| ProtocolHistory {
                 protocol_id: protocol_id.clone(),
@@ -692,16 +711,25 @@ impl ProtocolVersionManager {
         strategy: MergeStrategy,
     ) -> Result<String, String> {
         // Check if branches exist
-        let source = self.repository.branches.get(&source_branch)
+        let source = self
+            .repository
+            .branches
+            .get(&source_branch)
             .ok_or("Source branch does not exist")?;
-        let target = self.repository.branches.get(&target_branch)
+        let target = self
+            .repository
+            .branches
+            .get(&target_branch)
             .ok_or("Target branch does not exist")?;
 
         // Detect conflicts
         let conflicts = self.detect_merge_conflicts(&source_branch, &target_branch)?;
 
         if !conflicts.is_empty() {
-            return Err(format!("Merge conflicts detected: {} conflicts", conflicts.len()));
+            return Err(format!(
+                "Merge conflicts detected: {} conflicts",
+                conflicts.len()
+            ));
         }
 
         // Perform merge
@@ -749,11 +777,15 @@ impl ProtocolVersionManager {
         version_hash: String,
         tag_name: String,
     ) -> Result<(), String> {
-        let protocol_history = self.repository.protocols.get_mut(&protocol_id)
+        let protocol_history = self
+            .repository
+            .protocols
+            .get_mut(&protocol_id)
             .ok_or("Protocol not found")?;
 
         // Verify version exists
-        let version_exists = protocol_history.versions
+        let version_exists = protocol_history
+            .versions
             .iter()
             .any(|v| v.version_hash == version_hash);
 
@@ -777,15 +809,20 @@ impl ProtocolVersionManager {
         version1: &str,
         version2: &str,
     ) -> Result<Vec<ProtocolChange>, String> {
-        let protocol_history = self.repository.protocols.get(protocol_id)
+        let protocol_history = self
+            .repository
+            .protocols
+            .get(protocol_id)
             .ok_or("Protocol not found")?;
 
-        let v1 = protocol_history.versions
+        let v1 = protocol_history
+            .versions
             .iter()
             .find(|v| v.version_hash == version1)
             .ok_or("Version 1 not found")?;
 
-        let v2 = protocol_history.versions
+        let v2 = protocol_history
+            .versions
             .iter()
             .find(|v| v.version_hash == version2)
             .ok_or("Version 2 not found")?;
@@ -805,26 +842,46 @@ impl ProtocolVersionManager {
     ) -> Result<(), String> {
         let permissions = match role {
             CollaboratorRole::Owner => [
-                Permission::Read, Permission::Write, Permission::CreateBranch,
-                Permission::Merge, Permission::Delete, Permission::AdministerUsers,
-                Permission::ReviewChanges, Permission::ApproveChanges
-            ].iter().cloned().collect(),
+                Permission::Read,
+                Permission::Write,
+                Permission::CreateBranch,
+                Permission::Merge,
+                Permission::Delete,
+                Permission::AdministerUsers,
+                Permission::ReviewChanges,
+                Permission::ApproveChanges,
+            ]
+            .iter()
+            .cloned()
+            .collect(),
             CollaboratorRole::Principal => [
-                Permission::Read, Permission::Write, Permission::CreateBranch,
-                Permission::Merge, Permission::ReviewChanges, Permission::ApproveChanges
-            ].iter().cloned().collect(),
+                Permission::Read,
+                Permission::Write,
+                Permission::CreateBranch,
+                Permission::Merge,
+                Permission::ReviewChanges,
+                Permission::ApproveChanges,
+            ]
+            .iter()
+            .cloned()
+            .collect(),
             CollaboratorRole::Researcher => [
-                Permission::Read, Permission::Write, Permission::CreateBranch
-            ].iter().cloned().collect(),
-            CollaboratorRole::Analyst => [
-                Permission::Read, Permission::Write
-            ].iter().cloned().collect(),
-            CollaboratorRole::Reviewer => [
-                Permission::Read, Permission::ReviewChanges
-            ].iter().cloned().collect(),
-            CollaboratorRole::Observer => [
-                Permission::Read
-            ].iter().cloned().collect(),
+                Permission::Read,
+                Permission::Write,
+                Permission::CreateBranch,
+            ]
+            .iter()
+            .cloned()
+            .collect(),
+            CollaboratorRole::Analyst => [Permission::Read, Permission::Write]
+                .iter()
+                .cloned()
+                .collect(),
+            CollaboratorRole::Reviewer => [Permission::Read, Permission::ReviewChanges]
+                .iter()
+                .cloned()
+                .collect(),
+            CollaboratorRole::Observer => [Permission::Read].iter().cloned().collect(),
         };
 
         let collaborator = Collaborator {
@@ -836,7 +893,10 @@ impl ProtocolVersionManager {
             institution,
         };
 
-        self.repository.collaboration_settings.collaborators.push(collaborator);
+        self.repository
+            .collaboration_settings
+            .collaborators
+            .push(collaborator);
         Ok(())
     }
 
@@ -847,31 +907,31 @@ impl ProtocolVersionManager {
         version_hash: &str,
         format: ExportFormat,
     ) -> Result<String, String> {
-        let protocol_history = self.repository.protocols.get(protocol_id)
+        let protocol_history = self
+            .repository
+            .protocols
+            .get(protocol_id)
             .ok_or("Protocol not found")?;
 
-        let version = protocol_history.versions
+        let version = protocol_history
+            .versions
             .iter()
             .find(|v| v.version_hash == version_hash)
             .ok_or("Version not found")?;
 
         match format {
-            ExportFormat::JSON => {
-                serde_json::to_string_pretty(&version.protocol_state)
-                    .map_err(|e| format!("JSON export failed: {}", e))
-            },
-            ExportFormat::YAML => {
-                serde_yaml::to_string(&version.protocol_state)
-                    .map_err(|e| format!("YAML export failed: {}", e))
-            },
+            ExportFormat::JSON => serde_json::to_string_pretty(&version.protocol_state)
+                .map_err(|e| format!("JSON export failed: {}", e)),
+            ExportFormat::YAML => serde_yaml::to_string(&version.protocol_state)
+                .map_err(|e| format!("YAML export failed: {}", e)),
             ExportFormat::PDF => {
                 // Would generate PDF report
                 Ok("PDF export not yet implemented".to_string())
-            },
+            }
             ExportFormat::LaTeX => {
                 // Would generate LaTeX document
                 self.generate_latex_protocol(&version.protocol_state)
-            },
+            }
         }
     }
 
@@ -914,12 +974,19 @@ impl ProtocolVersionManager {
         }
 
         // Check power analysis
-        let power = snapshot.experimental_design.sample_size.power_analysis.power;
+        let power = snapshot
+            .experimental_design
+            .sample_size
+            .power_analysis
+            .power;
         if power < 0.8 {
             warnings.push(ValidationWarning {
                 warning_code: "PA001".to_string(),
                 section: "experimental_design".to_string(),
-                message: format!("Power is low ({:.2}), consider increasing sample size", power),
+                message: format!(
+                    "Power is low ({:.2}), consider increasing sample size",
+                    power
+                ),
                 recommendation: "Increase sample size to achieve power ≥ 0.8".to_string(),
             });
         }
@@ -943,27 +1010,34 @@ impl ProtocolVersionManager {
         })
     }
 
-    fn generate_version_hash(&self, snapshot: &ProtocolSnapshot, author: &str, message: &str) -> String {
+    fn generate_version_hash(
+        &self,
+        snapshot: &ProtocolSnapshot,
+        author: &str,
+        message: &str,
+    ) -> String {
         let mut hasher = Sha256::new();
-        
+
         // Hash the protocol snapshot
         if let Ok(snapshot_json) = serde_json::to_string(snapshot) {
             hasher.update(snapshot_json.as_bytes());
         }
-        
+
         hasher.update(author.as_bytes());
         hasher.update(message.as_bytes());
         hasher.update(Utc::now().timestamp().to_string().as_bytes());
-        
+
         format!("{:x}", hasher.finalize())[..16].to_string()
     }
 
     fn generate_version_number(&self, protocol_id: &str) -> String {
-        let version_count = self.repository.protocols
+        let version_count = self
+            .repository
+            .protocols
             .get(protocol_id)
             .map(|h| h.versions.len())
             .unwrap_or(0);
-        
+
         format!("v1.{}.0", version_count)
     }
 
@@ -973,10 +1047,14 @@ impl ProtocolVersionManager {
         parent_hash: &str,
         current_snapshot: &ProtocolSnapshot,
     ) -> Result<Vec<ProtocolChange>, String> {
-        let protocol_history = self.repository.protocols.get(protocol_id)
+        let protocol_history = self
+            .repository
+            .protocols
+            .get(protocol_id)
             .ok_or("Protocol not found")?;
 
-        let parent_version = protocol_history.versions
+        let parent_version = protocol_history
+            .versions
             .iter()
             .find(|v| v.version_hash == parent_hash)
             .ok_or("Parent version not found")?;
@@ -992,13 +1070,21 @@ impl ProtocolVersionManager {
         let mut changes = Vec::new();
 
         // Compare experimental design factors
-        if old_snapshot.experimental_design.factors.len() != new_snapshot.experimental_design.factors.len() {
+        if old_snapshot.experimental_design.factors.len()
+            != new_snapshot.experimental_design.factors.len()
+        {
             changes.push(ProtocolChange {
                 change_type: ChangeType::Modification,
                 section: "experimental_design".to_string(),
                 field: "factors".to_string(),
-                old_value: Some(format!("{} factors", old_snapshot.experimental_design.factors.len())),
-                new_value: Some(format!("{} factors", new_snapshot.experimental_design.factors.len())),
+                old_value: Some(format!(
+                    "{} factors",
+                    old_snapshot.experimental_design.factors.len()
+                )),
+                new_value: Some(format!(
+                    "{} factors",
+                    new_snapshot.experimental_design.factors.len()
+                )),
                 justification: "Factor structure modified".to_string(),
                 impact_assessment: ImpactAssessment {
                     validity_impact: ValidityImpact::Moderate,
@@ -1011,23 +1097,48 @@ impl ProtocolVersionManager {
         }
 
         // Compare sample sizes
-        if old_snapshot.experimental_design.sample_size.target_n != new_snapshot.experimental_design.sample_size.target_n {
+        if old_snapshot.experimental_design.sample_size.target_n
+            != new_snapshot.experimental_design.sample_size.target_n
+        {
             changes.push(ProtocolChange {
                 change_type: ChangeType::Modification,
                 section: "experimental_design".to_string(),
                 field: "sample_size".to_string(),
-                old_value: Some(old_snapshot.experimental_design.sample_size.target_n.to_string()),
-                new_value: Some(new_snapshot.experimental_design.sample_size.target_n.to_string()),
+                old_value: Some(
+                    old_snapshot
+                        .experimental_design
+                        .sample_size
+                        .target_n
+                        .to_string(),
+                ),
+                new_value: Some(
+                    new_snapshot
+                        .experimental_design
+                        .sample_size
+                        .target_n
+                        .to_string(),
+                ),
                 justification: "Sample size adjusted based on power analysis".to_string(),
                 impact_assessment: ImpactAssessment {
                     validity_impact: ValidityImpact::Minimal,
-                    sample_size_impact: if new_snapshot.experimental_design.sample_size.target_n > old_snapshot.experimental_design.sample_size.target_n {
-                        SampleSizeImpact::Increase((new_snapshot.experimental_design.sample_size.target_n as f64 / old_snapshot.experimental_design.sample_size.target_n as f64) - 1.0)
+                    sample_size_impact: if new_snapshot.experimental_design.sample_size.target_n
+                        > old_snapshot.experimental_design.sample_size.target_n
+                    {
+                        SampleSizeImpact::Increase(
+                            (new_snapshot.experimental_design.sample_size.target_n as f64
+                                / old_snapshot.experimental_design.sample_size.target_n as f64)
+                                - 1.0,
+                        )
                     } else {
-                        SampleSizeImpact::Decrease(1.0 - (new_snapshot.experimental_design.sample_size.target_n as f64 / old_snapshot.experimental_design.sample_size.target_n as f64))
+                        SampleSizeImpact::Decrease(
+                            1.0 - (new_snapshot.experimental_design.sample_size.target_n as f64
+                                / old_snapshot.experimental_design.sample_size.target_n as f64),
+                        )
                     },
                     timeline_impact: TimelineImpact::None,
-                    resource_impact: ResourceImpact::Additional("Recruitment resources".to_string()),
+                    resource_impact: ResourceImpact::Additional(
+                        "Recruitment resources".to_string(),
+                    ),
                     ethical_impact: EthicalImpact::Amendment,
                 },
             });
@@ -1037,15 +1148,30 @@ impl ProtocolVersionManager {
     }
 
     fn calculate_diff_summary(&self, changes: &[ProtocolChange]) -> DiffSummary {
-        let additions = changes.iter().filter(|c| matches!(c.change_type, ChangeType::Addition)).count();
-        let modifications = changes.iter().filter(|c| matches!(c.change_type, ChangeType::Modification)).count();
-        let deletions = changes.iter().filter(|c| matches!(c.change_type, ChangeType::Deletion)).count();
+        let additions = changes
+            .iter()
+            .filter(|c| matches!(c.change_type, ChangeType::Addition))
+            .count();
+        let modifications = changes
+            .iter()
+            .filter(|c| matches!(c.change_type, ChangeType::Modification))
+            .count();
+        let deletions = changes
+            .iter()
+            .filter(|c| matches!(c.change_type, ChangeType::Deletion))
+            .count();
 
         let sections_changed: HashSet<String> = changes.iter().map(|c| c.section.clone()).collect();
         let sections_changed: Vec<String> = sections_changed.into_iter().collect();
 
-        let critical_changes: Vec<String> = changes.iter()
-            .filter(|c| matches!(c.impact_assessment.validity_impact, ValidityImpact::Critical | ValidityImpact::Significant))
+        let critical_changes: Vec<String> = changes
+            .iter()
+            .filter(|c| {
+                matches!(
+                    c.impact_assessment.validity_impact,
+                    ValidityImpact::Critical | ValidityImpact::Significant
+                )
+            })
             .map(|c| format!("{}.{}", c.section, c.field))
             .collect();
 
@@ -1072,7 +1198,11 @@ impl ProtocolVersionManager {
         }
     }
 
-    fn detect_merge_conflicts(&self, _source_branch: &str, _target_branch: &str) -> Result<Vec<MergeConflict>, String> {
+    fn detect_merge_conflicts(
+        &self,
+        _source_branch: &str,
+        _target_branch: &str,
+    ) -> Result<Vec<MergeConflict>, String> {
         // Simplified conflict detection
         // In practice, would compare protocol states between branches
         Ok(Vec::new())
@@ -1084,21 +1214,30 @@ impl ProtocolVersionManager {
 
         // Experimental design completeness
         max_score += 1.0;
-        if !snapshot.experimental_design.factors.is_empty() &&
-           !snapshot.experimental_design.conditions.is_empty() &&
-           snapshot.experimental_design.sample_size.target_n > 0 {
+        if !snapshot.experimental_design.factors.is_empty()
+            && !snapshot.experimental_design.conditions.is_empty()
+            && snapshot.experimental_design.sample_size.target_n > 0
+        {
             score += 1.0;
         }
 
         // Randomization completeness
         max_score += 1.0;
-        if !snapshot.randomization_settings.randomization_type.is_empty() {
+        if !snapshot
+            .randomization_settings
+            .randomization_type
+            .is_empty()
+        {
             score += 1.0;
         }
 
         // Data collection completeness
         max_score += 1.0;
-        if !snapshot.data_collection_params.collection_methods.is_empty() {
+        if !snapshot
+            .data_collection_params
+            .collection_methods
+            .is_empty()
+        {
             score += 1.0;
         }
 
@@ -1108,7 +1247,11 @@ impl ProtocolVersionManager {
             score += 1.0;
         }
 
-        if max_score > 0.0 { score / max_score } else { 0.0 }
+        if max_score > 0.0 {
+            score / max_score
+        } else {
+            0.0
+        }
     }
 
     fn calculate_reproducibility_score(&self, snapshot: &ProtocolSnapshot) -> f64 {
@@ -1133,12 +1276,16 @@ impl ProtocolVersionManager {
             score += 1.0;
         }
 
-        if max_score > 0.0 { score / max_score } else { 0.0 }
+        if max_score > 0.0 {
+            score / max_score
+        } else {
+            0.0
+        }
     }
 
     fn generate_latex_protocol(&self, snapshot: &ProtocolSnapshot) -> Result<String, String> {
         let mut latex = String::new();
-        
+
         latex.push_str("\\documentclass{article}\n");
         latex.push_str("\\usepackage[utf8]{inputenc}\n");
         latex.push_str("\\usepackage{booktabs}\n");
@@ -1146,19 +1293,29 @@ impl ProtocolVersionManager {
         latex.push_str("\\title{Experimental Protocol}\n");
         latex.push_str("\\begin{document}\n");
         latex.push_str("\\maketitle\n");
-        
+
         // Experimental design section
         latex.push_str("\\section{Experimental Design}\n");
-        latex.push_str(&format!("\\textbf{{Design Type:}} {}\\\\\n", snapshot.experimental_design.design_type));
-        latex.push_str(&format!("\\textbf{{Target Sample Size:}} {}\\\\\n", snapshot.experimental_design.sample_size.target_n));
-        
+        latex.push_str(&format!(
+            "\\textbf{{Design Type:}} {}\\\\\n",
+            snapshot.experimental_design.design_type
+        ));
+        latex.push_str(&format!(
+            "\\textbf{{Target Sample Size:}} {}\\\\\n",
+            snapshot.experimental_design.sample_size.target_n
+        ));
+
         // Factors
         latex.push_str("\\subsection{Factors}\n");
         for factor in &snapshot.experimental_design.factors {
-            latex.push_str(&format!("\\textbf{{{}}}: {} ({})\\\\\n", 
-                factor.name, factor.levels.join(", "), factor.factor_type));
+            latex.push_str(&format!(
+                "\\textbf{{{}}}: {} ({})\\\\\n",
+                factor.name,
+                factor.levels.join(", "),
+                factor.factor_type
+            ));
         }
-        
+
         // Conditions
         latex.push_str("\\subsection{Conditions}\n");
         latex.push_str("\\begin{tabular}{lll}\n");
@@ -1166,16 +1323,23 @@ impl ProtocolVersionManager {
         latex.push_str("Condition & Levels & Expected N \\\\\n");
         latex.push_str("\\midrule\n");
         for condition in &snapshot.experimental_design.conditions {
-            latex.push_str(&format!("{} & {} & {} \\\\\n", 
+            latex.push_str(&format!(
+                "{} & {} & {} \\\\\n",
                 condition.condition_name,
-                condition.factor_levels.values().cloned().collect::<Vec<_>>().join(", "),
-                condition.expected_n));
+                condition
+                    .factor_levels
+                    .values()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                condition.expected_n
+            ));
         }
         latex.push_str("\\bottomrule\n");
         latex.push_str("\\end{tabular}\n");
-        
+
         latex.push_str("\\end{document}\n");
-        
+
         Ok(latex)
     }
 }
@@ -1200,11 +1364,9 @@ mod tests {
 
     #[test]
     fn test_protocol_version_manager_creation() {
-        let manager = ProtocolVersionManager::new(
-            "Test Repository".to_string(),
-            "test_user".to_string(),
-        );
-        
+        let manager =
+            ProtocolVersionManager::new("Test Repository".to_string(), "test_user".to_string());
+
         assert_eq!(manager.repository.repository_name, "Test Repository");
         assert_eq!(manager.repository.metadata.created_by, "test_user");
         assert_eq!(manager.repository.active_branch, "main");
@@ -1213,10 +1375,8 @@ mod tests {
 
     #[test]
     fn test_create_version() {
-        let mut manager = ProtocolVersionManager::new(
-            "Test Repository".to_string(),
-            "test_user".to_string(),
-        );
+        let mut manager =
+            ProtocolVersionManager::new("Test Repository".to_string(), "test_user".to_string());
 
         let snapshot = create_test_snapshot();
         let result = manager.create_version(
@@ -1229,7 +1389,7 @@ mod tests {
         assert!(result.is_ok());
         let version_hash = result.unwrap();
         assert!(!version_hash.is_empty());
-        
+
         let history = manager.get_protocol_history("protocol_1");
         assert!(history.is_some());
         assert_eq!(history.unwrap().versions.len(), 1);
@@ -1237,10 +1397,8 @@ mod tests {
 
     #[test]
     fn test_branch_operations() {
-        let mut manager = ProtocolVersionManager::new(
-            "Test Repository".to_string(),
-            "test_user".to_string(),
-        );
+        let mut manager =
+            ProtocolVersionManager::new("Test Repository".to_string(), "test_user".to_string());
 
         // Create branch
         let result = manager.create_branch(
@@ -1259,10 +1417,8 @@ mod tests {
 
     #[test]
     fn test_collaborator_management() {
-        let mut manager = ProtocolVersionManager::new(
-            "Test Repository".to_string(),
-            "test_user".to_string(),
-        );
+        let mut manager =
+            ProtocolVersionManager::new("Test Repository".to_string(), "test_user".to_string());
 
         let result = manager.add_collaborator(
             "user123".to_string(),
@@ -1273,8 +1429,15 @@ mod tests {
         );
 
         assert!(result.is_ok());
-        assert_eq!(manager.repository.collaboration_settings.collaborators.len(), 1);
-        
+        assert_eq!(
+            manager
+                .repository
+                .collaboration_settings
+                .collaborators
+                .len(),
+            1
+        );
+
         let collaborator = &manager.repository.collaboration_settings.collaborators[0];
         assert_eq!(collaborator.name, "John Doe");
         assert!(collaborator.permissions.contains(&Permission::Read));
@@ -1283,10 +1446,8 @@ mod tests {
 
     #[test]
     fn test_version_validation() {
-        let manager = ProtocolVersionManager::new(
-            "Test Repository".to_string(),
-            "test_user".to_string(),
-        );
+        let manager =
+            ProtocolVersionManager::new("Test Repository".to_string(), "test_user".to_string());
 
         let snapshot = create_test_snapshot();
         let validation = manager.validate_protocol(&snapshot);
@@ -1302,23 +1463,22 @@ mod tests {
         ProtocolSnapshot {
             experimental_design: ExperimentalDesignSnapshot {
                 design_type: "Between-subjects".to_string(),
-                factors: vec![
-                    FactorSnapshot {
-                        name: "Condition".to_string(),
-                        factor_type: "between".to_string(),
-                        levels: vec!["Control".to_string(), "Treatment".to_string()],
-                        manipulation_details: "Text manipulation".to_string(),
-                    }
-                ],
-                conditions: vec![
-                    ConditionSnapshot {
-                        condition_id: "control".to_string(),
-                        condition_name: "Control".to_string(),
-                        factor_levels: [("Condition".to_string(), "Control".to_string())].iter().cloned().collect(),
-                        expected_n: 50,
-                        materials: vec!["control_text.txt".to_string()],
-                    }
-                ],
+                factors: vec![FactorSnapshot {
+                    name: "Condition".to_string(),
+                    factor_type: "between".to_string(),
+                    levels: vec!["Control".to_string(), "Treatment".to_string()],
+                    manipulation_details: "Text manipulation".to_string(),
+                }],
+                conditions: vec![ConditionSnapshot {
+                    condition_id: "control".to_string(),
+                    condition_name: "Control".to_string(),
+                    factor_levels: [("Condition".to_string(), "Control".to_string())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                    expected_n: 50,
+                    materials: vec!["control_text.txt".to_string()],
+                }],
                 counterbalancing: CounterbalancingSnapshot {
                     method: "randomized".to_string(),
                     constraints: Vec::new(),
@@ -1348,14 +1508,12 @@ mod tests {
             },
             data_collection_params: DataCollectionSnapshot {
                 collection_methods: vec!["Online survey".to_string()],
-                instruments: vec![
-                    InstrumentSnapshot {
-                        instrument_name: "Questionnaire".to_string(),
-                        version: "1.0".to_string(),
-                        parameters: HashMap::new(),
-                        validation_status: "Validated".to_string(),
-                    }
-                ],
+                instruments: vec![InstrumentSnapshot {
+                    instrument_name: "Questionnaire".to_string(),
+                    version: "1.0".to_string(),
+                    parameters: HashMap::new(),
+                    validation_status: "Validated".to_string(),
+                }],
                 timing: TimingSnapshot {
                     session_duration: "30 minutes".to_string(),
                     break_intervals: Vec::new(),
@@ -1365,17 +1523,18 @@ mod tests {
                 quality_checks: vec!["Attention checks".to_string()],
             },
             analysis_pipeline: AnalysisPipelineSnapshot {
-                primary_analyses: vec![
-                    AnalysisSnapshot {
-                        analysis_name: "Main effect test".to_string(),
-                        method: "Independent t-test".to_string(),
-                        dependent_variables: vec!["Response".to_string()],
-                        independent_variables: vec!["Condition".to_string()],
-                        covariates: Vec::new(),
-                        assumptions: vec!["normality", "homogeneity"].iter().map(|s| s.to_string()).collect(),
-                        interpretation_guidelines: "p < 0.05 for significance".to_string(),
-                    }
-                ],
+                primary_analyses: vec![AnalysisSnapshot {
+                    analysis_name: "Main effect test".to_string(),
+                    method: "Independent t-test".to_string(),
+                    dependent_variables: vec!["Response".to_string()],
+                    independent_variables: vec!["Condition".to_string()],
+                    covariates: Vec::new(),
+                    assumptions: vec!["normality", "homogeneity"]
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect(),
+                    interpretation_guidelines: "p < 0.05 for significance".to_string(),
+                }],
                 secondary_analyses: Vec::new(),
                 exploratory_analyses: Vec::new(),
                 preprocessing_steps: vec!["Remove outliers".to_string()],

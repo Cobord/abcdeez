@@ -297,10 +297,10 @@ impl TerminalApp {
                 // Launch the research dashboard in a separate session
                 terminal::disable_raw_mode()?;
                 execute!(io::stdout(), terminal::LeaveAlternateScreen)?;
-                
+
                 // Run the research dashboard
                 crate::research_dashboard::run_research_dashboard()?;
-                
+
                 // Re-enable raw mode and alternate screen when returning
                 terminal::enable_raw_mode()?;
                 execute!(io::stdout(), terminal::EnterAlternateScreen)?;

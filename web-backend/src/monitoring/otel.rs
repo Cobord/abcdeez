@@ -1,8 +1,8 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::SystemTime;
-use tracing::{info, warn, error};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
+use tracing::{error, info, warn};
 
 /// OpenTelemetry-compatible metrics exporter
 #[derive(Debug, Clone)]
@@ -81,7 +81,7 @@ impl OtelMetricsExporter {
         let mut custom_attributes = HashMap::new();
         custom_attributes.insert("host.name".to_string(), hostname);
         custom_attributes.insert("process.pid".to_string(), std::process::id().to_string());
-        
+
         Self {
             service_name,
             service_version,
@@ -95,7 +95,7 @@ impl OtelMetricsExporter {
         let metrics_snapshot = crate::monitoring::global_metrics().get_snapshot().await;
         let resource = self.create_resource();
         let now = Utc::now();
-        
+
         let mut otel_metrics = Vec::new();
 
         // Request metrics
@@ -117,7 +117,8 @@ impl OtelMetricsExporter {
                 description: "Average HTTP request duration in milliseconds".to_string(),
                 unit: "ms".to_string(),
                 metric_type: MetricType::Gauge,
-                value: metrics_snapshot.request_duration_ms as f64 / metrics_snapshot.request_count as f64,
+                value: metrics_snapshot.request_duration_ms as f64
+                    / metrics_snapshot.request_count as f64,
                 timestamp: now,
                 attributes: HashMap::new(),
                 resource: resource.clone(),
@@ -214,7 +215,7 @@ impl OtelMetricsExporter {
         for (endpoint, endpoint_metrics) in &metrics_snapshot.endpoint_metrics {
             let mut endpoint_attrs = HashMap::new();
             endpoint_attrs.insert("endpoint".to_string(), endpoint.clone());
-            
+
             otel_metrics.push(OtelMetric {
                 name: "http_requests_per_endpoint_total".to_string(),
                 description: "Total number of HTTP requests per endpoint".to_string(),
@@ -228,7 +229,8 @@ impl OtelMetricsExporter {
 
             otel_metrics.push(OtelMetric {
                 name: "http_request_duration_per_endpoint_avg_ms".to_string(),
-                description: "Average HTTP request duration per endpoint in milliseconds".to_string(),
+                description: "Average HTTP request duration per endpoint in milliseconds"
+                    .to_string(),
                 unit: "ms".to_string(),
                 metric_type: MetricType::Gauge,
                 value: endpoint_metrics.avg_duration_ms,
@@ -300,7 +302,8 @@ impl OtelMetricsExporter {
 
     fn create_resource(&self) -> OtelResource {
         let instance_id = uuid::Uuid::new_v4().to_string();
-        let hostname = self.custom_attributes
+        let hostname = self
+            .custom_attributes
             .get("host.name")
             .cloned()
             .unwrap_or_else(|| "unknown".to_string());
@@ -318,27 +321,37 @@ impl OtelMetricsExporter {
     pub async fn export_prometheus_format(&self) -> String {
         let app_metrics = self.export_application_metrics().await;
         let system_metrics = self.export_system_metrics().await;
-        
+
         let mut output = String::new();
-        
+
         for metric in app_metrics.iter().chain(system_metrics.iter()) {
             // Add metric help and type
             output.push_str(&format!("# HELP {} {}\n", metric.name, metric.description));
-            output.push_str(&format!("# TYPE {} {}\n", metric.name, metric_type_to_prometheus(&metric.metric_type)));
-            
+            output.push_str(&format!(
+                "# TYPE {} {}\n",
+                metric.name,
+                metric_type_to_prometheus(&metric.metric_type)
+            ));
+
             // Add metric value with labels
             if metric.attributes.is_empty() {
                 output.push_str(&format!("{} {}\n", metric.name, metric.value));
             } else {
-                let labels: Vec<String> = metric.attributes
+                let labels: Vec<String> = metric
+                    .attributes
                     .iter()
                     .map(|(k, v)| format!("{}=\"{}\"", k, v))
                     .collect();
-                output.push_str(&format!("{}{{{}}} {}\n", metric.name, labels.join(","), metric.value));
+                output.push_str(&format!(
+                    "{}{{{}}} {}\n",
+                    metric.name,
+                    labels.join(","),
+                    metric.value
+                ));
             }
             output.push('\n');
         }
-        
+
         output
     }
 }
@@ -370,7 +383,7 @@ fn get_memory_usage_mb() -> Option<u64> {
             }
         }
     }
-    
+
     // Fallback for other platforms or if reading fails
     None
 }
@@ -407,15 +420,15 @@ pub fn create_otel_log_event(
     attributes: HashMap<String, String>,
 ) {
     let mut fields = HashMap::new();
-    
+
     if let Some(trace_id) = trace_id {
         fields.insert("trace_id".to_string(), trace_id.to_string());
     }
-    
+
     if let Some(span_id) = span_id {
         fields.insert("span_id".to_string(), span_id.to_string());
     }
-    
+
     for (key, value) in attributes {
         fields.insert(key, value);
     }
@@ -441,10 +454,10 @@ mod tests {
             "1.0.0".to_string(),
             "test".to_string(),
         );
-        
+
         let metrics = exporter.export_application_metrics().await;
         assert!(!metrics.is_empty());
-        
+
         // Check that we have basic HTTP metrics
         let has_request_count = metrics.iter().any(|m| m.name == "http_requests_total");
         assert!(has_request_count);
@@ -457,7 +470,7 @@ mod tests {
             "1.0.0".to_string(),
             "test".to_string(),
         );
-        
+
         let prometheus_output = exporter.export_prometheus_format().await;
         assert!(!prometheus_output.is_empty());
         assert!(prometheus_output.contains("# HELP"));

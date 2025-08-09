@@ -146,14 +146,37 @@ pub struct BehavioralPattern {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PatternType {
-    Hesitation { location: HesitationLocation, duration: Duration },
-    TypingBurst { speed: f64, accuracy: f64 },
-    CorrectionBehavior { correction_rate: f64, strategy: CorrectionStrategy },
-    SearchPattern { strategy: SearchStrategy, efficiency: f64 },
-    FocusPattern { attention_span: Duration, focus_switches: usize },
-    ProcrastinationBehavior { indicators: Vec<ProcrastinationIndicator> },
-    ConfidenceIndicator { level: ConfidenceLevel, indicators: Vec<String> },
-    CognitiveLoad { level: CognitiveLoadLevel, metrics: HashMap<String, f64> },
+    Hesitation {
+        location: HesitationLocation,
+        duration: Duration,
+    },
+    TypingBurst {
+        speed: f64,
+        accuracy: f64,
+    },
+    CorrectionBehavior {
+        correction_rate: f64,
+        strategy: CorrectionStrategy,
+    },
+    SearchPattern {
+        strategy: SearchStrategy,
+        efficiency: f64,
+    },
+    FocusPattern {
+        attention_span: Duration,
+        focus_switches: usize,
+    },
+    ProcrastinationBehavior {
+        indicators: Vec<ProcrastinationIndicator>,
+    },
+    ConfidenceIndicator {
+        level: ConfidenceLevel,
+        indicators: Vec<String>,
+    },
+    CognitiveLoad {
+        level: CognitiveLoadLevel,
+        metrics: HashMap<String, f64>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -406,13 +429,15 @@ impl InteractionTracker {
         context: KeystrokeContext,
     ) {
         let timestamp = chrono::Utc::now();
-        
+
         // Calculate timing metrics
-        let inter_key_interval = self.session.keystroke_events
+        let inter_key_interval = self
+            .session
+            .keystroke_events
             .last()
             .map(|last_event| timestamp.signed_duration_since(last_event.timestamp))
             .map(|duration| Duration::from_millis(duration.num_milliseconds().max(0) as u64));
-        
+
         let keystroke_event = KeystrokeEvent {
             timestamp,
             event_type: event_type.clone(),
@@ -422,19 +447,22 @@ impl InteractionTracker {
             inter_key_interval,
             context,
         };
-        
+
         // Add to session and buffer
         self.session.keystroke_events.push(keystroke_event.clone());
-        self.event_buffer.push_back(InteractionEvent::Keystroke(keystroke_event));
-        
+        self.event_buffer
+            .push_back(InteractionEvent::Keystroke(keystroke_event));
+
         // Analyze typing patterns in real-time
-        self.typing_analyzer.analyze_keystroke(&key, &event_type, timestamp);
-        
+        self.typing_analyzer
+            .analyze_keystroke(&key, &event_type, timestamp);
+
         // Detect hesitations
         if let Some(interval) = inter_key_interval {
-            self.hesitation_detector.analyze_interval(interval, timestamp);
+            self.hesitation_detector
+                .analyze_interval(interval, timestamp);
         }
-        
+
         // Update behavioral patterns
         self.update_behavioral_patterns();
     }
@@ -448,11 +476,12 @@ impl InteractionTracker {
         button: Option<MouseButton>,
     ) {
         let timestamp = chrono::Utc::now();
-        
+
         // Calculate movement metrics
-        let (velocity, acceleration, smoothness) = self.mouse_analyzer
+        let (velocity, acceleration, smoothness) = self
+            .mouse_analyzer
             .calculate_movement_metrics(&position, timestamp);
-        
+
         let mouse_event = MouseEvent {
             timestamp,
             event_type,
@@ -464,10 +493,11 @@ impl InteractionTracker {
             movement_acceleration: acceleration,
             trajectory_smoothness: smoothness,
         };
-        
+
         self.session.mouse_events.push(mouse_event.clone());
-        self.event_buffer.push_back(InteractionEvent::Mouse(mouse_event));
-        
+        self.event_buffer
+            .push_back(InteractionEvent::Mouse(mouse_event));
+
         // Update movement analysis
         self.mouse_analyzer.update_movement_patterns(timestamp);
     }
@@ -480,19 +510,29 @@ impl InteractionTracker {
         tab_order: Option<usize>,
     ) {
         let timestamp = chrono::Utc::now();
-        
+
         // Calculate focus duration
-        let focus_duration = if matches!(event_type, FocusEventType::Blur | FocusEventType::FocusOut) {
-            self.session.focus_events
-                .iter()
-                .rev()
-                .find(|e| e.element == element && matches!(e.event_type, FocusEventType::Focus | FocusEventType::FocusIn))
-                .map(|focus_event| timestamp.signed_duration_since(focus_event.timestamp))
-                .map(|duration| Duration::from_millis(duration.num_milliseconds().max(0) as u64))
-        } else {
-            None
-        };
-        
+        let focus_duration =
+            if matches!(event_type, FocusEventType::Blur | FocusEventType::FocusOut) {
+                self.session
+                    .focus_events
+                    .iter()
+                    .rev()
+                    .find(|e| {
+                        e.element == element
+                            && matches!(
+                                e.event_type,
+                                FocusEventType::Focus | FocusEventType::FocusIn
+                            )
+                    })
+                    .map(|focus_event| timestamp.signed_duration_since(focus_event.timestamp))
+                    .map(
+                        |duration| Duration::from_millis(duration.num_milliseconds().max(0) as u64),
+                    )
+            } else {
+                None
+            };
+
         let focus_event = FocusEvent {
             timestamp,
             event_type,
@@ -500,9 +540,10 @@ impl InteractionTracker {
             focus_duration,
             tab_order,
         };
-        
+
         self.session.focus_events.push(focus_event.clone());
-        self.event_buffer.push_back(InteractionEvent::Focus(focus_event));
+        self.event_buffer
+            .push_back(InteractionEvent::Focus(focus_event));
     }
 
     /// Record a scroll event
@@ -514,7 +555,7 @@ impl InteractionTracker {
         element: Option<String>,
     ) {
         let timestamp = chrono::Utc::now();
-        
+
         let scroll_event = ScrollEvent {
             timestamp,
             scroll_position,
@@ -522,27 +563,28 @@ impl InteractionTracker {
             scroll_direction,
             element,
         };
-        
+
         self.session.scroll_events.push(scroll_event.clone());
-        self.event_buffer.push_back(InteractionEvent::Scroll(scroll_event));
+        self.event_buffer
+            .push_back(InteractionEvent::Scroll(scroll_event));
     }
 
     /// Finalize the session and generate comprehensive analysis
     pub fn finalize_session(mut self) -> InteractionSession {
         self.session.end_time = Some(chrono::Utc::now());
-        
+
         // Generate final analyses
         self.session.hesitation_analysis = self.hesitation_detector.finalize_analysis();
         self.session.typing_dynamics = self.typing_analyzer.generate_profile();
         self.session.interaction_quality = self.calculate_interaction_quality();
-        
+
         // Detect final behavioral patterns
         self.session.behavioral_patterns = self.pattern_detector.detect_all_patterns(
             &self.session.keystroke_events,
             &self.session.mouse_events,
             &self.session.focus_events,
         );
-        
+
         self.session
     }
 
@@ -561,13 +603,8 @@ impl InteractionTracker {
     // Helper methods
     fn update_behavioral_patterns(&mut self) {
         // Process recent events to detect emerging patterns
-        let recent_events: Vec<_> = self.event_buffer
-            .iter()
-            .rev()
-            .take(10)
-            .cloned()
-            .collect();
-        
+        let recent_events: Vec<_> = self.event_buffer.iter().rev().take(10).cloned().collect();
+
         self.pattern_detector.analyze_recent_events(&recent_events);
     }
 
@@ -576,16 +613,22 @@ impl InteractionTracker {
         let attention = self.calculate_focus_stability();
         let efficiency = self.calculate_interaction_efficiency();
         let error_handling = self.calculate_error_handling_quality();
-        
+
         let overall_score = (engagement + attention + efficiency + error_handling) / 4.0;
-        
+
         InteractionQuality {
             overall_score,
-            engagement_level: if engagement > 0.8 { EngagementLevel::VeryHigh }
-                           else if engagement > 0.6 { EngagementLevel::High }
-                           else if engagement > 0.4 { EngagementLevel::Medium }
-                           else if engagement > 0.2 { EngagementLevel::Low }
-                           else { EngagementLevel::Disengaged },
+            engagement_level: if engagement > 0.8 {
+                EngagementLevel::VeryHigh
+            } else if engagement > 0.6 {
+                EngagementLevel::High
+            } else if engagement > 0.4 {
+                EngagementLevel::Medium
+            } else if engagement > 0.2 {
+                EngagementLevel::Low
+            } else {
+                EngagementLevel::Disengaged
+            },
             attention_consistency: attention,
             task_focus: self.calculate_task_focus(),
             interaction_efficiency: efficiency,
@@ -598,7 +641,7 @@ impl InteractionTracker {
         // Simple engagement calculation based on activity level
         let recent_events = self.event_buffer.len() as f64;
         let time_window = 60.0; // seconds
-        
+
         // Normalize activity level
         (recent_events / time_window).min(1.0)
     }
@@ -607,12 +650,14 @@ impl InteractionTracker {
         if self.session.focus_events.is_empty() {
             return 0.5; // Neutral score if no focus data
         }
-        
+
         let focus_switches = self.session.focus_events.len() as f64;
-        let session_duration = self.session.start_time
+        let session_duration = self
+            .session
+            .start_time
             .signed_duration_since(chrono::Utc::now())
             .num_seconds() as f64;
-        
+
         // Lower switch rate indicates better focus
         let switch_rate = focus_switches / (session_duration / 60.0); // switches per minute
         (1.0 / (1.0 + switch_rate * 0.1)).max(0.0).min(1.0)
@@ -621,51 +666,55 @@ impl InteractionTracker {
     fn calculate_interaction_efficiency(&self) -> f64 {
         let typing_speed = self.typing_analyzer.get_current_wpm();
         let error_rate = self.typing_analyzer.get_recent_error_rate();
-        
+
         // Efficiency combines speed and accuracy
         let speed_score = (typing_speed / 60.0).min(1.0); // Normalize to 60 WPM as max
         let accuracy_score = (1.0 - error_rate).max(0.0);
-        
+
         (speed_score + accuracy_score) / 2.0
     }
 
     fn calculate_error_handling_quality(&self) -> f64 {
         // Quality of error correction behavior
-        let correction_events: Vec<_> = self.session.keystroke_events
+        let correction_events: Vec<_> = self
+            .session
+            .keystroke_events
             .iter()
             .filter(|event| event.context.is_correction)
             .collect();
-        
+
         if correction_events.is_empty() {
             return 1.0; // No errors to handle
         }
-        
+
         // Analyze correction latency and effectiveness
         let average_latency = correction_events
             .iter()
             .filter_map(|event| event.inter_key_interval)
             .map(|duration| duration.as_millis() as f64)
             .collect::<Vec<_>>();
-        
+
         if average_latency.is_empty() {
             return 0.5;
         }
-        
+
         let mean_latency = average_latency.iter().sum::<f64>() / average_latency.len() as f64;
-        
+
         // Lower latency indicates better error handling
         (1.0 / (1.0 + mean_latency / 1000.0)).max(0.0).min(1.0)
     }
 
     fn calculate_task_focus(&self) -> f64 {
         // Measure how much attention is directed at task-relevant elements
-        let task_focused_events = self.session.focus_events
+        let task_focused_events = self
+            .session
+            .focus_events
             .iter()
             .filter(|event| self.is_task_relevant_element(&event.element))
             .count() as f64;
-        
+
         let total_focus_events = self.session.focus_events.len() as f64;
-        
+
         if total_focus_events == 0.0 {
             0.5
         } else {
@@ -680,22 +729,22 @@ impl InteractionTracker {
 
     fn detect_learning_indicators(&self) -> Vec<LearningIndicator> {
         let mut indicators = Vec::new();
-        
+
         // Check for improving typing speed
         if self.typing_analyzer.is_speed_improving() {
             indicators.push(LearningIndicator::ImprovingSpeed);
         }
-        
+
         // Check for reducing errors
         if self.typing_analyzer.is_error_rate_decreasing() {
             indicators.push(LearningIndicator::ReducingErrors);
         }
-        
+
         // Check for more confident input (fewer hesitations)
         if self.hesitation_detector.is_confidence_improving() {
             indicators.push(LearningIndicator::MoreConfidentInput);
         }
-        
+
         indicators
     }
 
@@ -703,9 +752,9 @@ impl InteractionTracker {
         let hesitation_rate = self.hesitation_detector.get_recent_hesitation_rate();
         let error_rate = self.typing_analyzer.get_recent_error_rate();
         let typing_irregularity = self.typing_analyzer.get_typing_irregularity();
-        
+
         let load_score = (hesitation_rate + error_rate + typing_irregularity) / 3.0;
-        
+
         if load_score > 0.8 {
             CognitiveLoadLevel::Overload
         } else if load_score > 0.6 {
@@ -775,7 +824,12 @@ impl TypingAnalyzer {
         }
     }
 
-    fn analyze_keystroke(&mut self, key: &str, event_type: &KeyEventType, timestamp: chrono::DateTime<chrono::Utc>) {
+    fn analyze_keystroke(
+        &mut self,
+        key: &str,
+        event_type: &KeyEventType,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    ) {
         // Analyze keystroke for typing patterns
     }
 
@@ -787,7 +841,7 @@ impl TypingAnalyzer {
         if self.error_history.is_empty() {
             return 0.0;
         }
-        
+
         let errors = self.error_history.iter().filter(|&&e| e).count();
         errors as f64 / self.error_history.len() as f64
     }
@@ -796,14 +850,15 @@ impl TypingAnalyzer {
         if self.typing_speed_history.len() < 2 {
             return false;
         }
-        
-        let recent_speeds: Vec<_> = self.typing_speed_history
+
+        let recent_speeds: Vec<_> = self
+            .typing_speed_history
             .iter()
             .rev()
             .take(5)
             .cloned()
             .collect();
-        
+
         // Simple trend analysis
         recent_speeds.first() > recent_speeds.last()
     }
@@ -817,20 +872,24 @@ impl TypingAnalyzer {
         if self.typing_rhythm_buffer.len() < 2 {
             return 0.0;
         }
-        
-        let intervals: Vec<f64> = self.typing_rhythm_buffer
+
+        let intervals: Vec<f64> = self
+            .typing_rhythm_buffer
             .iter()
             .map(|d| d.as_millis() as f64)
             .collect();
-        
+
         // Calculate coefficient of variation
         let mean = intervals.iter().sum::<f64>() / intervals.len() as f64;
-        let variance = intervals.iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / intervals.len() as f64;
+        let variance =
+            intervals.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / intervals.len() as f64;
         let std_dev = variance.sqrt();
-        
-        if mean == 0.0 { 0.0 } else { std_dev / mean }
+
+        if mean == 0.0 {
+            0.0
+        } else {
+            std_dev / mean
+        }
     }
 
     fn generate_profile(&self) -> TypingDynamicsProfile {
@@ -858,11 +917,11 @@ impl MouseAnalyzer {
     ) -> (Option<f64>, Option<f64>, Option<f64>) {
         // Calculate velocity, acceleration, and smoothness
         self.recent_positions.push_back(position.clone());
-        
+
         if self.recent_positions.len() > 10 {
             self.recent_positions.pop_front();
         }
-        
+
         // Placeholder calculations
         (Some(100.0), Some(5.0), Some(0.8))
     }
@@ -898,11 +957,11 @@ impl HesitationDetector {
     fn analyze_interval(&mut self, interval: Duration, timestamp: chrono::DateTime<chrono::Utc>) {
         if interval > self.hesitation_threshold {
             self.recent_hesitations.push_back(interval);
-            
+
             // Determine hesitation location and trigger
             let location = self.classify_hesitation_location(timestamp);
             let trigger = self.identify_hesitation_trigger(interval);
-            
+
             self.hesitation_contexts.push(HesitationContext {
                 timestamp,
                 duration: interval,
@@ -910,7 +969,7 @@ impl HesitationDetector {
                 trigger,
             });
         }
-        
+
         // Keep only recent hesitations
         if self.recent_hesitations.len() > 20 {
             self.recent_hesitations.pop_front();
@@ -925,29 +984,33 @@ impl HesitationDetector {
         if self.hesitation_contexts.len() < 10 {
             return false;
         }
-        
-        let recent_hesitations = self.hesitation_contexts
+
+        let recent_hesitations = self
+            .hesitation_contexts
             .iter()
             .rev()
             .take(5)
             .map(|h| h.duration.as_millis())
             .collect::<Vec<_>>();
-        
-        let earlier_hesitations = self.hesitation_contexts
+
+        let earlier_hesitations = self
+            .hesitation_contexts
             .iter()
             .rev()
             .skip(5)
             .take(5)
             .map(|h| h.duration.as_millis())
             .collect::<Vec<_>>();
-        
+
         if recent_hesitations.is_empty() || earlier_hesitations.is_empty() {
             return false;
         }
-        
-        let recent_avg: f64 = recent_hesitations.iter().sum::<u128>() as f64 / recent_hesitations.len() as f64;
-        let earlier_avg: f64 = earlier_hesitations.iter().sum::<u128>() as f64 / earlier_hesitations.len() as f64;
-        
+
+        let recent_avg: f64 =
+            recent_hesitations.iter().sum::<u128>() as f64 / recent_hesitations.len() as f64;
+        let earlier_avg: f64 =
+            earlier_hesitations.iter().sum::<u128>() as f64 / earlier_hesitations.len() as f64;
+
         recent_avg < earlier_avg
     }
 
@@ -955,7 +1018,10 @@ impl HesitationDetector {
         HesitationAnalysis::default()
     }
 
-    fn classify_hesitation_location(&self, timestamp: chrono::DateTime<chrono::Utc>) -> HesitationLocation {
+    fn classify_hesitation_location(
+        &self,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    ) -> HesitationLocation {
         // Classify based on context - placeholder
         HesitationLocation::DuringInput
     }
@@ -1026,10 +1092,8 @@ mod tests {
 
     #[test]
     fn test_interaction_tracking() {
-        let mut tracker = InteractionTracker::new(
-            "session_123".to_string(),
-            "participant_456".to_string(),
-        );
+        let mut tracker =
+            InteractionTracker::new("session_123".to_string(), "participant_456".to_string());
 
         // Record some keystroke events
         tracker.record_keystroke(

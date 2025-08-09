@@ -1,30 +1,33 @@
 //! Research Dashboard with Pre-Registration Interface
-//! 
+//!
 //! This module provides a comprehensive research dashboard for managing
 //! pre-registrations, viewing existing registrations, and ensuring
 //! scientific integrity in experimental studies.
 
+use chrono::{DateTime, Local, Utc};
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute,
-    style::{Color, Print, ResetColor, SetForegroundColor, SetBackgroundColor},
+    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
     terminal::{self, Clear, ClearType},
 };
+use std::collections::HashMap;
 use std::io::{self, Write};
 use std::time::Duration;
-use chrono::{DateTime, Utc, Local};
-use std::collections::HashMap;
 
-use crate::preregistration::{
-    PreRegistration, StudyMetadata, PowerAnalysisSpec,
-    RegistrationStatus, TransparencyReport, AnalysisValidator,
-};
-use crate::power_analysis::{PowerAnalyzer, StatisticalTestType};
 use crate::audio_recording::{AudioRecorder, AudioSession, ThinkAloudAnalyzer};
-use crate::sensor_integration::{SensorManager, SensorSession, SensorType, EEGChannel, EEGReference, GSRPlacement, EyeTrackingMode};
 use crate::irb_compliance::{IRBComplianceGenerator, StudySummary};
 use crate::mixed_effects::{MixedEffectsAnalyzer, MixedEffectsData};
+use crate::power_analysis::{PowerAnalyzer, StatisticalTestType};
+use crate::preregistration::{
+    AnalysisValidator, PowerAnalysisSpec, PreRegistration, RegistrationStatus, StudyMetadata,
+    TransparencyReport,
+};
+use crate::sensor_integration::{
+    EEGChannel, EEGReference, EyeTrackingMode, GSRPlacement, SensorManager, SensorSession,
+    SensorType,
+};
 
 /// Dashboard view states
 #[derive(Debug, Clone, PartialEq)]
@@ -98,7 +101,7 @@ struct FormInputs {
     funding_source: String,
     conflicts: Vec<String>,
     current_conflict: String,
-    
+
     // Hypotheses
     hypothesis_id: String,
     hypothesis_description: String,
@@ -108,7 +111,7 @@ struct FormInputs {
     hypothesis_effect_type: String,
     hypothesis_effect_value: String,
     is_primary_hypothesis: bool,
-    
+
     // Analysis plan
     analysis_name: String,
     analysis_description: String,
@@ -122,12 +125,12 @@ struct FormInputs {
     current_assumption: String,
     fallback_method: String,
     correction_method: String,
-    
+
     // Power analysis
     target_power: String,
     alpha_level: String,
     effect_size: String,
-    
+
     // Data collection
     sample_size: String,
     sampling_method: String,
@@ -139,7 +142,7 @@ struct FormInputs {
     stopping_n: String,
     quality_checks: Vec<String>,
     current_quality_check: String,
-    
+
     // Exclusion criteria
     participant_exclusions: Vec<String>,
     current_participant_exclusion: String,
@@ -149,7 +152,7 @@ struct FormInputs {
     current_data_quality: String,
     outlier_strategy: String,
     outlier_threshold: String,
-    
+
     // Decision rules
     success_criteria: Vec<String>,
     current_success: String,
@@ -191,10 +194,17 @@ enum MessageType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AudioRecordingState {
     Idle,
-    Recording { start_time: DateTime<Utc>, duration: Duration },
-    Paused { total_duration: Duration },
+    Recording {
+        start_time: DateTime<Utc>,
+        duration: Duration,
+    },
+    Paused {
+        total_duration: Duration,
+    },
     Processing,
-    Completed { file_path: String },
+    Completed {
+        file_path: String,
+    },
     Error(String),
 }
 
@@ -286,11 +296,7 @@ impl ResearchDashboard {
             current_view: DashboardView::Overview,
             current_form_section: FormSection::StudyMetadata,
             preregistrations: Vec::new(),
-            draft_registration: PreRegistration::new(
-                String::new(),
-                String::new(),
-                Vec::new(),
-            ),
+            draft_registration: PreRegistration::new(String::new(), String::new(), Vec::new()),
             form_inputs: FormInputs::new(),
             selected_index: 0,
             scroll_offset: 0,
@@ -377,12 +383,16 @@ impl ResearchDashboard {
                 DashboardView::PowerAnalysisCalculator => {
                     self.render_power_calculator(&mut stdout)?
                 }
-                DashboardView::AnalysisValidation => self.render_analysis_validation(&mut stdout)?,
+                DashboardView::AnalysisValidation => {
+                    self.render_analysis_validation(&mut stdout)?
+                }
                 DashboardView::TransparencyReport { id } => {
                     self.render_transparency_report(&mut stdout, &id)?
                 }
                 // Research data collection views
-                DashboardView::ExperimentManagement => self.render_experiment_management(&mut stdout)?,
+                DashboardView::ExperimentManagement => {
+                    self.render_experiment_management(&mut stdout)?
+                }
                 DashboardView::AudioRecording { session_id } => {
                     self.render_audio_recording(&mut stdout, session_id.as_deref())?
                 }
@@ -391,7 +401,9 @@ impl ResearchDashboard {
                     self.render_data_collection(&mut stdout, &experiment_id)?
                 }
                 DashboardView::IRBCompliance => self.render_irb_compliance(&mut stdout)?,
-                DashboardView::StatisticalAnalysis => self.render_statistical_analysis(&mut stdout)?,
+                DashboardView::StatisticalAnalysis => {
+                    self.render_statistical_analysis(&mut stdout)?
+                }
             }
 
             // Render message if any
@@ -478,16 +490,24 @@ impl ResearchDashboard {
 
         // Statistics
         let total = self.preregistrations.len();
-        let drafts = self.preregistrations.iter()
+        let drafts = self
+            .preregistrations
+            .iter()
             .filter(|p| matches!(p.status, RegistrationStatus::Draft))
             .count();
-        let registered = self.preregistrations.iter()
+        let registered = self
+            .preregistrations
+            .iter()
             .filter(|p| matches!(p.status, RegistrationStatus::Registered))
             .count();
-        let in_progress = self.preregistrations.iter()
+        let in_progress = self
+            .preregistrations
+            .iter()
             .filter(|p| matches!(p.status, RegistrationStatus::DataCollectionStarted))
             .count();
-        let completed = self.preregistrations.iter()
+        let completed = self
+            .preregistrations
+            .iter()
             .filter(|p| matches!(p.status, RegistrationStatus::AnalysisComplete))
             .count();
 
@@ -523,9 +543,7 @@ impl ResearchDashboard {
             ResetColor
         )?;
 
-        let mut recent: Vec<_> = self.preregistrations.iter()
-            .take(5)
-            .collect();
+        let mut recent: Vec<_> = self.preregistrations.iter().take(5).collect();
         recent.sort_by_key(|p| p.registered_at);
         recent.reverse();
 
@@ -543,8 +561,12 @@ impl ResearchDashboard {
 
                 execute!(
                     stdout,
-                    Print(format!("  • {} - ", 
-                        prereg.registered_at.with_timezone(&Local).format("%Y-%m-%d")
+                    Print(format!(
+                        "  • {} - ",
+                        prereg
+                            .registered_at
+                            .with_timezone(&Local)
+                            .format("%Y-%m-%d")
                     )),
                     SetForegroundColor(status_color),
                     Print(format!("{:?}", prereg.status)),
@@ -587,7 +609,8 @@ impl ResearchDashboard {
             execute!(
                 stdout,
                 SetForegroundColor(Color::Cyan),
-                Print(format!("{:<30} {:<15} {:<20} {:<10}\n", 
+                Print(format!(
+                    "{:<30} {:<15} {:<20} {:<10}\n",
                     "Title", "Status", "Date", "Actions"
                 )),
                 Print("─".repeat(75)),
@@ -602,7 +625,7 @@ impl ResearchDashboard {
 
             for (i, prereg) in self.preregistrations[start..end].iter().enumerate() {
                 let is_selected = i + start == self.selected_index;
-                
+
                 let status_color = match prereg.status {
                     RegistrationStatus::Draft => Color::Yellow,
                     RegistrationStatus::Registered => Color::Green,
@@ -628,8 +651,12 @@ impl ResearchDashboard {
                     SetForegroundColor(status_color),
                     Print(format!("{:<15} ", format!("{:?}", prereg.status))),
                     ResetColor,
-                    Print(format!("{:<20} ", 
-                        prereg.registered_at.with_timezone(&Local).format("%Y-%m-%d %H:%M")
+                    Print(format!(
+                        "{:<20} ",
+                        prereg
+                            .registered_at
+                            .with_timezone(&Local)
+                            .format("%Y-%m-%d %H:%M")
                     ))
                 )?;
 
@@ -654,8 +681,11 @@ impl ResearchDashboard {
                 stdout,
                 Print("\n"),
                 SetForegroundColor(Color::DarkGrey),
-                Print(format!("Showing {}-{} of {} | ", 
-                    start + 1, end, self.preregistrations.len()
+                Print(format!(
+                    "Showing {}-{} of {} | ",
+                    start + 1,
+                    end,
+                    self.preregistrations.len()
                 )),
                 Print("↑/↓ Navigate | Enter: Select | N: New | Q: Quit\n"),
                 ResetColor
@@ -748,17 +778,15 @@ impl ResearchDashboard {
             Print(&self.form_inputs.title),
             ResetColor,
             Print("\n\n"),
-            
             Print("Description:\n"),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.description),
             ResetColor,
             Print("\n\n"),
-            
             Print("Researchers: "),
             SetForegroundColor(Color::Cyan)
         )?;
-        
+
         for researcher in &self.form_inputs.researchers {
             execute!(stdout, Print(format!("[{}] ", researcher)))?;
         }
@@ -770,29 +798,25 @@ impl ResearchDashboard {
             Print(&self.form_inputs.current_researcher),
             ResetColor,
             Print("\n\n"),
-            
             Print("Institution: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.institution),
             ResetColor,
             Print("\n\n"),
-            
             Print("Ethical Approval #: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.ethical_approval),
             ResetColor,
             Print("\n\n"),
-            
             Print("Funding Source: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.funding_source),
             ResetColor,
             Print("\n\n"),
-            
             Print("Conflicts of Interest: "),
             SetForegroundColor(Color::Cyan)
         )?;
-        
+
         for conflict in &self.form_inputs.conflicts {
             execute!(stdout, Print(format!("[{}] ", conflict)))?;
         }
@@ -830,7 +854,7 @@ impl ResearchDashboard {
                 Print(format!("  • [{}] {}\n", hyp.id, hyp.description))
             )?;
         }
-        
+
         execute!(
             stdout,
             Print("\n"),
@@ -853,7 +877,6 @@ impl ResearchDashboard {
             Print("Add New Hypothesis:\n"),
             Print("─────────────────────────\n"),
             ResetColor,
-            
             Print("Type: "),
             SetForegroundColor(if self.form_inputs.is_primary_hypothesis {
                 Color::Green
@@ -867,37 +890,31 @@ impl ResearchDashboard {
             }),
             ResetColor,
             Print(" (Press P to toggle)\n\n"),
-            
             Print("ID: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.hypothesis_id),
             ResetColor,
             Print("\n\n"),
-            
             Print("Description:\n"),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.hypothesis_description),
             ResetColor,
             Print("\n\n"),
-            
             Print("Operationalization:\n"),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.hypothesis_operationalization),
             ResetColor,
             Print("\n\n"),
-            
             Print("Statistical Test: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.hypothesis_test),
             ResetColor,
             Print("\n\n"),
-            
             Print("Alpha Level: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.hypothesis_alpha),
             ResetColor,
             Print("\n\n"),
-            
             Print("Effect Prediction: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.hypothesis_effect_type),
@@ -907,7 +924,6 @@ impl ResearchDashboard {
             Print(&self.form_inputs.hypothesis_effect_value),
             ResetColor,
             Print("\n\n"),
-            
             SetForegroundColor(Color::Green),
             Print("[A] Add Hypothesis | [Tab] Next Section\n"),
             ResetColor
@@ -935,7 +951,10 @@ impl ResearchDashboard {
         for analysis in &self.draft_registration.analysis_plan.primary_analyses {
             execute!(
                 stdout,
-                Print(format!("  • {} - {}\n", analysis.name, analysis.statistical_model))
+                Print(format!(
+                    "  • {} - {}\n",
+                    analysis.name, analysis.statistical_model
+                ))
             )?;
         }
 
@@ -947,29 +966,25 @@ impl ResearchDashboard {
             Print("Add New Analysis:\n"),
             Print("─────────────────────────\n"),
             ResetColor,
-            
             Print("Name: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.analysis_name),
             ResetColor,
             Print("\n\n"),
-            
             Print("Description:\n"),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.analysis_description),
             ResetColor,
             Print("\n\n"),
-            
             Print("Dependent Variable: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.dependent_variable),
             ResetColor,
             Print("\n\n"),
-            
             Print("Independent Variables: "),
             SetForegroundColor(Color::Cyan)
         )?;
-        
+
         for var in &self.form_inputs.independent_variables {
             execute!(stdout, Print(format!("[{}] ", var)))?;
         }
@@ -981,19 +996,16 @@ impl ResearchDashboard {
             Print(&self.form_inputs.current_independent),
             ResetColor,
             Print("\n\n"),
-            
             Print("Statistical Model: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.statistical_model),
             ResetColor,
             Print("\n\n"),
-            
             Print("Multiple Comparison Correction: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.correction_method),
             ResetColor,
             Print("\n\n"),
-            
             SetForegroundColor(Color::Green),
             Print("[A] Add Analysis | [Tab] Next Section\n"),
             ResetColor
@@ -1009,19 +1021,16 @@ impl ResearchDashboard {
             Print("Power Analysis\n"),
             Print("─────────────────────────────────────────────────────────────────────\n\n"),
             ResetColor,
-            
             Print("Target Power: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.target_power),
             ResetColor,
             Print("\n\n"),
-            
             Print("Alpha Level: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.alpha_level),
             ResetColor,
             Print("\n\n"),
-            
             Print("Expected Effect Size (Cohen's d): "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.effect_size),
@@ -1036,7 +1045,11 @@ impl ResearchDashboard {
             self.form_inputs.effect_size.parse::<f64>(),
         ) {
             let analyzer = PowerAnalyzer::new(0.05, 0.8);
-            match analyzer.calculate_sample_size(StatisticalTestType::IndependentTTest, effect, power) {
+            match analyzer.calculate_sample_size(
+                StatisticalTestType::IndependentTTest,
+                effect,
+                power,
+            ) {
                 Ok(required_n) => {
                     execute!(
                         stdout,
@@ -1077,23 +1090,20 @@ impl ResearchDashboard {
             Print("Data Collection Plan\n"),
             Print("─────────────────────────────────────────────────────────────────────\n\n"),
             ResetColor,
-            
             Print("Target Sample Size: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.sample_size),
             ResetColor,
             Print("\n\n"),
-            
             Print("Sampling Method: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.sampling_method),
             ResetColor,
             Print("\n\n"),
-            
             Print("Inclusion Criteria: "),
             SetForegroundColor(Color::Cyan)
         )?;
-        
+
         for criterion in &self.form_inputs.inclusion_criteria {
             execute!(stdout, Print(format!("\n  • {} ", criterion)))?;
         }
@@ -1105,19 +1115,16 @@ impl ResearchDashboard {
             Print(&self.form_inputs.current_inclusion),
             ResetColor,
             Print("\n\n"),
-            
             Print("Randomization Procedure: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.randomization),
             ResetColor,
             Print("\n\n"),
-            
             Print("Blinding Level: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.blinding_level),
             ResetColor,
             Print(" [none/single/double/triple]\n\n"),
-            
             Print("Stopping Rule: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.stopping_rule_type),
@@ -1139,12 +1146,11 @@ impl ResearchDashboard {
             Print("Exclusion Criteria\n"),
             Print("─────────────────────────────────────────────────────────────────────\n\n"),
             ResetColor,
-            
             SetForegroundColor(Color::Yellow),
             Print("Participant-Level Exclusions:\n"),
             ResetColor
         )?;
-        
+
         for criterion in &self.form_inputs.participant_exclusions {
             execute!(stdout, Print(format!("  • {}\n", criterion)))?;
         }
@@ -1155,12 +1161,11 @@ impl ResearchDashboard {
             Print(&self.form_inputs.current_participant_exclusion),
             ResetColor,
             Print("\n\n"),
-            
             SetForegroundColor(Color::Yellow),
             Print("Trial-Level Exclusions:\n"),
             ResetColor
         )?;
-        
+
         for criterion in &self.form_inputs.trial_exclusions {
             execute!(stdout, Print(format!("  • {}\n", criterion)))?;
         }
@@ -1171,7 +1176,6 @@ impl ResearchDashboard {
             Print(&self.form_inputs.current_trial_exclusion),
             ResetColor,
             Print("\n\n"),
-            
             Print("Outlier Handling Strategy: "),
             SetForegroundColor(Color::White),
             Print(&self.form_inputs.outlier_strategy),
@@ -1193,12 +1197,11 @@ impl ResearchDashboard {
             Print("Decision Rules\n"),
             Print("─────────────────────────────────────────────────────────────────────\n\n"),
             ResetColor,
-            
             SetForegroundColor(Color::Green),
             Print("Success Criteria:\n"),
             ResetColor
         )?;
-        
+
         for criterion in &self.form_inputs.success_criteria {
             execute!(stdout, Print(format!("  ✓ {}\n", criterion)))?;
         }
@@ -1209,12 +1212,11 @@ impl ResearchDashboard {
             Print(&self.form_inputs.current_success),
             ResetColor,
             Print("\n\n"),
-            
             SetForegroundColor(Color::Red),
             Print("Failure Criteria:\n"),
             ResetColor
         )?;
-        
+
         for criterion in &self.form_inputs.failure_criteria {
             execute!(stdout, Print(format!("  ✗ {}\n", criterion)))?;
         }
@@ -1225,12 +1227,11 @@ impl ResearchDashboard {
             Print(&self.form_inputs.current_failure),
             ResetColor,
             Print("\n\n"),
-            
             SetForegroundColor(Color::Yellow),
             Print("Interpretation Guidelines:\n"),
             ResetColor
         )?;
-        
+
         for (key, value) in &self.form_inputs.interpretation_guidelines {
             execute!(stdout, Print(format!("  {} → {}\n", key, value)))?;
         }
@@ -1266,29 +1267,46 @@ impl ResearchDashboard {
             Print("Study Summary:\n"),
             ResetColor,
             Print(format!("  Title: {}\n", self.form_inputs.title)),
-            Print(format!("  Researchers: {}\n", self.form_inputs.researchers.join(", "))),
-            Print(format!("  Institution: {}\n\n", self.form_inputs.institution)),
-            
+            Print(format!(
+                "  Researchers: {}\n",
+                self.form_inputs.researchers.join(", ")
+            )),
+            Print(format!(
+                "  Institution: {}\n\n",
+                self.form_inputs.institution
+            )),
             SetForegroundColor(Color::Cyan),
             Print("Hypotheses:\n"),
             ResetColor,
-            Print(format!("  Primary: {}\n", self.draft_registration.hypotheses.primary.len())),
-            Print(format!("  Secondary: {}\n\n", self.draft_registration.hypotheses.secondary.len())),
-            
+            Print(format!(
+                "  Primary: {}\n",
+                self.draft_registration.hypotheses.primary.len()
+            )),
+            Print(format!(
+                "  Secondary: {}\n\n",
+                self.draft_registration.hypotheses.secondary.len()
+            )),
             SetForegroundColor(Color::Cyan),
             Print("Analysis Plan:\n"),
             ResetColor,
-            Print(format!("  Primary Analyses: {}\n", 
-                self.draft_registration.analysis_plan.primary_analyses.len())),
+            Print(format!(
+                "  Primary Analyses: {}\n",
+                self.draft_registration.analysis_plan.primary_analyses.len()
+            )),
             Print(format!("  Power: {}\n", self.form_inputs.target_power)),
             Print(format!("  Alpha: {}\n", self.form_inputs.alpha_level)),
-            Print(format!("  Effect Size: {}\n\n", self.form_inputs.effect_size)),
-            
+            Print(format!(
+                "  Effect Size: {}\n\n",
+                self.form_inputs.effect_size
+            )),
             SetForegroundColor(Color::Cyan),
             Print("Data Collection:\n"),
             ResetColor,
             Print(format!("  Sample Size: {}\n", self.form_inputs.sample_size)),
-            Print(format!("  Blinding: {}\n\n", self.form_inputs.blinding_level))
+            Print(format!(
+                "  Blinding: {}\n\n",
+                self.form_inputs.blinding_level
+            ))
         )?;
 
         // Validation checks
@@ -1301,10 +1319,26 @@ impl ResearchDashboard {
 
         let checks = vec![
             (!self.form_inputs.title.is_empty(), "Title provided"),
-            (!self.form_inputs.researchers.is_empty(), "Researchers listed"),
-            (!self.draft_registration.hypotheses.primary.is_empty(), "Primary hypotheses defined"),
-            (!self.draft_registration.analysis_plan.primary_analyses.is_empty(), "Primary analyses specified"),
-            (!self.form_inputs.sample_size.is_empty(), "Sample size determined"),
+            (
+                !self.form_inputs.researchers.is_empty(),
+                "Researchers listed",
+            ),
+            (
+                !self.draft_registration.hypotheses.primary.is_empty(),
+                "Primary hypotheses defined",
+            ),
+            (
+                !self
+                    .draft_registration
+                    .analysis_plan
+                    .primary_analyses
+                    .is_empty(),
+                "Primary analyses specified",
+            ),
+            (
+                !self.form_inputs.sample_size.is_empty(),
+                "Sample size determined",
+            ),
         ];
 
         for (passed, description) in checks {
@@ -1351,17 +1385,20 @@ impl ResearchDashboard {
                 Print("Pre-Registration Details\n"),
                 Print("─────────────────────────────────────────────────────────────────────\n\n"),
                 ResetColor,
-                
                 SetForegroundColor(Color::Cyan),
                 Print("Registration Information:\n"),
                 ResetColor,
                 Print(format!("  ID: {}\n", prereg.id)),
                 Print(format!("  Status: {:?}\n", prereg.status)),
-                Print(format!("  Registered: {}\n", 
-                    prereg.registered_at.with_timezone(&Local).format("%Y-%m-%d %H:%M:%S")
+                Print(format!(
+                    "  Registered: {}\n",
+                    prereg
+                        .registered_at
+                        .with_timezone(&Local)
+                        .format("%Y-%m-%d %H:%M:%S")
                 ))
             )?;
-            
+
             if !prereg.registration_hash.is_empty() {
                 execute!(
                     stdout,
@@ -1370,7 +1407,7 @@ impl ResearchDashboard {
                     ResetColor
                 )?;
             }
-            
+
             execute!(
                 stdout,
                 Print("\n"),
@@ -1379,14 +1416,17 @@ impl ResearchDashboard {
                 ResetColor,
                 Print(format!("  Title: {}\n", prereg.study.title)),
                 Print(format!("  Description: {}\n", prereg.study.description)),
-                Print(format!("  Researchers: {}\n", prereg.study.researchers.join(", "))),
+                Print(format!(
+                    "  Researchers: {}\n",
+                    prereg.study.researchers.join(", ")
+                )),
                 Print(format!("  Institution: {}\n", prereg.study.institution))
             )?;
-            
+
             if let Some(approval) = &prereg.study.ethical_approval {
                 execute!(stdout, Print(format!("  Ethical Approval: {}\n", approval)))?;
             }
-            
+
             execute!(
                 stdout,
                 Print("\n"),
@@ -1394,26 +1434,35 @@ impl ResearchDashboard {
                 Print("Hypotheses:\n"),
                 ResetColor,
                 SetForegroundColor(Color::Green),
-                Print(format!("  Primary ({}):\n", prereg.hypotheses.primary.len())),
+                Print(format!(
+                    "  Primary ({}):\n",
+                    prereg.hypotheses.primary.len()
+                )),
                 ResetColor
             )?;
-            
+
             for hyp in &prereg.hypotheses.primary {
                 execute!(
                     stdout,
                     Print(format!("    • [{}] {}\n", hyp.id, hyp.description)),
-                    Print(format!("      Test: {} (α = {})\n", hyp.statistical_test, hyp.alpha_level))
+                    Print(format!(
+                        "      Test: {} (α = {})\n",
+                        hyp.statistical_test, hyp.alpha_level
+                    ))
                 )?;
             }
-            
+
             if !prereg.hypotheses.secondary.is_empty() {
                 execute!(
                     stdout,
                     SetForegroundColor(Color::Yellow),
-                    Print(format!("  Secondary ({}):\n", prereg.hypotheses.secondary.len())),
+                    Print(format!(
+                        "  Secondary ({}):\n",
+                        prereg.hypotheses.secondary.len()
+                    )),
                     ResetColor
                 )?;
-                
+
                 for hyp in &prereg.hypotheses.secondary {
                     execute!(
                         stdout,
@@ -1421,7 +1470,7 @@ impl ResearchDashboard {
                     )?;
                 }
             }
-            
+
             // Deviations if any
             if !prereg.deviations.is_empty() {
                 execute!(
@@ -1431,11 +1480,12 @@ impl ResearchDashboard {
                     Print("Deviations from Pre-Registration:\n"),
                     ResetColor
                 )?;
-                
+
                 for deviation in &prereg.deviations {
                     execute!(
                         stdout,
-                        Print(format!("  • {} - {}\n", 
+                        Print(format!(
+                            "  • {} - {}\n",
                             deviation.timestamp.with_timezone(&Local).format("%Y-%m-%d"),
                             deviation.description
                         )),
@@ -1443,7 +1493,7 @@ impl ResearchDashboard {
                     )?;
                 }
             }
-            
+
             execute!(
                 stdout,
                 Print("\n"),
@@ -1459,7 +1509,7 @@ impl ResearchDashboard {
                 ResetColor
             )?;
         }
-        
+
         Ok(())
     }
 
@@ -1470,42 +1520,36 @@ impl ResearchDashboard {
             Print("Power Analysis Calculator\n"),
             Print("─────────────────────────────────────────────────────────────────────\n\n"),
             ResetColor,
-            
             Print("Test Type: "),
             SetForegroundColor(Color::White),
             Print(&self.power_calculator.test_type),
             ResetColor,
             Print(" [t-test/anova/regression]\n\n"),
-            
             Print("Effect Size (Cohen's d): "),
             SetForegroundColor(Color::White),
             Print(&self.power_calculator.effect_size),
             ResetColor,
             Print("\n"),
-            
             SetForegroundColor(Color::DarkGrey),
             Print("  Small: 0.2 | Medium: 0.5 | Large: 0.8\n\n"),
             ResetColor,
-            
             Print("Alpha Level: "),
             SetForegroundColor(Color::White),
             Print(&self.power_calculator.alpha),
             ResetColor,
             Print("\n\n"),
-            
             Print("Desired Power: "),
             SetForegroundColor(Color::White),
             Print(&self.power_calculator.power),
             ResetColor,
             Print("\n\n"),
-            
             Print("Sample Size (optional): "),
             SetForegroundColor(Color::White),
             Print(&self.power_calculator.sample_size),
             ResetColor,
             Print("\n\n")
         )?;
-        
+
         // Show calculation result
         if let Some(result) = &self.power_calculator.calculated_result {
             execute!(
@@ -1516,7 +1560,10 @@ impl ResearchDashboard {
                 Print("───────────────────────────────────────────────\n"),
                 ResetColor,
                 Print(format!("  Required N per group: {}\n", result.required_n)),
-                Print(format!("  Total N (two groups): {}\n", result.required_n * 2)),
+                Print(format!(
+                    "  Total N (two groups): {}\n",
+                    result.required_n * 2
+                )),
                 Print(format!("  Actual Power: {:.3}\n", result.actual_power)),
                 Print(format!("  Effect Size: {:.3}\n", result.effect_size)),
                 Print(format!("  Alpha: {:.3}\n", result.alpha)),
@@ -1525,7 +1572,7 @@ impl ResearchDashboard {
                 ResetColor
             )?;
         }
-        
+
         execute!(
             stdout,
             Print("\n"),
@@ -1533,7 +1580,7 @@ impl ResearchDashboard {
             Print("[C] Calculate | [R] Reset | [B] Back | [Q] Quit\n"),
             ResetColor
         )?;
-        
+
         Ok(())
     }
 
@@ -1545,21 +1592,19 @@ impl ResearchDashboard {
             Print("─────────────────────────────────────────────────────────────────────\n\n"),
             ResetColor
         )?;
-        
+
         if let Some(validator) = &self.analysis_validator {
             execute!(
                 stdout,
                 SetForegroundColor(Color::Green),
                 Print("Pre-registered analyses are being validated.\n\n"),
                 ResetColor,
-                
                 SetForegroundColor(Color::Cyan),
                 Print("Validation Status:\n"),
                 ResetColor,
                 Print("  ✓ All primary analyses must match pre-registration\n"),
                 Print("  ⚠ Secondary analyses should be marked as exploratory\n"),
                 Print("  ✗ Non-registered analyses require justification\n\n"),
-                
                 SetForegroundColor(Color::Yellow),
                 Print("Recent Validations:\n"),
                 ResetColor,
@@ -1574,7 +1619,7 @@ impl ResearchDashboard {
                 ResetColor
             )?;
         }
-        
+
         execute!(
             stdout,
             Print("\n"),
@@ -1582,43 +1627,59 @@ impl ResearchDashboard {
             Print("[S] Select Pre-Registration | [B] Back | [Q] Quit\n"),
             ResetColor
         )?;
-        
+
         Ok(())
     }
 
     fn render_transparency_report(&self, stdout: &mut io::Stdout, id: &str) -> io::Result<()> {
         if let Some(prereg) = self.preregistrations.iter().find(|p| p.id == id) {
             let report = prereg.generate_transparency_report();
-            
+
             execute!(
                 stdout,
                 SetForegroundColor(Color::Yellow),
                 Print("Transparency Report\n"),
                 Print("─────────────────────────────────────────────────────────────────────\n\n"),
                 ResetColor,
-                
                 SetForegroundColor(Color::Cyan),
                 Print("Registration Summary:\n"),
                 ResetColor,
                 Print(format!("  ID: {}\n", report.registration_id)),
-                Print(format!("  Date: {}\n", 
-                    report.registered_at.with_timezone(&Local).format("%Y-%m-%d %H:%M:%S")
+                Print(format!(
+                    "  Date: {}\n",
+                    report
+                        .registered_at
+                        .with_timezone(&Local)
+                        .format("%Y-%m-%d %H:%M:%S")
                 )),
-                Print(format!("  Hash: {}...\n\n", &report.registration_hash[..32])),
-                
+                Print(format!(
+                    "  Hash: {}...\n\n",
+                    &report.registration_hash[..32]
+                )),
                 SetForegroundColor(Color::Cyan),
                 Print("Pre-Registered Elements:\n"),
                 ResetColor,
-                Print(format!("  Primary Hypotheses: {}\n", report.n_primary_hypotheses)),
-                Print(format!("  Secondary Hypotheses: {}\n", report.n_secondary_hypotheses)),
-                Print(format!("  Primary Analyses: {}\n", report.n_primary_analyses)),
-                Print(format!("  Secondary Analyses: {}\n\n", report.n_secondary_analyses)),
-                
+                Print(format!(
+                    "  Primary Hypotheses: {}\n",
+                    report.n_primary_hypotheses
+                )),
+                Print(format!(
+                    "  Secondary Hypotheses: {}\n",
+                    report.n_secondary_hypotheses
+                )),
+                Print(format!(
+                    "  Primary Analyses: {}\n",
+                    report.n_primary_analyses
+                )),
+                Print(format!(
+                    "  Secondary Analyses: {}\n\n",
+                    report.n_secondary_analyses
+                )),
                 SetForegroundColor(Color::Cyan),
                 Print("Adherence:\n"),
                 ResetColor
             )?;
-            
+
             if report.n_deviations == 0 {
                 execute!(
                     stdout,
@@ -1630,15 +1691,18 @@ impl ResearchDashboard {
                 execute!(
                     stdout,
                     SetForegroundColor(Color::Yellow),
-                    Print(format!("  ⚠ {} deviations recorded:\n", report.n_deviations)),
+                    Print(format!(
+                        "  ⚠ {} deviations recorded:\n",
+                        report.n_deviations
+                    )),
                     ResetColor
                 )?;
-                
+
                 for deviation in &report.deviation_descriptions {
                     execute!(stdout, Print(format!("    • {}\n", deviation)))?;
                 }
             }
-            
+
             execute!(
                 stdout,
                 Print("\n"),
@@ -1646,13 +1710,12 @@ impl ResearchDashboard {
                 Print("This report can be included in publications to demonstrate\n"),
                 Print("transparency and adherence to pre-registered protocols.\n\n"),
                 ResetColor,
-                
                 SetForegroundColor(Color::DarkGrey),
                 Print("[E] Export Report | [B] Back | [Q] Quit\n"),
                 ResetColor
             )?;
         }
-        
+
         Ok(())
     }
 
@@ -1691,25 +1754,30 @@ impl ResearchDashboard {
             Print("╚══════════════════════════════════════════════════════╝\n"),
             ResetColor
         )?;
-        
+
         Ok(())
     }
 
-    fn render_message(&self, stdout: &mut io::Stdout, msg: &str, msg_type: &MessageType) -> io::Result<()> {
+    fn render_message(
+        &self,
+        stdout: &mut io::Stdout,
+        msg: &str,
+        msg_type: &MessageType,
+    ) -> io::Result<()> {
         let color = match msg_type {
             MessageType::Success => Color::Green,
             MessageType::Error => Color::Red,
             MessageType::Warning => Color::Yellow,
             MessageType::Info => Color::Cyan,
         };
-        
+
         let symbol = match msg_type {
             MessageType::Success => "✓",
             MessageType::Error => "✗",
             MessageType::Warning => "⚠",
             MessageType::Info => "ℹ",
         };
-        
+
         execute!(
             stdout,
             cursor::MoveTo(0, 25),
@@ -1717,22 +1785,24 @@ impl ResearchDashboard {
             Print(format!(" {} {} ", symbol, msg)),
             ResetColor
         )?;
-        
+
         Ok(())
     }
 
     fn handle_input(&mut self, key: KeyEvent) -> io::Result<bool> {
         // Clear message on any input
         self.message = None;
-        
+
         // Handle finalization dialog
         if self.show_finalization_dialog {
             return self.handle_finalization_input(key);
         }
-        
+
         // Global navigation
         match key.code {
-            KeyCode::Char('q') | KeyCode::Char('Q') if key.modifiers.contains(KeyModifiers::NONE) => {
+            KeyCode::Char('q') | KeyCode::Char('Q')
+                if key.modifiers.contains(KeyModifiers::NONE) =>
+            {
                 return Ok(false);
             }
             KeyCode::Char('1') => {
@@ -1760,7 +1830,7 @@ impl ResearchDashboard {
                 }
             }
         }
-        
+
         Ok(true)
     }
 
@@ -1799,16 +1869,16 @@ impl ResearchDashboard {
             }
             KeyCode::Enter | KeyCode::Char('v') | KeyCode::Char('V') => {
                 if let Some(prereg) = self.preregistrations.get(self.selected_index) {
-                    self.current_view = DashboardView::ViewPreRegistration { 
-                        id: prereg.id.clone() 
+                    self.current_view = DashboardView::ViewPreRegistration {
+                        id: prereg.id.clone(),
                     };
                 }
             }
             KeyCode::Char('e') | KeyCode::Char('E') => {
                 if let Some(prereg) = self.preregistrations.get(self.selected_index) {
                     if matches!(prereg.status, RegistrationStatus::Draft) {
-                        self.current_view = DashboardView::EditPreRegistration { 
-                            id: prereg.id.clone() 
+                        self.current_view = DashboardView::EditPreRegistration {
+                            id: prereg.id.clone(),
                         };
                     }
                 }
@@ -1832,7 +1902,9 @@ impl ResearchDashboard {
             KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.save_draft();
             }
-            KeyCode::Char('f') | KeyCode::Char('F') if self.current_form_section == FormSection::Review => {
+            KeyCode::Char('f') | KeyCode::Char('F')
+                if self.current_form_section == FormSection::Review =>
+            {
                 self.show_finalization_dialog = true;
             }
             _ => {
@@ -1892,39 +1964,47 @@ impl ResearchDashboard {
     fn save_draft(&mut self) {
         // Update draft_registration from form_inputs
         self.update_draft_from_form();
-        
+
         // Add to list if new
-        if !self.preregistrations.iter().any(|p| p.id == self.draft_registration.id) {
+        if !self
+            .preregistrations
+            .iter()
+            .any(|p| p.id == self.draft_registration.id)
+        {
             self.preregistrations.push(self.draft_registration.clone());
         }
-        
+
         self.message = Some(("Draft saved successfully".to_string(), MessageType::Success));
     }
 
     fn finalize_registration(&mut self) {
         self.update_draft_from_form();
-        
+
         match self.draft_registration.finalize() {
             Ok(hash) => {
                 // Update in list
-                if let Some(prereg) = self.preregistrations.iter_mut()
-                    .find(|p| p.id == self.draft_registration.id) {
+                if let Some(prereg) = self
+                    .preregistrations
+                    .iter_mut()
+                    .find(|p| p.id == self.draft_registration.id)
+                {
                     *prereg = self.draft_registration.clone();
                 } else {
                     self.preregistrations.push(self.draft_registration.clone());
                 }
-                
+
                 self.message = Some((
                     format!("Registration finalized! Hash: {}...", &hash[..16]),
-                    MessageType::Success
+                    MessageType::Success,
                 ));
-                
+
                 // Create validator for this registration
-                self.analysis_validator = Some(AnalysisValidator::new(self.draft_registration.clone()));
-                
+                self.analysis_validator =
+                    Some(AnalysisValidator::new(self.draft_registration.clone()));
+
                 // Switch to viewer
                 self.current_view = DashboardView::ViewPreRegistration {
-                    id: self.draft_registration.id.clone()
+                    id: self.draft_registration.id.clone(),
                 };
             }
             Err(e) => {
@@ -1940,7 +2020,11 @@ impl ResearchDashboard {
             self.power_calculator.power.parse::<f64>(),
         ) {
             let analyzer = PowerAnalyzer::new(0.05, 0.8);
-            match analyzer.calculate_sample_size(StatisticalTestType::IndependentTTest, effect, power) {
+            match analyzer.calculate_sample_size(
+                StatisticalTestType::IndependentTTest,
+                effect,
+                power,
+            ) {
                 Ok(required_n) => {
                     self.power_calculator.calculated_result = Some(PowerCalculationResult {
                         required_n,
@@ -1950,7 +2034,10 @@ impl ResearchDashboard {
                     });
                 }
                 Err(e) => {
-                    self.message = Some((format!("Power calculation error: {}", e), MessageType::Error));
+                    self.message = Some((
+                        format!("Power calculation error: {}", e),
+                        MessageType::Error,
+                    ));
                 }
             }
         } else {
@@ -1977,7 +2064,7 @@ impl ResearchDashboard {
             },
             conflicts_of_interest: self.form_inputs.conflicts.clone(),
         };
-        
+
         // Update power analysis
         if let (Ok(power), Ok(alpha), Ok(effect)) = (
             self.form_inputs.target_power.parse::<f64>(),
@@ -1995,7 +2082,7 @@ impl ResearchDashboard {
                 achieved_sample_size: None,
             };
         }
-        
+
         // Update sample size
         if let Ok(n) = self.form_inputs.sample_size.parse::<usize>() {
             self.draft_registration.data_collection.target_sample_size = n;
@@ -2017,7 +2104,11 @@ impl ResearchDashboard {
         )
     }
 
-    fn render_audio_recording(&mut self, stdout: &mut io::Stdout, _session_id: Option<&str>) -> io::Result<()> {
+    fn render_audio_recording(
+        &mut self,
+        stdout: &mut io::Stdout,
+        _session_id: Option<&str>,
+    ) -> io::Result<()> {
         execute!(
             stdout,
             Clear(ClearType::All),
@@ -2047,7 +2138,11 @@ impl ResearchDashboard {
         )
     }
 
-    fn render_data_collection(&mut self, stdout: &mut io::Stdout, _experiment_id: &str) -> io::Result<()> {
+    fn render_data_collection(
+        &mut self,
+        stdout: &mut io::Stdout,
+        _experiment_id: &str,
+    ) -> io::Result<()> {
         execute!(
             stdout,
             Clear(ClearType::All),

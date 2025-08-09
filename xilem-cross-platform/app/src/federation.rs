@@ -1,8 +1,8 @@
+use crate::research::{ExperimentCondition, ExperimentType, ResearchSession};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
-use crate::research::{ResearchSession, ExperimentType, ExperimentCondition};
 
 /// Federated Data Collection System
 /// Enables secure multi-institutional research collaboration
@@ -55,9 +55,9 @@ pub struct NodeCapabilities {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TrustLevel {
     Untrusted,
-    Provisional,    // New node, limited access
-    Verified,       // IRB verified, standard access
-    HighTrust,      // Long-term partner, full access
+    Provisional,     // New node, limited access
+    Verified,        // IRB verified, standard access
+    HighTrust,       // Long-term partner, full access
     InternalNetwork, // Same institution network
 }
 
@@ -73,19 +73,19 @@ pub struct DataGovernancePolicy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SharingRestriction {
-    NoRawData,           // Only aggregated data
-    InstitutionOnly,     // Within institution network
-    IRBApprovalRequired, // Requires specific IRB approval
-    TimeDelayed(u32),    // Delay in days before sharing
+    NoRawData,                    // Only aggregated data
+    InstitutionOnly,              // Within institution network
+    IRBApprovalRequired,          // Requires specific IRB approval
+    TimeDelayed(u32),             // Delay in days before sharing
     GeographicLimit(Vec<String>), // Restricted to regions
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AnonymizationLevel {
-    Identified,     // Contains PII
-    Pseudonymized,  // Reversible anonymization
-    Anonymized,     // Irreversible anonymization
-    Aggregate,      // Only summary statistics
+    Identified,    // Contains PII
+    Pseudonymized, // Reversible anonymization
+    Anonymized,    // Irreversible anonymization
+    Aggregate,     // Only summary statistics
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,10 +98,10 @@ pub struct AuditRequirement {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuditLevel {
-    Basic,      // Access logs only
-    Standard,   // Access + data operations
-    Detailed,   // Full audit trail
-    Forensic,   // Complete system state logging
+    Basic,    // Access logs only
+    Standard, // Access + data operations
+    Detailed, // Full audit trail
+    Forensic, // Complete system state logging
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -205,11 +205,11 @@ pub enum PrivacyLevel {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AnonymizationRule {
-    Remove,                    // Delete field
-    Hash,                      // One-way hash
-    Generalize(String),        // e.g., age to age range
-    Noise(f64),               // Add statistical noise
-    Pseudonymize(String),     // Replace with pseudonym
+    Remove,               // Delete field
+    Hash,                 // One-way hash
+    Generalize(String),   // e.g., age to age range
+    Noise(f64),           // Add statistical noise
+    Pseudonymize(String), // Replace with pseudonym
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -266,12 +266,12 @@ pub struct ConsentRequirements {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConsentType {
-    General,              // General research participation
-    DataSharing,          // Cross-institutional sharing
-    AudioRecording,       // Audio data collection
-    SensorData,           // Physiological sensors
-    LongTermStorage,      // Extended data retention
-    CommercialUse,        // Commercial research use
+    General,         // General research participation
+    DataSharing,     // Cross-institutional sharing
+    AudioRecording,  // Audio data collection
+    SensorData,      // Physiological sensors
+    LongTermStorage, // Extended data retention
+    CommercialUse,   // Commercial research use
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -427,8 +427,8 @@ pub enum DataFormat {
     CSV,
     HDF5,
     Parquet,
-    BIDS,        // Brain Imaging Data Structure
-    HL7FHIR,     // Healthcare interoperability
+    BIDS,    // Brain Imaging Data Structure
+    HL7FHIR, // Healthcare interoperability
     Custom(String),
 }
 
@@ -446,12 +446,12 @@ pub enum AnalysisCapability {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ComplianceStandard {
-    GDPR,           // EU General Data Protection Regulation
-    HIPAA,          // US Health Insurance Portability
-    FERPA,          // US Family Educational Rights
-    CommonRule,     // US Federal Research Regulations
-    ISO27001,       // Information Security Management
-    SOC2,           // Security and Availability
+    GDPR,       // EU General Data Protection Regulation
+    HIPAA,      // US Health Insurance Portability
+    FERPA,      // US Family Educational Rights
+    CommonRule, // US Federal Research Regulations
+    ISO27001,   // Information Security Management
+    SOC2,       // Security and Availability
     Custom(String),
 }
 
@@ -510,7 +510,7 @@ impl FederationNetwork {
         data_schema: DataSchema,
     ) -> Result<String, String> {
         let protocol_id = Uuid::new_v4().to_string();
-        
+
         let protocol = SharedProtocol {
             protocol_id: protocol_id.clone(),
             name,
@@ -532,21 +532,27 @@ impl FederationNetwork {
     }
 
     pub fn join_protocol(&mut self, protocol_id: &str) -> Result<(), String> {
-        let protocol = self.shared_protocols.get_mut(protocol_id)
+        let protocol = self
+            .shared_protocols
+            .get_mut(protocol_id)
             .ok_or("Protocol not found")?;
 
-        if protocol.participating_nodes.contains(&self.local_node.node_id) {
+        if protocol
+            .participating_nodes
+            .contains(&self.local_node.node_id)
+        {
             return Err("Already participating in this protocol".to_string());
         }
 
         // Check capabilities against requirements
         self.validate_protocol_compatibility(&protocol)?;
 
-        protocol.participating_nodes.insert(self.local_node.node_id.clone());
-        protocol.approval_status.insert(
-            self.local_node.node_id.clone(),
-            ApprovalStatus::Pending,
-        );
+        protocol
+            .participating_nodes
+            .insert(self.local_node.node_id.clone());
+        protocol
+            .approval_status
+            .insert(self.local_node.node_id.clone(), ApprovalStatus::Pending);
 
         Ok(())
     }
@@ -586,9 +592,12 @@ impl FederationNetwork {
         FederationSummary {
             network_id: self.network_id.clone(),
             total_nodes: self.peer_nodes.len() + 1,
-            online_nodes: self.peer_nodes.values()
+            online_nodes: self
+                .peer_nodes
+                .values()
                 .filter(|node| matches!(node.status, NodeStatus::Online))
-                .count() + 1,
+                .count()
+                + 1,
             active_protocols: self.shared_protocols.len(),
             active_studies: self.active_studies.len(),
             total_participants: self.calculate_total_participants(),
@@ -600,14 +609,20 @@ impl FederationNetwork {
         let capabilities = &self.local_node.capabilities;
 
         // Check experiment type support
-        if !capabilities.supported_experiments.contains(&protocol.experiment_template.experiment_type) {
+        if !capabilities
+            .supported_experiments
+            .contains(&protocol.experiment_template.experiment_type)
+        {
             return Err("Experiment type not supported".to_string());
         }
 
         // Check sensor requirements
         for required_sensor in &protocol.experiment_template.required_sensors {
             if !capabilities.available_sensors.contains(required_sensor) {
-                return Err(format!("Required sensor not available: {}", required_sensor));
+                return Err(format!(
+                    "Required sensor not available: {}",
+                    required_sensor
+                ));
             }
         }
 
@@ -615,20 +630,22 @@ impl FederationNetwork {
     }
 
     fn calculate_total_participants(&self) -> u32 {
-        self.active_studies.values()
+        self.active_studies
+            .values()
             .flat_map(|study| study.current_enrollment.values())
             .sum()
     }
 
     fn check_compliance_status(&self) -> ComplianceStatus {
         // Check if all required compliance standards are met
-        let required_standards = vec![
-            ComplianceStandard::CommonRule,
-            ComplianceStandard::ISO27001,
-        ];
+        let required_standards = vec![ComplianceStandard::CommonRule, ComplianceStandard::ISO27001];
 
-        let has_all_standards = required_standards.iter()
-            .all(|standard| self.local_node.capabilities.compliance_standards.contains(standard));
+        let has_all_standards = required_standards.iter().all(|standard| {
+            self.local_node
+                .capabilities
+                .compliance_standards
+                .contains(standard)
+        });
 
         if has_all_standards {
             ComplianceStatus::Compliant

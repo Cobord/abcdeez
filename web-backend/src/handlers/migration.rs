@@ -1,9 +1,12 @@
-use axum::{extract::{State, Path}, Json};
+use axum::{
+    extract::{Path, State},
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::{
-    db::{MigrationManager, MigrationInfo, run_migrations_with_rollback},
+    db::{run_migrations_with_rollback, MigrationInfo, MigrationManager},
     error::{AppError, AppResult},
     state::AppState,
 };
@@ -51,18 +54,22 @@ pub async fn get_migration_status(
     State(state): State<Arc<AppState>>,
 ) -> AppResult<Json<MigrationStatus>> {
     let manager = create_migration_manager(&state).await?;
-    
-    let applied_migrations = manager.get_migration_history().await
+
+    let applied_migrations = manager
+        .get_migration_history()
+        .await
         .map_err(|e| AppError::InternalServerError)?;
-    
-    let current_version = applied_migrations.iter()
-        .map(|m| m.version)
-        .max();
-    
-    let is_up_to_date = manager.is_up_to_date().await
+
+    let current_version = applied_migrations.iter().map(|m| m.version).max();
+
+    let is_up_to_date = manager
+        .is_up_to_date()
+        .await
         .map_err(|e| AppError::InternalServerError)?;
-    
-    let validation_issues = manager.validate_migrations().await
+
+    let validation_issues = manager
+        .validate_migrations()
+        .await
         .map_err(|e| AppError::InternalServerError)?;
 
     let status = MigrationStatus {
@@ -80,16 +87,22 @@ pub async fn run_migrations(
     State(state): State<Arc<AppState>>,
 ) -> AppResult<Json<MigrationResponse>> {
     tracing::info!("Admin triggered migration run");
-    
-    let manager = run_migrations_with_rollback(&state.db_pool).await
+
+    let manager = run_migrations_with_rollback(&state.db_pool)
+        .await
         .map_err(|e| AppError::InternalServerError)?;
-    
-    let applied_migrations = manager.get_migration_history().await
+
+    let applied_migrations = manager
+        .get_migration_history()
+        .await
         .map_err(|e| AppError::InternalServerError)?;
 
     let response = MigrationResponse {
         success: true,
-        message: format!("Successfully applied {} migrations", applied_migrations.len()),
+        message: format!(
+            "Successfully applied {} migrations",
+            applied_migrations.len()
+        ),
         migrations_affected: applied_migrations,
     };
 
@@ -103,7 +116,7 @@ pub async fn rollback_to_version(
 ) -> AppResult<Json<MigrationResponse>> {
     if !request.confirm {
         return Err(AppError::BadRequest(
-            "Rollback must be confirmed with 'confirm: true'".to_string()
+            "Rollback must be confirmed with 'confirm: true'".to_string(),
         ));
     }
 
@@ -113,14 +126,14 @@ pub async fn rollback_to_version(
     );
 
     let manager = create_migration_manager(&state).await?;
-    
+
     match manager.rollback_to(request.target_version).await {
         Ok(rolled_back) => {
             let response = MigrationResponse {
                 success: true,
                 message: format!(
-                    "Successfully rolled back {} migrations to version {}", 
-                    rolled_back.len(), 
+                    "Successfully rolled back {} migrations to version {}",
+                    rolled_back.len(),
                     request.target_version
                 ),
                 migrations_affected: rolled_back,
@@ -141,13 +154,13 @@ pub async fn rollback_last_migrations(
 ) -> AppResult<Json<MigrationResponse>> {
     if !request.confirm {
         return Err(AppError::BadRequest(
-            "Rollback must be confirmed with 'confirm: true'".to_string()
+            "Rollback must be confirmed with 'confirm: true'".to_string(),
         ));
     }
 
     if request.count == 0 {
         return Err(AppError::BadRequest(
-            "Count must be greater than 0".to_string()
+            "Count must be greater than 0".to_string(),
         ));
     }
 
@@ -157,15 +170,12 @@ pub async fn rollback_last_migrations(
     );
 
     let manager = create_migration_manager(&state).await?;
-    
+
     match manager.rollback_last(request.count).await {
         Ok(rolled_back) => {
             let response = MigrationResponse {
                 success: true,
-                message: format!(
-                    "Successfully rolled back {} migrations", 
-                    rolled_back.len()
-                ),
+                message: format!("Successfully rolled back {} migrations", rolled_back.len()),
                 migrations_affected: rolled_back,
             };
             Ok(Json(response))
@@ -182,11 +192,15 @@ pub async fn validate_migrations(
     State(state): State<Arc<AppState>>,
 ) -> AppResult<Json<serde_json::Value>> {
     let manager = create_migration_manager(&state).await?;
-    
-    let issues = manager.validate_migrations().await
+
+    let issues = manager
+        .validate_migrations()
+        .await
         .map_err(|e| AppError::InternalServerError)?;
-    
-    let applied_migrations = manager.get_migration_history().await
+
+    let applied_migrations = manager
+        .get_migration_history()
+        .await
         .map_err(|e| AppError::InternalServerError)?;
 
     let response = serde_json::json!({
@@ -206,8 +220,10 @@ pub async fn create_backup(
     Json(request): Json<BackupRequest>,
 ) -> AppResult<Json<BackupResponse>> {
     let manager = create_migration_manager(&state).await?;
-    
-    let backup_path = manager.create_backup(&request.backup_name).await
+
+    let backup_path = manager
+        .create_backup(&request.backup_name)
+        .await
         .map_err(|e| {
             tracing::error!("Backup creation failed: {}", e);
             AppError::InternalServerError
@@ -227,8 +243,10 @@ pub async fn get_migration_history(
     State(state): State<Arc<AppState>>,
 ) -> AppResult<Json<Vec<MigrationInfo>>> {
     let manager = create_migration_manager(&state).await?;
-    
-    let migrations = manager.get_migration_history().await
+
+    let migrations = manager
+        .get_migration_history()
+        .await
         .map_err(|e| AppError::InternalServerError)?;
 
     Ok(Json(migrations))
@@ -240,9 +258,11 @@ pub async fn preview_rollback(
     Path(target_version): Path<i64>,
 ) -> AppResult<Json<serde_json::Value>> {
     let manager = create_migration_manager(&state).await?;
-    let applied_migrations = manager.get_migration_history().await
+    let applied_migrations = manager
+        .get_migration_history()
+        .await
         .map_err(|e| AppError::InternalServerError)?;
-    
+
     // Find migrations that would be rolled back
     let to_rollback: Vec<_> = applied_migrations
         .into_iter()
@@ -250,7 +270,8 @@ pub async fn preview_rollback(
         .collect();
 
     let can_rollback_all = to_rollback.iter().all(|m| m.can_rollback);
-    let rollback_sql: Vec<_> = to_rollback.iter()
+    let rollback_sql: Vec<_> = to_rollback
+        .iter()
         .filter_map(|m| m.rollback_sql.as_ref().map(|sql| (m.version, sql)))
         .collect();
 
@@ -276,11 +297,11 @@ async fn create_migration_manager(state: &AppState) -> AppResult<MigrationManage
     let migrations_path = "./migrations".to_string();
     #[cfg(feature = "postgres")]
     let migrations_path = "./migrations-postgres".to_string();
-    
+
     let mut manager = MigrationManager::new(state.db_pool.clone(), migrations_path);
-    
+
     // Register rollback scripts
     crate::db::register_rollback_scripts(&mut manager);
-    
+
     Ok(manager)
 }

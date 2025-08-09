@@ -376,22 +376,32 @@ impl StatisticalValidator {
 
         let mean = data.iter().sum::<f64>() / n;
         let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0);
-        
+
         // Simplified W statistic calculation
         let w_stat = if variance > 0.0 {
-            let numerator: f64 = sorted_data.iter()
+            let numerator: f64 = sorted_data
+                .iter()
                 .enumerate()
                 .map(|(i, &x)| {
                     let coeff = self.shapiro_wilk_coefficient(i, data.len());
                     coeff * x
                 })
-                .sum::<f64>().powi(2);
+                .sum::<f64>()
+                .powi(2);
             numerator / (variance * (n - 1.0))
         } else {
             1.0
         };
 
-        let p_value = if w_stat > 0.95 { 0.8 } else if w_stat > 0.90 { 0.2 } else if w_stat > 0.85 { 0.05 } else { 0.01 };
+        let p_value = if w_stat > 0.95 {
+            0.8
+        } else if w_stat > 0.90 {
+            0.2
+        } else if w_stat > 0.85 {
+            0.05
+        } else {
+            0.01
+        };
         let ad_statistic = self.anderson_darling_statistic(data);
 
         NormalityTest {
@@ -421,9 +431,10 @@ impl StatisticalValidator {
             let z = (x - mean) / std_dev;
             let phi = normal.cdf(z);
             let i_f64 = (i + 1) as f64;
-            
+
             if phi > 0.0 && phi < 1.0 {
-                ad_stat += (2.0 * i_f64 - 1.0) * (phi.ln() + (1.0 - sorted_data[sorted_data.len() - i - 1]).ln());
+                ad_stat += (2.0 * i_f64 - 1.0)
+                    * (phi.ln() + (1.0 - sorted_data[sorted_data.len() - i - 1]).ln());
             }
         }
 
@@ -720,8 +731,8 @@ impl StatisticalValidator {
             levene_p_value: levene_result.1,
             bartlett_statistic: bartlett_result.0,
             bartlett_p_value: bartlett_result.1,
-            equal_variance: levene_result.1 > (1.0 - self.confidence_level) && 
-                          bartlett_result.1 > (1.0 - self.confidence_level),
+            equal_variance: levene_result.1 > (1.0 - self.confidence_level)
+                && bartlett_result.1 > (1.0 - self.confidence_level),
         }
     }
 
@@ -735,16 +746,17 @@ impl StatisticalValidator {
             if group.is_empty() {
                 continue;
             }
-            
+
             // Calculate median (more robust than mean)
             let mut sorted_group = group.clone();
             sorted_group.sort_by(|a, b| a.partial_cmp(b).unwrap());
             let median = if sorted_group.len() % 2 == 0 {
-                (sorted_group[sorted_group.len() / 2 - 1] + sorted_group[sorted_group.len() / 2]) / 2.0
+                (sorted_group[sorted_group.len() / 2 - 1] + sorted_group[sorted_group.len() / 2])
+                    / 2.0
             } else {
                 sorted_group[sorted_group.len() / 2]
             };
-            
+
             group_medians.push(median);
             group_sizes.push(group.len());
             n_total += group.len();
@@ -763,7 +775,10 @@ impl StatisticalValidator {
                 continue;
             }
 
-            let deviations: Vec<f64> = group.iter().map(|&x| (x - group_medians[i]).abs()).collect();
+            let deviations: Vec<f64> = group
+                .iter()
+                .map(|&x| (x - group_medians[i]).abs())
+                .collect();
             let deviation_mean = deviations.iter().sum::<f64>() / deviations.len() as f64;
             group_deviation_means.push(deviation_mean);
             all_deviations.extend(deviations);
@@ -795,7 +810,11 @@ impl StatisticalValidator {
         let df_within = (n_total - k) as f64;
         let ms_between = ss_between / df_between;
         let ms_within = ss_within / df_within;
-        let f_stat = if ms_within > 0.0 { ms_between / ms_within } else { 0.0 };
+        let f_stat = if ms_within > 0.0 {
+            ms_between / ms_within
+        } else {
+            0.0
+        };
 
         // Calculate p-value
         let f_dist = FisherSnedecor::new(df_between, df_within).unwrap();
@@ -846,10 +865,15 @@ impl StatisticalValidator {
         let bartlett_stat = sum_weights * pooled_variance.ln() - sum_log_vars;
 
         // Apply correction factor (simplified)
-        let correction = 1.0 + (1.0 / (3.0 * (k - 1) as f64)) * 
-                        (variances.iter().enumerate().map(|(i, _)| 1.0 / (sample_sizes[i] - 1) as f64).sum::<f64>() - 
-                         1.0 / (total_n - k) as f64);
-        
+        let correction = 1.0
+            + (1.0 / (3.0 * (k - 1) as f64))
+                * (variances
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| 1.0 / (sample_sizes[i] - 1) as f64)
+                    .sum::<f64>()
+                    - 1.0 / (total_n - k) as f64);
+
         let corrected_stat = bartlett_stat / correction;
 
         // Chi-squared distribution with k-1 degrees of freedom
@@ -887,7 +911,9 @@ impl StatisticalValidator {
         let mut absolute_deviations: Vec<f64> = data.iter().map(|&x| (x - median).abs()).collect();
         absolute_deviations.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let mad = if absolute_deviations.len() % 2 == 0 {
-            (absolute_deviations[absolute_deviations.len() / 2 - 1] + absolute_deviations[absolute_deviations.len() / 2]) / 2.0
+            (absolute_deviations[absolute_deviations.len() / 2 - 1]
+                + absolute_deviations[absolute_deviations.len() / 2])
+                / 2.0
         } else {
             absolute_deviations[absolute_deviations.len() / 2]
         };
@@ -902,11 +928,11 @@ impl StatisticalValidator {
             } else {
                 0.0
             };
-            
+
             if modified_z > threshold {
                 outlier_indices.push(i);
             }
-            
+
             if modified_z > max_z_score {
                 max_z_score = modified_z;
             }
@@ -934,8 +960,13 @@ impl StatisticalValidator {
         }
 
         // Take the worst normality result
-        let normality = normality_tests.into_iter()
-            .min_by(|a, b| a.shapiro_wilk_p_value.partial_cmp(&b.shapiro_wilk_p_value).unwrap())
+        let normality = normality_tests
+            .into_iter()
+            .min_by(|a, b| {
+                a.shapiro_wilk_p_value
+                    .partial_cmp(&b.shapiro_wilk_p_value)
+                    .unwrap()
+            })
             .unwrap_or(NormalityTest {
                 shapiro_wilk_statistic: 0.0,
                 shapiro_wilk_p_value: 1.0,
@@ -944,7 +975,7 @@ impl StatisticalValidator {
             });
 
         let homoscedasticity = self.check_homogeneity(data);
-        
+
         // Check outliers across all data
         let all_data: Vec<f64> = data.iter().flatten().cloned().collect();
         let outliers = self.check_outliers(&all_data);

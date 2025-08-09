@@ -202,7 +202,9 @@ pub async fn submit_test_trials(
 }
 
 pub async fn body_to_json(response: Response<Body>) -> Value {
-    let body = body::to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let body = body::to_bytes(response.into_body(), 1024 * 1024)
+        .await
+        .unwrap();
     serde_json::from_slice(&body).unwrap()
 }
 

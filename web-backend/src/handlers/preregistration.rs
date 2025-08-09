@@ -8,11 +8,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::{
-    error::AppError,
-    models::preregistration::*,
-    state::AppState,
-};
+use crate::{error::AppError, models::preregistration::*, state::AppState};
 
 /// Query parameters for listing pre-registrations
 #[derive(Debug, Deserialize)]
@@ -31,7 +27,7 @@ pub async fn create_preregistration(
 ) -> Result<Json<PreRegistrationResponse>, AppError> {
     let id = format!("prereg_{}", Uuid::new_v4());
     let now = Utc::now();
-    
+
     // Serialize complex fields to JSON
     let study_metadata_json = serde_json::to_string(&payload.study_metadata)?;
     let hypotheses_json = serde_json::to_string(&payload.hypotheses)?;
@@ -39,7 +35,7 @@ pub async fn create_preregistration(
     let data_collection_json = serde_json::to_string(&payload.data_collection_plan)?;
     let exclusion_criteria_json = serde_json::to_string(&payload.exclusion_criteria)?;
     let decision_rules_json = serde_json::to_string(&payload.decision_rules)?;
-    
+
     // Insert into database
     sqlx::query!(
         r#"
@@ -77,7 +73,7 @@ pub async fn create_preregistration(
     )
     .execute(&state.db)
     .await?;
-    
+
     Ok(Json(PreRegistrationResponse {
         id: id.clone(),
         experiment_id: payload.experiment_id,
@@ -103,11 +99,11 @@ pub async fn get_preregistration(
     )
     .fetch_one(&state.db)
     .await?;
-    
+
     // Parse JSON fields
     let hypotheses: Hypotheses = serde_json::from_str(&prereg.hypotheses)?;
     let analysis_plan: AnalysisPlan = serde_json::from_str(&prereg.analysis_plan)?;
-    
+
     // Get deviations count
     let deviations_count = sqlx::query_scalar!(
         "SELECT COUNT(*) FROM preregistration_deviations WHERE preregistration_id = ?",
@@ -115,7 +111,7 @@ pub async fn get_preregistration(
     )
     .fetch_one(&state.db)
     .await?;
-    
+
     // Generate transparency report if registered
     let transparency_report = if prereg.status != "draft" {
         Some(TransparencyReport {
@@ -133,15 +129,23 @@ pub async fn get_preregistration(
     } else {
         None
     };
-    
+
     Ok(Json(PreRegistrationResponse {
         id: prereg.id,
         experiment_id: prereg.experiment_id,
         title: prereg.title,
         description: prereg.description,
         status: prereg.status.clone(),
-        registered_at: if prereg.status != "draft" { Some(prereg.registered_at) } else { None },
-        registration_hash: if prereg.status != "draft" { Some(prereg.registration_hash) } else { None },
+        registered_at: if prereg.status != "draft" {
+            Some(prereg.registered_at)
+        } else {
+            None
+        },
+        registration_hash: if prereg.status != "draft" {
+            Some(prereg.registration_hash)
+        } else {
+            None
+        },
         can_edit: prereg.status == "draft",
         transparency_report,
     }))
@@ -154,44 +158,59 @@ pub async fn update_preregistration(
     Json(payload): Json<UpdatePreRegistration>,
 ) -> Result<Json<PreRegistrationResponse>, AppError> {
     // Check if pre-registration exists and is in draft status
-    let current = sqlx::query!(
-        "SELECT status FROM preregistrations WHERE id = ?",
-        id
-    )
-    .fetch_one(&state.db)
-    .await?;
-    
+    let current = sqlx::query!("SELECT status FROM preregistrations WHERE id = ?", id)
+        .fetch_one(&state.db)
+        .await?;
+
     if current.status != "draft" {
-        return Err(AppError::BadRequest("Cannot edit finalized pre-registration".to_string()));
+        return Err(AppError::BadRequest(
+            "Cannot edit finalized pre-registration".to_string(),
+        ));
     }
-    
+
     // Build update query dynamically based on provided fields
     let mut updates = vec![];
-    
+
     if let Some(title) = &payload.title {
-        sqlx::query!("UPDATE preregistrations SET title = ? WHERE id = ?", title, id)
-            .execute(&state.db)
-            .await?;
-    }
-    
-    if let Some(description) = &payload.description {
-        sqlx::query!("UPDATE preregistrations SET description = ? WHERE id = ?", description, id)
-            .execute(&state.db)
-            .await?;
-    }
-    
-    if let Some(hypotheses) = &payload.hypotheses {
-        let json = serde_json::to_string(hypotheses)?;
-        sqlx::query!("UPDATE preregistrations SET hypotheses = ? WHERE id = ?", json, id)
-            .execute(&state.db)
-            .await?;
-    }
-    
-    // Update timestamp
-    sqlx::query!("UPDATE preregistrations SET updated_at = ? WHERE id = ?", Utc::now(), id)
+        sqlx::query!(
+            "UPDATE preregistrations SET title = ? WHERE id = ?",
+            title,
+            id
+        )
         .execute(&state.db)
         .await?;
-    
+    }
+
+    if let Some(description) = &payload.description {
+        sqlx::query!(
+            "UPDATE preregistrations SET description = ? WHERE id = ?",
+            description,
+            id
+        )
+        .execute(&state.db)
+        .await?;
+    }
+
+    if let Some(hypotheses) = &payload.hypotheses {
+        let json = serde_json::to_string(hypotheses)?;
+        sqlx::query!(
+            "UPDATE preregistrations SET hypotheses = ? WHERE id = ?",
+            json,
+            id
+        )
+        .execute(&state.db)
+        .await?;
+    }
+
+    // Update timestamp
+    sqlx::query!(
+        "UPDATE preregistrations SET updated_at = ? WHERE id = ?",
+        Utc::now(),
+        id
+    )
+    .execute(&state.db)
+    .await?;
+
     get_preregistration(State(state), Path(id)).await
 }
 
@@ -208,28 +227,36 @@ pub async fn finalize_preregistration(
     )
     .fetch_one(&state.db)
     .await?;
-    
+
     if prereg.status != "draft" {
-        return Err(AppError::BadRequest("Pre-registration already finalized".to_string()));
+        return Err(AppError::BadRequest(
+            "Pre-registration already finalized".to_string(),
+        ));
     }
-    
+
     // Validate required fields
     let hypotheses: Hypotheses = serde_json::from_str(&prereg.hypotheses)?;
     let analysis_plan: AnalysisPlan = serde_json::from_str(&prereg.analysis_plan)?;
     let data_collection: DataCollectionPlan = serde_json::from_str(&prereg.data_collection_plan)?;
-    
+
     if hypotheses.primary.is_empty() {
-        return Err(AppError::BadRequest("At least one primary hypothesis required".to_string()));
+        return Err(AppError::BadRequest(
+            "At least one primary hypothesis required".to_string(),
+        ));
     }
-    
+
     if analysis_plan.primary_analyses.is_empty() {
-        return Err(AppError::BadRequest("At least one primary analysis required".to_string()));
+        return Err(AppError::BadRequest(
+            "At least one primary analysis required".to_string(),
+        ));
     }
-    
+
     if data_collection.target_sample_size == 0 {
-        return Err(AppError::BadRequest("Target sample size must be specified".to_string()));
+        return Err(AppError::BadRequest(
+            "Target sample size must be specified".to_string(),
+        ));
     }
-    
+
     // Generate hash of the content
     let content_to_hash = format!(
         "{}{}{}{}{}{}{}",
@@ -241,13 +268,13 @@ pub async fn finalize_preregistration(
         prereg.exclusion_criteria,
         prereg.decision_rules
     );
-    
+
     let mut hasher = Sha256::new();
     hasher.update(content_to_hash.as_bytes());
     let hash = format!("{:x}", hasher.finalize());
-    
+
     let now = Utc::now();
-    
+
     // Update status and hash
     sqlx::query!(
         "UPDATE preregistrations SET status = ?, registration_hash = ?, registered_at = ? WHERE id = ?",
@@ -258,7 +285,7 @@ pub async fn finalize_preregistration(
     )
     .execute(&state.db)
     .await?;
-    
+
     get_preregistration(State(state), Path(id)).await
 }
 
@@ -269,7 +296,7 @@ pub async fn record_deviation(
     Json(payload): Json<RecordDeviation>,
 ) -> Result<StatusCode, AppError> {
     let deviation_id = format!("dev_{}", Uuid::new_v4());
-    
+
     sqlx::query!(
         r#"
         INSERT INTO preregistration_deviations (
@@ -287,7 +314,7 @@ pub async fn record_deviation(
     )
     .execute(&state.db)
     .await?;
-    
+
     Ok(StatusCode::CREATED)
 }
 
@@ -304,28 +331,31 @@ pub async fn validate_analysis(
     )
     .fetch_one(&state.db)
     .await?;
-    
+
     let analysis_plan: AnalysisPlan = serde_json::from_str(&prereg.analysis_plan)?;
-    
+
     // Check if analysis is pre-registered
-    let is_primary = analysis_plan.primary_analyses
+    let is_primary = analysis_plan
+        .primary_analyses
         .iter()
         .any(|a| a.name == payload.analysis_name);
-    
-    let is_secondary = analysis_plan.secondary_analyses
+
+    let is_secondary = analysis_plan
+        .secondary_analyses
         .iter()
         .any(|a| a.name == payload.analysis_name);
-    
+
     let (validation_result, is_exploratory, deviation_reason) = if is_primary {
         // Validate against primary analysis specification
-        let planned = analysis_plan.primary_analyses
+        let planned = analysis_plan
+            .primary_analyses
             .iter()
             .find(|a| a.name == payload.analysis_name)
             .unwrap();
-        
-        let matches = planned.statistical_model == payload.actual_test &&
-                      planned.independent_variables == payload.actual_variables;
-        
+
+        let matches = planned.statistical_model == payload.actual_test
+            && planned.independent_variables == payload.actual_variables;
+
         if matches {
             ("valid".to_string(), false, None)
         } else {
@@ -343,11 +373,11 @@ pub async fn validate_analysis(
     } else {
         ("not_preregistered".to_string(), true, None)
     };
-    
+
     // Record validation
     let validation_id = format!("val_{}", Uuid::new_v4());
     let variables_json = serde_json::to_string(&payload.actual_variables)?;
-    
+
     sqlx::query!(
         r#"
         INSERT INTO analysis_validations (
@@ -366,7 +396,7 @@ pub async fn validate_analysis(
     )
     .execute(&state.db)
     .await?;
-    
+
     Ok(Json(ValidationResponse {
         is_preregistered: is_primary || is_secondary,
         is_primary,
@@ -382,33 +412,33 @@ pub async fn list_preregistrations(
     Query(params): Query<ListPreRegistrationsQuery>,
 ) -> Result<Json<Vec<PreRegistrationResponse>>, AppError> {
     let mut query = String::from("SELECT * FROM preregistrations WHERE 1=1");
-    
+
     if let Some(exp_id) = params.experiment_id {
         query.push_str(&format!(" AND experiment_id = '{}'", exp_id));
     }
-    
+
     if let Some(researcher_id) = params.researcher_id {
         query.push_str(&format!(" AND researcher_id = '{}'", researcher_id));
     }
-    
+
     if let Some(status) = params.status {
         query.push_str(&format!(" AND status = '{}'", status));
     }
-    
+
     query.push_str(" ORDER BY created_at DESC");
-    
+
     if let Some(limit) = params.limit {
         query.push_str(&format!(" LIMIT {}", limit));
     }
-    
+
     if let Some(offset) = params.offset {
         query.push_str(&format!(" OFFSET {}", offset));
     }
-    
+
     let preregistrations = sqlx::query_as::<_, PreRegistrationDb>(&query)
         .fetch_all(&state.db)
         .await?;
-    
+
     let responses: Vec<PreRegistrationResponse> = preregistrations
         .into_iter()
         .map(|p| PreRegistrationResponse {
@@ -417,13 +447,21 @@ pub async fn list_preregistrations(
             title: p.title,
             description: p.description,
             status: p.status.clone(),
-            registered_at: if p.status != "draft" { Some(p.registered_at) } else { None },
-            registration_hash: if p.status != "draft" { Some(p.registration_hash) } else { None },
+            registered_at: if p.status != "draft" {
+                Some(p.registered_at)
+            } else {
+                None
+            },
+            registration_hash: if p.status != "draft" {
+                Some(p.registration_hash)
+            } else {
+                None
+            },
             can_edit: p.status == "draft",
             transparency_report: None,
         })
         .collect();
-    
+
     Ok(Json(responses))
 }
 

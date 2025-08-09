@@ -137,5 +137,3 @@ impl PrivacyAccountingService {
         }
     }
 }
-
-

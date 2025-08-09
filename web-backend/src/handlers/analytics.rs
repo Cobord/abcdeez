@@ -10,14 +10,15 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, AppResult},
     middleware::Claims,
-    services::{audit::AuditService, privacy_accounting::PrivacyAccountingService, AnalyticsService, LearnerService},
+    services::{
+        audit::AuditService, privacy_accounting::PrivacyAccountingService, AnalyticsService,
+        LearnerService,
+    },
     state::AppState,
 };
 use axum::http::HeaderValue;
 use graph_learning_core::{
-    statistics::{
-        DetailedStatistics, ExGaussianModel, StrategyType,
-    },
+    statistics::{DetailedStatistics, ExGaussianModel, StrategyType},
     Topology,
 };
 
@@ -74,10 +75,8 @@ pub async fn population(
     );
 
     // Pre-spend privacy budget (global window)
-    let accounting = PrivacyAccountingService::new(
-        Arc::new(state.db_pool.clone()),
-        state.config.clone(),
-    );
+    let accounting =
+        PrivacyAccountingService::new(Arc::new(state.db_pool.clone()), state.config.clone());
     accounting.ensure_budget_row("global", None).await.ok();
     let (eps_cost, delta_cost) = dp_cost_for("/analytics/population", state.config.privacy_epsilon);
     let allowed = accounting
@@ -122,17 +121,14 @@ pub async fn population(
     );
     response.headers_mut().insert(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
-        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon))
+            .unwrap_or(HeaderValue::from_static("1.0")),
     );
 
     // Spend from privacy budget (global window for now)
-    let accounting = PrivacyAccountingService::new(
-        Arc::new(state.db_pool.clone()),
-        state.config.clone(),
-    );
-    let _ = accounting
-        .ensure_budget_row("global", None)
-        .await;
+    let accounting =
+        PrivacyAccountingService::new(Arc::new(state.db_pool.clone()), state.config.clone());
+    let _ = accounting.ensure_budget_row("global", None).await;
     let _ = accounting
         .spend(
             "global",
@@ -161,12 +157,14 @@ pub async fn bottlenecks(
 
     // Pre-spend per-user budget
     {
-        let accounting = PrivacyAccountingService::new(
-            Arc::new(state.db_pool.clone()),
-            state.config.clone(),
-        );
-        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
-        let (eps_cost, delta_cost) = dp_cost_for("/analytics/bottlenecks", state.config.privacy_epsilon);
+        let accounting =
+            PrivacyAccountingService::new(Arc::new(state.db_pool.clone()), state.config.clone());
+        accounting
+            .ensure_budget_row("user", Some(claims.sub))
+            .await
+            .ok();
+        let (eps_cost, delta_cost) =
+            dp_cost_for("/analytics/bottlenecks", state.config.privacy_epsilon);
         let allowed = accounting
             .spend(
                 "user",
@@ -219,7 +217,8 @@ pub async fn bottlenecks(
     );
     response.headers_mut().insert(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
-        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon))
+            .unwrap_or(HeaderValue::from_static("1.0")),
     );
 
     Ok(response)
@@ -401,12 +400,11 @@ pub async fn learning_curves(
     );
     response.headers_mut().insert(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
-        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon))
+            .unwrap_or(HeaderValue::from_static("1.0")),
     );
-    let accounting = PrivacyAccountingService::new(
-        Arc::new(state.db_pool.clone()),
-        state.config.clone(),
-    );
+    let accounting =
+        PrivacyAccountingService::new(Arc::new(state.db_pool.clone()), state.config.clone());
     let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
     let _ = accounting
         .spend(
@@ -434,12 +432,14 @@ pub async fn compare(
 
     // Pre-spend per-user budget
     {
-        let accounting = PrivacyAccountingService::new(
-            Arc::new(state.db_pool.clone()),
-            state.config.clone(),
-        );
-        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
-        let (eps_cost, delta_cost) = dp_cost_for("/analytics/compare", state.config.privacy_epsilon);
+        let accounting =
+            PrivacyAccountingService::new(Arc::new(state.db_pool.clone()), state.config.clone());
+        accounting
+            .ensure_budget_row("user", Some(claims.sub))
+            .await
+            .ok();
+        let (eps_cost, delta_cost) =
+            dp_cost_for("/analytics/compare", state.config.privacy_epsilon);
         let allowed = accounting
             .spend(
                 "user",
@@ -518,7 +518,8 @@ pub async fn compare(
     );
     response.headers_mut().insert(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
-        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon))
+            .unwrap_or(HeaderValue::from_static("1.0")),
     );
     Ok(response)
 }
@@ -536,11 +537,12 @@ pub async fn live(
 
     // Pre-spend per-user budget
     {
-        let accounting = PrivacyAccountingService::new(
-            Arc::new(state.db_pool.clone()),
-            state.config.clone(),
-        );
-        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
+        let accounting =
+            PrivacyAccountingService::new(Arc::new(state.db_pool.clone()), state.config.clone());
+        accounting
+            .ensure_budget_row("user", Some(claims.sub))
+            .await
+            .ok();
         let (eps_cost, delta_cost) = dp_cost_for("/analytics/live", state.config.privacy_epsilon);
         let allowed = accounting
             .spend(
@@ -571,12 +573,11 @@ pub async fn live(
     );
     response.headers_mut().insert(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
-        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+        HeaderValue::from_str(&format!("{:.6}", analytics_service.privacy_epsilon))
+            .unwrap_or(HeaderValue::from_static("1.0")),
     );
-    let accounting = PrivacyAccountingService::new(
-        Arc::new(state.db_pool.clone()),
-        state.config.clone(),
-    );
+    let accounting =
+        PrivacyAccountingService::new(Arc::new(state.db_pool.clone()), state.config.clone());
     let _ = accounting.ensure_budget_row("user", Some(claims.sub)).await;
     let _ = accounting
         .spend(
@@ -667,12 +668,16 @@ pub async fn response_time_analysis(
 ) -> AppResult<axum::response::Response> {
     // Pre-spend per-user budget
     {
-        let accounting = PrivacyAccountingService::new(
-            Arc::new(state.db_pool.clone()),
-            state.config.clone(),
+        let accounting =
+            PrivacyAccountingService::new(Arc::new(state.db_pool.clone()), state.config.clone());
+        accounting
+            .ensure_budget_row("user", Some(claims.sub))
+            .await
+            .ok();
+        let (eps_cost, delta_cost) = dp_cost_for(
+            "/analytics/response-time-analysis",
+            state.config.privacy_epsilon,
         );
-        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
-        let (eps_cost, delta_cost) = dp_cost_for("/analytics/response-time-analysis", state.config.privacy_epsilon);
         let allowed = accounting
             .spend(
                 "user",
@@ -805,7 +810,8 @@ pub async fn response_time_analysis(
     );
     response.headers_mut().insert(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
-        HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+        HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon))
+            .unwrap_or(HeaderValue::from_static("1.0")),
     );
     Ok(response)
 }
@@ -818,12 +824,16 @@ pub async fn learner_performance_analysis(
 ) -> AppResult<axum::response::Response> {
     // Pre-spend per-user budget
     {
-        let accounting = PrivacyAccountingService::new(
-            Arc::new(state.db_pool.clone()),
-            state.config.clone(),
+        let accounting =
+            PrivacyAccountingService::new(Arc::new(state.db_pool.clone()), state.config.clone());
+        accounting
+            .ensure_budget_row("user", Some(claims.sub))
+            .await
+            .ok();
+        let (eps_cost, delta_cost) = dp_cost_for(
+            "/analytics/learner/performance",
+            state.config.privacy_epsilon,
         );
-        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
-        let (eps_cost, delta_cost) = dp_cost_for("/analytics/learner/performance", state.config.privacy_epsilon);
         let allowed = accounting
             .spend(
                 "user",
@@ -1020,7 +1030,8 @@ pub async fn learner_performance_analysis(
     );
     response.headers_mut().insert(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
-        HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+        HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon))
+            .unwrap_or(HeaderValue::from_static("1.0")),
     );
     Ok(response)
 }
@@ -1033,12 +1044,16 @@ pub async fn population_strategy_analysis(
 ) -> AppResult<axum::response::Response> {
     // Pre-spend per-user budget
     {
-        let accounting = PrivacyAccountingService::new(
-            Arc::new(state.db_pool.clone()),
-            state.config.clone(),
+        let accounting =
+            PrivacyAccountingService::new(Arc::new(state.db_pool.clone()), state.config.clone());
+        accounting
+            .ensure_budget_row("user", Some(claims.sub))
+            .await
+            .ok();
+        let (eps_cost, delta_cost) = dp_cost_for(
+            "/analytics/population/strategies",
+            state.config.privacy_epsilon,
         );
-        accounting.ensure_budget_row("user", Some(claims.sub)).await.ok();
-        let (eps_cost, delta_cost) = dp_cost_for("/analytics/population/strategies", state.config.privacy_epsilon);
         let allowed = accounting
             .spend(
                 "user",
@@ -1117,7 +1132,8 @@ pub async fn population_strategy_analysis(
     );
     response.headers_mut().insert(
         axum::http::header::HeaderName::from_static("x-privacy-epsilon"),
-        HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon)).unwrap_or(HeaderValue::from_static("1.0")),
+        HeaderValue::from_str(&format!("{:.6}", state.config.privacy_epsilon))
+            .unwrap_or(HeaderValue::from_static("1.0")),
     );
     Ok(response)
 }

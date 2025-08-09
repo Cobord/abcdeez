@@ -1,8 +1,7 @@
 use chrono::{DateTime, Utc};
 use graph_learning_core::{
-    tasks::TaskResponse as CoreTaskResponse,
-    LearnerMetrics as CoreLearnerMetrics, LearnerModel as CoreLearnerModel,
-    Task as CoreTask, Topology, TopologyType,
+    tasks::TaskResponse as CoreTaskResponse, LearnerMetrics as CoreLearnerMetrics,
+    LearnerModel as CoreLearnerModel, Task as CoreTask, Topology, TopologyType,
 };
 use serde::{Deserialize, Serialize};
 
@@ -361,4 +360,3 @@ impl Session {
         }
     }
 }
-

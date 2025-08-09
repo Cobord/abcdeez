@@ -55,14 +55,14 @@ pub struct IRBFormData {
 }
 
 use api_client::{AdaptiveApiClient, ApiClientTrait};
-use config::{AppConfig, ConfigManager};
 use components::*;
+use config::{AppConfig, ConfigManager};
 use demo::DemoController;
 use easter_egg::LittleCrab;
 use models::*;
 use offline::{ConnectivityMonitor, OfflineStorage, SyncStatus};
 use screens::{
-    dashboard_screen, domain_selection_screen, research_dashboard_screen, settings_screen, 
+    dashboard_screen, domain_selection_screen, research_dashboard_screen, settings_screen,
     training_screen, visualizations_screen, welcome_screen,
 };
 
@@ -144,7 +144,7 @@ pub struct AppData {
 
     // Configuration management
     pub config_manager: ConfigManager,
-    
+
     // API client with fallback capability
     pub api_client: Arc<AdaptiveApiClient>,
 
@@ -179,7 +179,7 @@ pub struct AppData {
     pub api_fallback_enabled: bool,
     pub show_api_settings: bool,
     pub api_connection_status: String,
-    
+
     // Runtime for async operations
     pub runtime: Arc<tokio::runtime::Runtime>,
 
@@ -187,7 +187,7 @@ pub struct AppData {
     pub little_crab: Option<LittleCrab>,
     pub crab_trigger_clicks: usize,
     pub last_click_time: Option<std::time::Instant>,
-    
+
     // Research mode
     pub research_controller: Option<research::ResearchController>,
     pub show_experiment_setup: bool,
@@ -257,9 +257,8 @@ impl Default for AppData {
             config_manager: ConfigManager::new().unwrap_or_else(|e| {
                 tracing::warn!("Failed to initialize config manager: {}", e);
                 // Create a fallback with default config
-                ConfigManager::with_config_file("./config.toml").unwrap_or_else(|_| {
-                    panic!("Failed to create fallback config manager")
-                })
+                ConfigManager::with_config_file("./config.toml")
+                    .unwrap_or_else(|_| panic!("Failed to create fallback config manager"))
             }),
             api_client: {
                 let config_manager = ConfigManager::new().unwrap_or_else(|e| {
@@ -309,26 +308,23 @@ impl Default for AppData {
 
             // API Configuration UI state (initialize from config)
             api_url_input: {
-                let config_manager_temp = ConfigManager::new().unwrap_or_else(|_| {
-                    ConfigManager::with_config_file("./config.toml").unwrap()
-                });
+                let config_manager_temp = ConfigManager::new()
+                    .unwrap_or_else(|_| ConfigManager::with_config_file("./config.toml").unwrap());
                 config_manager_temp.config().api_url().to_string()
             },
             api_timeout_input: {
-                let config_manager_temp = ConfigManager::new().unwrap_or_else(|_| {
-                    ConfigManager::with_config_file("./config.toml").unwrap()
-                });
+                let config_manager_temp = ConfigManager::new()
+                    .unwrap_or_else(|_| ConfigManager::with_config_file("./config.toml").unwrap());
                 config_manager_temp.config().api.timeout_seconds.to_string()
             },
             api_fallback_enabled: {
-                let config_manager_temp = ConfigManager::new().unwrap_or_else(|_| {
-                    ConfigManager::with_config_file("./config.toml").unwrap()
-                });
+                let config_manager_temp = ConfigManager::new()
+                    .unwrap_or_else(|_| ConfigManager::with_config_file("./config.toml").unwrap());
                 config_manager_temp.config().should_fallback_to_mock()
             },
             show_api_settings: false,
             api_connection_status: "Not tested".to_string(),
-            
+
             // Runtime for async operations
             runtime: Arc::new(runtime),
 
@@ -336,7 +332,7 @@ impl Default for AppData {
             little_crab: Some(easter_egg::init_random_crab()),
             crab_trigger_clicks: 0,
             last_click_time: None,
-            
+
             // Research mode
             research_controller: None,
             show_experiment_setup: false,
@@ -529,9 +525,11 @@ fn app_logic(data: &mut AppData) -> impl WidgetView<AppData> {
             (data.current_screen == Screen::Training).then(|| training_screen(data)),
             (data.current_screen == Screen::Dashboard).then(|| dashboard_screen(data)),
             (data.current_screen == Screen::Settings).then(|| settings_screen(data)),
-            (data.current_screen == Screen::ResearchDashboard).then(|| research_dashboard_screen(data)),
+            (data.current_screen == Screen::ResearchDashboard)
+                .then(|| research_dashboard_screen(data)),
             (data.current_screen == Screen::Visualizations).then(|| visualizations_screen(data)),
-            (data.current_screen == Screen::WidgetGallery).then(|| screens::widget_gallery_screen(data)),
+            (data.current_screen == Screen::WidgetGallery)
+                .then(|| screens::widget_gallery_screen(data)),
         ))
         .direction(Axis::Vertical),
     ))
@@ -632,7 +630,9 @@ impl AppData {
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn setup_online_offline_listeners(connectivity: std::sync::Arc<ConnectivityMonitor>) -> Result<(), String> {
+    fn setup_online_offline_listeners(
+        connectivity: std::sync::Arc<ConnectivityMonitor>,
+    ) -> Result<(), String> {
         use wasm_bindgen::closure::Closure;
         use wasm_bindgen::JsCast;
         let window = web_sys::window().ok_or("no window")?;
@@ -1346,7 +1346,7 @@ impl AppData {
                 // Update metrics
                 self.current_metrics
                     .update(correct, response_time_ms as i32);
-                
+
                 // Record to research controller if active
                 if let Some(controller) = &mut self.research_controller {
                     if controller.active_session.is_some() {

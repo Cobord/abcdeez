@@ -7,12 +7,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{
-    error::AppResult,
-    middleware::Claims,
-    models::gamification::*,
-    state::AppState,
-};
+use crate::{error::AppResult, middleware::Claims, models::gamification::*, state::AppState};
 
 // ============= Profile Endpoints =============
 

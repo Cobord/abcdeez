@@ -1,6 +1,6 @@
+use statrs::distribution::{ContinuousCDF, StudentsT};
 /// Mathematical utilities with numerical stability guarantees
 use std::f64;
-use statrs::distribution::{StudentsT, ContinuousCDF};
 
 /// Safe division that handles edge cases
 pub fn safe_divide(numerator: f64, denominator: f64) -> Option<f64> {

@@ -3,17 +3,12 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{
-    components::*, 
-    models::*, 
-    research::*,
-    visualization_components::*,
-    AppData, Screen,
-};
+use crate::{components::*, models::*, research::*, visualization_components::*, AppData, Screen};
 
 pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
     let has_controller = data.research_controller.is_some();
-    let has_active_experiment = data.research_controller
+    let has_active_experiment = data
+        .research_controller
         .as_ref()
         .and_then(|c| c.active_session.as_ref())
         .is_some();
@@ -85,11 +80,12 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                 prose("Enable research mode to collect detailed experimental data")
                     .alignment(TextAlignment::Middle),
                 button("🔬 Initialize Research Mode", |data: &mut AppData| {
-                    let participant_id = data.current_user
+                    let participant_id = data
+                        .current_user
                         .as_ref()
                         .map(|u| u.id.clone())
                         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-                    
+
                     data.research_controller = Some(ResearchController::new(participant_id));
                     data.success_message = Some("Research mode initialized".to_string());
                 }),
@@ -142,13 +138,11 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                     parameters: std::collections::HashMap::new(),
                                     control_group: data.experiment_control_group,
                                 };
-                                
+
                                 match controller.start_experiment(exp_type, condition) {
                                     Ok(session_id) => {
-                                        data.success_message = Some(format!(
-                                            "Started experiment: {}",
-                                            session_id
-                                        ));
+                                        data.success_message =
+                                            Some(format!("Started experiment: {}", session_id));
                                         data.show_experiment_setup = false;
                                     }
                                     Err(e) => {
@@ -172,7 +166,8 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
 
     let collected_data = if let Some(controller) = &data.research_controller {
         let total_sessions = controller.sessions.len();
-        let total_data_points: usize = controller.sessions
+        let total_data_points: usize = controller
+            .sessions
             .iter()
             .map(|s| s.data_points.len())
             .sum();
@@ -194,7 +189,8 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                 ))
                 .direction(Axis::Horizontal),
                 if !controller.sessions.is_empty() {
-                    let recent_sessions: Vec<_> = controller.sessions
+                    let recent_sessions: Vec<_> = controller
+                        .sessions
                         .iter()
                         .rev()
                         .take(5)
@@ -210,12 +206,14 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                             .direction(Axis::Horizontal)
                         })
                         .collect();
-                    
-                    Some(flex((
-                        label("Recent Sessions:").alignment(TextAlignment::Start),
-                        flex(recent_sessions).direction(Axis::Vertical),
-                    ))
-                    .direction(Axis::Vertical))
+
+                    Some(
+                        flex((
+                            label("Recent Sessions:").alignment(TextAlignment::Start),
+                            flex(recent_sessions).direction(Axis::Vertical),
+                        ))
+                        .direction(Axis::Vertical),
+                    )
                 } else {
                     None
                 },
@@ -240,13 +238,20 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
             let condition_comparison = analyzer.compare_conditions();
 
             // Calculate comprehensive statistics from collected data
-            let total_data_points: usize = controller.sessions.iter()
-                .map(|s| s.data_points.len()).sum();
-            let response_times: Vec<f64> = controller.sessions.iter()
+            let total_data_points: usize = controller
+                .sessions
+                .iter()
+                .map(|s| s.data_points.len())
+                .sum();
+            let response_times: Vec<f64> = controller
+                .sessions
+                .iter()
                 .flat_map(|s| s.data_points.iter())
                 .map(|dp| dp.response_time_ms as f64)
                 .collect();
-            let accuracy_scores: Vec<f64> = controller.sessions.iter()
+            let accuracy_scores: Vec<f64> = controller
+                .sessions
+                .iter()
                 .map(|s| {
                     let correct = s.data_points.iter().filter(|dp| dp.correct).count();
                     correct as f64 / s.data_points.len().max(1) as f64
@@ -529,7 +534,8 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     if let Some(controller) = &data.research_controller {
                         match controller.export_research_data(crate::research::ExportFormat::Json) {
                             Ok(_) => {
-                                data.success_message = Some("Research data exported as JSON".to_string());
+                                data.success_message =
+                                    Some("Research data exported as JSON".to_string());
                             }
                             Err(e) => {
                                 data.error_message = Some(e);
@@ -541,7 +547,8 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     if let Some(controller) = &data.research_controller {
                         match controller.export_research_data(crate::research::ExportFormat::Csv) {
                             Ok(_) => {
-                                data.success_message = Some("Research data exported as CSV".to_string());
+                                data.success_message =
+                                    Some("Research data exported as CSV".to_string());
                             }
                             Err(e) => {
                                 data.error_message = Some(e);
@@ -570,9 +577,11 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                         "❌ Disabled"
                     },
                     |data: &mut AppData| {
-                        data.research_data_collection_enabled = !data.research_data_collection_enabled;
+                        data.research_data_collection_enabled =
+                            !data.research_data_collection_enabled;
                         if let Some(controller) = &mut data.research_controller {
-                            controller.data_collection_enabled = data.research_data_collection_enabled;
+                            controller.data_collection_enabled =
+                                data.research_data_collection_enabled;
                         }
                     },
                 ),
@@ -619,7 +628,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
     let audio_controls = if let Some(controller) = &data.research_controller {
         let recording_button_text = match &controller.recording_state {
             crate::research::AudioRecordingState::Idle => "🎤 Start Recording",
-            crate::research::AudioRecordingState::Recording { .. } => "⏹ Stop Recording", 
+            crate::research::AudioRecordingState::Recording { .. } => "⏹ Stop Recording",
             crate::research::AudioRecordingState::Paused { .. } => "▶ Resume Recording",
             crate::research::AudioRecordingState::Processing => "⏳ Processing...",
             crate::research::AudioRecordingState::Completed { .. } => "✅ Recording Complete",
@@ -628,7 +637,9 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
 
         let recording_info = match &controller.recording_state {
             crate::research::AudioRecordingState::Recording { start_time, .. } => {
-                let duration = chrono::Utc::now().signed_duration_since(*start_time).num_seconds();
+                let duration = chrono::Utc::now()
+                    .signed_duration_since(*start_time)
+                    .num_seconds();
                 Some(format!("Recording: {}:{:02}", duration / 60, duration % 60))
             }
             crate::research::AudioRecordingState::Completed { file_path } => {
@@ -689,9 +700,10 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
         None
     };
 
-    // Sensor Integration Controls  
+    // Sensor Integration Controls
     let sensor_controls = if let Some(controller) = &data.research_controller {
-        let sensor_buttons: Vec<_> = controller.connected_sensors
+        let sensor_buttons: Vec<_> = controller
+            .connected_sensors
             .iter()
             .map(|sensor| {
                 let button_text = format!(
@@ -704,7 +716,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     },
                     sensor.sensor_type
                 );
-                
+
                 let sensor_type = sensor.sensor_type.clone();
                 button(button_text, move |data: &mut AppData| {
                     if let Some(controller) = &mut data.research_controller {
@@ -778,20 +790,24 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     }),
                 ))
                 .direction(Axis::Horizontal),
-                
                 // Show existing applications
                 if !pending_applications.is_empty() {
-                    let applications: Vec<_> = pending_applications.iter()
+                    let applications: Vec<_> = pending_applications
+                        .iter()
                         .take(3) // Show only first 3 applications
                         .map(|app| {
                             let status_color = match app.status {
-                                crate::research::IRBStatus::Draft => Color::from_rgb8(128, 128, 128),
-                                crate::research::IRBStatus::Submitted => Color::from_rgb8(255, 165, 0),
+                                crate::research::IRBStatus::Draft => {
+                                    Color::from_rgb8(128, 128, 128)
+                                }
+                                crate::research::IRBStatus::Submitted => {
+                                    Color::from_rgb8(255, 165, 0)
+                                }
                                 crate::research::IRBStatus::Approved => Color::from_rgb8(0, 128, 0),
                                 crate::research::IRBStatus::Rejected => Color::from_rgb8(255, 0, 0),
                                 _ => Color::from_rgb8(100, 100, 100),
                             };
-                            
+
                             flex((
                                 label(format!("📄 {}", app.study_title))
                                     .alignment(TextAlignment::Start),
@@ -802,16 +818,18 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                             .direction(Axis::Horizontal)
                         })
                         .collect();
-                    
+
                     Some(flex(applications).direction(Axis::Vertical))
                 } else {
                     Some(label("No IRB applications yet").alignment(TextAlignment::Middle))
                 },
-
                 // Generated Documents Section
                 flex((
-                    label(format!("Generated Documents: {}", generated_documents.len()))
-                        .alignment(TextAlignment::Start),
+                    label(format!(
+                        "Generated Documents: {}",
+                        generated_documents.len()
+                    ))
+                    .alignment(TextAlignment::Start),
                     if !generated_documents.is_empty() {
                         Some(button("📄 View Documents", |data: &mut AppData| {
                             data.show_irb_documents = true;
@@ -821,7 +839,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     },
                 ))
                 .direction(Axis::Horizontal),
-
                 // Quick Actions
                 flex((
                     button("📝 Generate Consent Form", |data: &mut AppData| {
@@ -833,7 +850,8 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                 vec!["Complete cognitive learning tasks".to_string()],
                             ) {
                                 Ok(doc_id) => {
-                                    data.success_message = Some(format!("Consent form generated: {}", &doc_id[..8]));
+                                    data.success_message =
+                                        Some(format!("Consent form generated: {}", &doc_id[..8]));
                                 }
                                 Err(e) => {
                                     data.error_message = Some(e);
@@ -843,9 +861,14 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     }),
                     button("📊 Data Management Plan", |data: &mut AppData| {
                         if let Some(controller) = &mut data.research_controller {
-                            match controller.generate_data_management_plan("Learning Study".to_string()) {
+                            match controller
+                                .generate_data_management_plan("Learning Study".to_string())
+                            {
                                 Ok(doc_id) => {
-                                    data.success_message = Some(format!("Data management plan generated: {}", &doc_id[..8]));
+                                    data.success_message = Some(format!(
+                                        "Data management plan generated: {}",
+                                        &doc_id[..8]
+                                    ));
                                 }
                                 Err(e) => {
                                     data.error_message = Some(e);
@@ -855,26 +878,30 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     }),
                 ))
                 .direction(Axis::Horizontal),
-
                 // Compliance Status
                 if !pending_applications.is_empty() {
-                    let approved_count = pending_applications.iter()
+                    let approved_count = pending_applications
+                        .iter()
                         .filter(|app| matches!(app.status, crate::research::IRBStatus::Approved))
                         .count();
-                    
-                    Some(flex((
-                        label(format!("✅ Approved: {}", approved_count))
-                            .brush(Color::from_rgb8(0, 128, 0)),
-                        label(format!("📋 Total: {}", pending_applications.len()))
-                            .brush(Color::from_rgb8(100, 100, 100)),
-                    ))
-                    .direction(Axis::Horizontal))
+
+                    Some(
+                        flex((
+                            label(format!("✅ Approved: {}", approved_count))
+                                .brush(Color::from_rgb8(0, 128, 0)),
+                            label(format!("📋 Total: {}", pending_applications.len()))
+                                .brush(Color::from_rgb8(100, 100, 100)),
+                        ))
+                        .direction(Axis::Horizontal),
+                    )
                 } else {
-                    Some(label("💡 Generate IRB documents before starting data collection")
-                        .alignment(TextAlignment::Start))
+                    Some(
+                        label("💡 Generate IRB documents before starting data collection")
+                            .alignment(TextAlignment::Start),
+                    )
                 },
             ))
-            .direction(Axis::Vertical)
+            .direction(Axis::Vertical),
         ))
     } else {
         None
@@ -889,48 +916,45 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                 flex((
                     label("Study Title:").alignment(TextAlignment::Start),
                     button(
-                        if data.irb_form_data.study_title.is_empty() { 
-                            "[Enter study title]" 
-                        } else { 
-                            &data.irb_form_data.study_title 
+                        if data.irb_form_data.study_title.is_empty() {
+                            "[Enter study title]"
+                        } else {
+                            &data.irb_form_data.study_title
                         },
                         |_data: &mut AppData| {
                             // In a real app, this would open a text input dialog
-                        }
+                        },
                     ),
                 ))
                 .direction(Axis::Horizontal),
-                
                 flex((
                     label("Principal Investigator:").alignment(TextAlignment::Start),
                     button(
-                        if data.irb_form_data.principal_investigator.is_empty() { 
-                            "[Enter PI name]" 
-                        } else { 
-                            &data.irb_form_data.principal_investigator 
+                        if data.irb_form_data.principal_investigator.is_empty() {
+                            "[Enter PI name]"
+                        } else {
+                            &data.irb_form_data.principal_investigator
                         },
                         |_data: &mut AppData| {
                             // Text input placeholder
-                        }
+                        },
                     ),
                 ))
                 .direction(Axis::Horizontal),
-
                 flex((
                     label("Institution:").alignment(TextAlignment::Start),
                     button(
-                        if data.irb_form_data.institution.is_empty() { 
-                            "[Enter institution]" 
-                        } else { 
-                            &data.irb_form_data.institution 
+                        if data.irb_form_data.institution.is_empty() {
+                            "[Enter institution]"
+                        } else {
+                            &data.irb_form_data.institution
                         },
                         |_data: &mut AppData| {
                             // Text input placeholder
-                        }
+                        },
                     ),
                 ))
                 .direction(Axis::Horizontal),
-
                 // Form actions
                 flex((
                     button("📋 Create Application", |data: &mut AppData| {
@@ -941,13 +965,13 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                             } else {
                                 data.irb_form_data.study_title.clone()
                             };
-                            
+
                             let pi = if data.irb_form_data.principal_investigator.is_empty() {
                                 "Dr. Research Scientist".to_string()
                             } else {
                                 data.irb_form_data.principal_investigator.clone()
                             };
-                            
+
                             let institution = if data.irb_form_data.institution.is_empty() {
                                 "University Research Center".to_string()
                             } else {
@@ -960,10 +984,14 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                 institution,
                                 "Study cognitive learning patterns and performance".to_string(),
                                 "Adult participants aged 18-65".to_string(),
-                                vec!["Response time measurement".to_string(), "Audio recording (optional)".to_string()],
+                                vec![
+                                    "Response time measurement".to_string(),
+                                    "Audio recording (optional)".to_string(),
+                                ],
                             ) {
                                 Ok(app_id) => {
-                                    data.success_message = Some(format!("IRB application created: {}", &app_id[..8]));
+                                    data.success_message =
+                                        Some(format!("IRB application created: {}", &app_id[..8]));
                                     data.show_irb_form = false;
                                     // Reset form
                                     data.irb_form_data = crate::IRBFormData::default();
@@ -981,7 +1009,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                 ))
                 .direction(Axis::Horizontal),
             ))
-            .direction(Axis::Vertical)
+            .direction(Axis::Vertical),
         ))
     } else {
         None
@@ -991,17 +1019,24 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
     let irb_documents_modal = if data.show_irb_documents {
         if let Some(controller) = &data.research_controller {
             let documents = controller.get_generated_documents();
-            
-            let document_list: Vec<_> = documents.iter()
+
+            let document_list: Vec<_> = documents
+                .iter()
                 .take(5)
                 .map(|doc| {
                     flex((
                         label(format!("📄 {}", doc.title)).alignment(TextAlignment::Start),
                         label(format!("{:?}", doc.status))
                             .brush(match doc.status {
-                                crate::research::DocumentStatus::Draft => Color::from_rgb8(128, 128, 128),
-                                crate::research::DocumentStatus::Generated => Color::from_rgb8(0, 128, 255),
-                                crate::research::DocumentStatus::Approved => Color::from_rgb8(0, 128, 0),
+                                crate::research::DocumentStatus::Draft => {
+                                    Color::from_rgb8(128, 128, 128)
+                                }
+                                crate::research::DocumentStatus::Generated => {
+                                    Color::from_rgb8(0, 128, 255)
+                                }
+                                crate::research::DocumentStatus::Approved => {
+                                    Color::from_rgb8(0, 128, 0)
+                                }
                                 _ => Color::from_rgb8(100, 100, 100),
                             })
                             .alignment(TextAlignment::End),
@@ -1019,11 +1054,13 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                             if let Some(controller) = &mut data.research_controller {
                                 let mut exported_count = 0;
                                 for doc in controller.get_generated_documents().clone() {
-                                    if let Ok(_) = controller.export_irb_document(&doc.document_id) {
+                                    if let Ok(_) = controller.export_irb_document(&doc.document_id)
+                                    {
                                         exported_count += 1;
                                     }
                                 }
-                                data.success_message = Some(format!("Exported {} documents", exported_count));
+                                data.success_message =
+                                    Some(format!("Exported {} documents", exported_count));
                             }
                         }),
                         button("✖ Close", |data: &mut AppData| {
@@ -1032,7 +1069,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     ))
                     .direction(Axis::Horizontal),
                 ))
-                .direction(Axis::Vertical)
+                .direction(Axis::Vertical),
             ))
         } else {
             None
@@ -1059,47 +1096,52 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                 irb_contact: "irb@university.edu".to_string(),
                                 data_protection_officer: "dpo@university.edu".to_string(),
                             };
-                            
-                            data.federation_network = Some(
-                                crate::federation::FederationNetwork::new(
+
+                            data.federation_network =
+                                Some(crate::federation::FederationNetwork::new(
                                     "University Research Center".to_string(),
-                                    contact
-                                )
-                            );
-                            
-                            data.success_message = Some("Federation network initialized".to_string());
+                                    contact,
+                                ));
+
+                            data.success_message =
+                                Some("Federation network initialized".to_string());
                             data.show_federation_setup = false;
                         }),
                         button("🔗 Join Network", |data: &mut AppData| {
-                            data.success_message = Some("Network discovery started - found 3 peer institutions".to_string());
+                            data.success_message = Some(
+                                "Network discovery started - found 3 peer institutions".to_string(),
+                            );
                         }),
                     ))
                     .direction(Axis::Horizontal),
                 ))
                 .direction(Axis::Vertical),
-
                 flex((
                     label("Data Governance:").alignment(TextAlignment::Start),
                     flex((
                         button("📋 GDPR Compliance", |data: &mut AppData| {
-                            data.success_message = Some("GDPR compliance configured for EU data sharing".to_string());
+                            data.success_message =
+                                Some("GDPR compliance configured for EU data sharing".to_string());
                         }),
                         button("🏥 HIPAA Settings", |data: &mut AppData| {
-                            data.success_message = Some("HIPAA compliance enabled for healthcare data".to_string());
+                            data.success_message =
+                                Some("HIPAA compliance enabled for healthcare data".to_string());
                         }),
                         button("🔒 Encryption Keys", |data: &mut AppData| {
-                            data.success_message = Some("End-to-end encryption keys generated and distributed".to_string());
+                            data.success_message = Some(
+                                "End-to-end encryption keys generated and distributed".to_string(),
+                            );
                         }),
                     ))
                     .direction(Axis::Horizontal),
                 ))
                 .direction(Axis::Vertical),
-
                 flex((
                     button("✅ Complete Setup", |data: &mut AppData| {
                         data.federation_status = crate::federation::ComplianceStatus::Compliant;
                         data.show_federation_setup = false;
-                        data.success_message = Some("Federation network setup complete!".to_string());
+                        data.success_message =
+                            Some("Federation network setup complete!".to_string());
                     }),
                     button("❌ Cancel", |data: &mut AppData| {
                         data.show_federation_setup = false;
@@ -1107,7 +1149,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                 ))
                 .direction(Axis::Horizontal),
             ))
-            .direction(Axis::Vertical)
+            .direction(Axis::Vertical),
         ))
     } else {
         None
@@ -1146,29 +1188,36 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     .direction(Axis::Vertical),
                 ))
                 .direction(Axis::Vertical),
-
                 flex((
                     label("Actions:").alignment(TextAlignment::Start),
                     flex((
                         button("➕ Create Protocol", |data: &mut AppData| {
-                            data.success_message = Some("Protocol template created - define experiment parameters".to_string());
+                            data.success_message = Some(
+                                "Protocol template created - define experiment parameters"
+                                    .to_string(),
+                            );
                         }),
                         button("📋 Join Study", |data: &mut AppData| {
-                            data.success_message = Some("Joined Multi-Site Learning Study - IRB approval required".to_string());
+                            data.success_message = Some(
+                                "Joined Multi-Site Learning Study - IRB approval required"
+                                    .to_string(),
+                            );
                         }),
                         button("📊 View Details", |data: &mut AppData| {
-                            data.success_message = Some("Protocol details: 200 trials, RT + accuracy, audio optional".to_string());
+                            data.success_message = Some(
+                                "Protocol details: 200 trials, RT + accuracy, audio optional"
+                                    .to_string(),
+                            );
                         }),
                     ))
                     .direction(Axis::Horizontal),
                 ))
                 .direction(Axis::Vertical),
-
                 button("✖ Close", |data: &mut AppData| {
                     data.show_protocol_browser = false;
                 }),
             ))
-            .direction(Axis::Vertical)
+            .direction(Axis::Vertical),
         ))
     } else {
         None
@@ -1183,11 +1232,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                 flex((
                     label("Active Studies:").alignment(TextAlignment::Start),
                     flex((
-                        metric_display(
-                            "Sites",
-                            "5".to_string(),
-                            Color::from_rgb8(0, 114, 178),
-                        ),
+                        metric_display("Sites", "5".to_string(), Color::from_rgb8(0, 114, 178)),
                         metric_display(
                             "Participants",
                             "247".to_string(),
@@ -1207,7 +1252,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     .direction(Axis::Horizontal),
                 ))
                 .direction(Axis::Vertical),
-
                 // Site-Specific Metrics
                 flex((
                     label("Site Performance:").alignment(TextAlignment::Start),
@@ -1237,30 +1281,35 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     .direction(Axis::Vertical),
                 ))
                 .direction(Axis::Vertical),
-
                 // Coordination Tools
                 flex((
                     label("Coordination Tools:").alignment(TextAlignment::Start),
                     flex((
                         button("📊 Interim Analysis", |data: &mut AppData| {
-                            data.success_message = Some("Interim analysis scheduled - DMC review on March 15".to_string());
+                            data.success_message = Some(
+                                "Interim analysis scheduled - DMC review on March 15".to_string(),
+                            );
                         }),
                         button("📋 Protocol Update", |data: &mut AppData| {
-                            data.success_message = Some("Protocol v1.2 distributed to all sites for approval".to_string());
+                            data.success_message = Some(
+                                "Protocol v1.2 distributed to all sites for approval".to_string(),
+                            );
                         }),
                         button("⚠️ Quality Alert", |data: &mut AppData| {
-                            data.error_message = Some("Site B: Low completion rate detected - intervention needed".to_string());
+                            data.error_message = Some(
+                                "Site B: Low completion rate detected - intervention needed"
+                                    .to_string(),
+                            );
                         }),
                     ))
                     .direction(Axis::Horizontal),
                 ))
                 .direction(Axis::Vertical),
-
                 button("✖ Close", |data: &mut AppData| {
                     data.show_study_coordination = false;
                 }),
             ))
-            .direction(Axis::Vertical)
+            .direction(Axis::Vertical),
         ))
     } else {
         None
@@ -1276,15 +1325,23 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                 flex((
                     label(format!("Status: {:?}", data.federation_status))
                         .brush(match data.federation_status {
-                            crate::federation::ComplianceStatus::Compliant => Color::from_rgb8(0, 128, 0),
-                            crate::federation::ComplianceStatus::NonCompliant => Color::from_rgb8(255, 0, 0),
-                            crate::federation::ComplianceStatus::UnderReview => Color::from_rgb8(255, 165, 0),
+                            crate::federation::ComplianceStatus::Compliant => {
+                                Color::from_rgb8(0, 128, 0)
+                            }
+                            crate::federation::ComplianceStatus::NonCompliant => {
+                                Color::from_rgb8(255, 0, 0)
+                            }
+                            crate::federation::ComplianceStatus::UnderReview => {
+                                Color::from_rgb8(255, 165, 0)
+                            }
                         })
                         .alignment(TextAlignment::End),
                     if let Some(network) = &data.federation_network {
-                        Some(label(format!("Network: {} nodes", network.peer_nodes.len() + 1))
-                            .brush(Color::from_rgb8(0, 114, 178))
-                            .alignment(TextAlignment::End))
+                        Some(
+                            label(format!("Network: {} nodes", network.peer_nodes.len() + 1))
+                                .brush(Color::from_rgb8(0, 114, 178))
+                                .alignment(TextAlignment::End),
+                        )
                     } else {
                         None
                     },
@@ -1292,7 +1349,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                 .direction(Axis::Horizontal),
             ))
             .direction(Axis::Vertical),
-
             // Federation Actions
             flex((
                 label("Network Management:").alignment(TextAlignment::Start),
@@ -1314,56 +1370,66 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                 .direction(Axis::Horizontal),
             ))
             .direction(Axis::Vertical),
-
             // Data Sharing Controls
             flex((
                 label("Data Sharing:").alignment(TextAlignment::Start),
                 flex((
                     button("🔒 Privacy Settings", |data: &mut AppData| {
-                        data.success_message = Some("Privacy: GDPR compliant, data anonymized, 7-year retention".to_string());
+                        data.success_message = Some(
+                            "Privacy: GDPR compliant, data anonymized, 7-year retention"
+                                .to_string(),
+                        );
                     }),
                     button("📊 Share Aggregates", |data: &mut AppData| {
-                        data.success_message = Some("Shared anonymized summary statistics with 3 partner sites".to_string());
+                        data.success_message = Some(
+                            "Shared anonymized summary statistics with 3 partner sites".to_string(),
+                        );
                     }),
                     button("🔑 Key Management", |data: &mut AppData| {
-                        data.success_message = Some("Encryption keys rotated, secure channels verified".to_string());
+                        data.success_message =
+                            Some("Encryption keys rotated, secure channels verified".to_string());
                     }),
                 ))
                 .direction(Axis::Horizontal),
             ))
             .direction(Axis::Vertical),
-
             // Network Statistics
             if let Some(network) = &data.federation_network {
                 let summary = network.get_federation_summary();
-                Some(flex((
-                    label("Network Statistics:").alignment(TextAlignment::Start),
+                Some(
                     flex((
-                        metric_display(
-                            "Nodes",
-                            summary.total_nodes.to_string(),
-                            Color::from_rgb8(0, 114, 178),
-                        ),
-                        metric_display(
-                            "Studies",
-                            summary.active_studies.to_string(),
-                            Color::from_rgb8(230, 159, 0),
-                        ),
-                        metric_display(
-                            "Participants",
-                            summary.total_participants.to_string(),
-                            Color::from_rgb8(0, 158, 115),
-                        ),
+                        label("Network Statistics:").alignment(TextAlignment::Start),
+                        flex((
+                            metric_display(
+                                "Nodes",
+                                summary.total_nodes.to_string(),
+                                Color::from_rgb8(0, 114, 178),
+                            ),
+                            metric_display(
+                                "Studies",
+                                summary.active_studies.to_string(),
+                                Color::from_rgb8(230, 159, 0),
+                            ),
+                            metric_display(
+                                "Participants",
+                                summary.total_participants.to_string(),
+                                Color::from_rgb8(0, 158, 115),
+                            ),
+                        ))
+                        .direction(Axis::Horizontal),
                     ))
-                    .direction(Axis::Horizontal),
-                ))
-                .direction(Axis::Vertical))
+                    .direction(Axis::Vertical),
+                )
             } else {
-                Some(flex((
-                    label("💡 Federation enables secure multi-site research collaboration").alignment(TextAlignment::Start),
-                    label("Features: Protocol sharing, data federation, compliance management").alignment(TextAlignment::Start),
-                ))
-                .direction(Axis::Vertical))
+                Some(
+                    flex((
+                        label("💡 Federation enables secure multi-site research collaboration")
+                            .alignment(TextAlignment::Start),
+                        label("Features: Protocol sharing, data federation, compliance management")
+                            .alignment(TextAlignment::Start),
+                    ))
+                    .direction(Axis::Vertical),
+                )
             },
         ))
         .direction(Axis::Vertical),

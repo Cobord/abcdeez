@@ -63,7 +63,7 @@ impl StrategyMixtureModel {
             Some(s) => rand::rngs::StdRng::seed_from_u64(s),
             None => rand::rngs::StdRng::from_entropy(),
         };
-        
+
         let strategies = Self::initialize_strategies(topology);
         let n = strategies.len();
         let mixture_weights = vec![1.0 / n as f64; n];
@@ -289,7 +289,6 @@ impl StrategyMixtureModel {
 
     /// Select next strategy based on mixture weights and transition probabilities
     pub fn select_strategy(&mut self) -> usize {
-
         // Combine mixture weights with transition probabilities
         let mut probabilities = Vec::new();
         for i in 0..self.strategies.len() {
@@ -370,7 +369,9 @@ impl StrategyMixtureModel {
                 } else {
                     // Error biased toward anchors
                     if !strategy.parameters.anchor_points.is_empty() && self.rng.gen_bool(0.5) {
-                        let idx = self.rng.gen_range(0..strategy.parameters.anchor_points.len());
+                        let idx = self
+                            .rng
+                            .gen_range(0..strategy.parameters.anchor_points.len());
                         (
                             strategy.parameters.anchor_points[idx].clone(),
                             confidence * 0.3,

@@ -19,11 +19,11 @@ pub async fn tracing_middleware(mut request: Request, next: Next) -> Response {
     let uri = request.uri().clone();
     let path = uri.path();
     let query = uri.query().unwrap_or("");
-    
+
     // Extract or generate trace ID
     let trace_id = extract_or_generate_trace_id(request.headers());
     let request_id = Uuid::new_v4().to_string();
-    
+
     // Add trace context to request headers for downstream services
     request.headers_mut().insert(
         HeaderName::from_static(TRACE_ID_HEADER),
@@ -92,11 +92,7 @@ pub async fn tracing_middleware(mut request: Request, next: Next) -> Response {
 
         // Record metrics
         crate::monitoring::global_metrics()
-            .record_request(
-                path,
-                duration.as_millis() as u64,
-                !status.is_success(),
-            )
+            .record_request(path, duration.as_millis() as u64, !status.is_success())
             .await;
 
         response
@@ -153,7 +149,7 @@ pub async fn request_logging_middleware(request: Request, next: Next) -> Respons
     let method = request.method().clone();
     let uri = request.uri().clone();
     let headers = request.headers().clone();
-    
+
     // Only log in debug builds or when explicitly enabled
     #[cfg(debug_assertions)]
     {
@@ -226,9 +222,10 @@ pub async fn error_tracking_middleware(request: Request, next: Next) -> Response
             trace_id = %trace_id,
             "Client error encountered"
         );
-        
+
         // Record client error metrics
-        crate::monitoring::global_metrics().error_count
+        crate::monitoring::global_metrics()
+            .error_count
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     } else if status.is_server_error() {
         error!(
@@ -238,11 +235,12 @@ pub async fn error_tracking_middleware(request: Request, next: Next) -> Response
             trace_id = %trace_id,
             "Server error encountered"
         );
-        
+
         // Record server error metrics
-        crate::monitoring::global_metrics().error_count
+        crate::monitoring::global_metrics()
+            .error_count
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        
+
         // TODO: Send alert to monitoring system for 5xx errors
     }
 
@@ -258,8 +256,11 @@ mod tests {
     fn test_extract_w3c_trace_id() {
         let traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
         let trace_id = extract_w3c_trace_id(traceparent);
-        assert_eq!(trace_id, Some("4bf92f3577b34da6a3ce929d0e0e4736".to_string()));
-        
+        assert_eq!(
+            trace_id,
+            Some("4bf92f3577b34da6a3ce929d0e0e4736".to_string())
+        );
+
         // Test invalid format
         let invalid_traceparent = "invalid-format";
         let trace_id = extract_w3c_trace_id(invalid_traceparent);
@@ -269,14 +270,11 @@ mod tests {
     #[test]
     fn test_extract_or_generate_trace_id() {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            TRACE_ID_HEADER,
-            HeaderValue::from_static("test-trace-id"),
-        );
-        
+        headers.insert(TRACE_ID_HEADER, HeaderValue::from_static("test-trace-id"));
+
         let trace_id = extract_or_generate_trace_id(&headers);
         assert_eq!(trace_id, "test-trace-id");
-        
+
         // Test generation when no header present
         let empty_headers = HeaderMap::new();
         let trace_id = extract_or_generate_trace_id(&empty_headers);

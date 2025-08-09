@@ -247,10 +247,14 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             flex((
                 flex((
                     button(
-                        if data.show_api_settings { "🔽 Hide API Settings" } else { "🔧 Show API Settings" },
+                        if data.show_api_settings {
+                            "🔽 Hide API Settings"
+                        } else {
+                            "🔧 Show API Settings"
+                        },
                         |data: &mut AppData| {
                             data.show_api_settings = !data.show_api_settings;
-                        }
+                        },
                     ),
                     prose("Configure backend server connection")
                         .brush(Color::from_rgb8(100, 100, 100))
@@ -264,7 +268,7 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                             &data.api_url_input,
                             std::sync::Arc::new(|data: &mut AppData, value: String| {
                                 data.api_url_input = value;
-                            })
+                            }),
                         ),
                         prose("Example: https://abcdeez.fg-goose.online/api/v1")
                             .brush(Color::from_rgb8(100, 100, 100))
@@ -274,7 +278,7 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                             &data.api_timeout_input,
                             std::sync::Arc::new(|data: &mut AppData, value: String| {
                                 data.api_timeout_input = value;
-                            })
+                            }),
                         ),
                         checkbox(
                             data.api_fallback_enabled,
@@ -294,14 +298,18 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                                     config.api.fallback_to_mock = data.api_fallback_enabled;
                                 }) {
                                     Ok(_) => {
-                                        data.success_message = Some("API settings saved successfully!".to_string());
+                                        data.success_message =
+                                            Some("API settings saved successfully!".to_string());
                                         // Recreate API client with new settings
                                         data.api_client = std::sync::Arc::new(
-                                            crate::api_client::AdaptiveApiClient::new(data.config_manager.config())
+                                            crate::api_client::AdaptiveApiClient::new(
+                                                data.config_manager.config(),
+                                            ),
                                         );
                                     }
                                     Err(_) => {
-                                        data.error_message = Some("Failed to save API settings".to_string());
+                                        data.error_message =
+                                            Some("Failed to save API settings".to_string());
                                     }
                                 }
                             }),
@@ -310,7 +318,7 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                                 // Test API connection asynchronously
                                 let api_client = data.api_client.clone();
                                 let runtime = data.runtime.clone();
-                                
+
                                 // Spawn async task to test connection
                                 runtime.spawn(async move {
                                     match api_client.health_check().await {

@@ -26,12 +26,12 @@ fn test_serial_position_effect() {
             // Middle items get older practice time (more forgetting)
             let hours_ago = if i < 3 || i > 6 {
                 // Primacy and recency items: more recent practice (better retention)
-                2.0 + (i as f64 * 0.2) 
+                2.0 + (i as f64 * 0.2)
             } else {
                 // Middle items: older practice, more forgetting (worse retention)
                 12.0 + ((i - 3) as f64 * 1.0)
             };
-            
+
             if let Some(mem) = learner.memory_strengths.get_mut(&format!("node_{}", i)) {
                 mem.last_practice = chrono::Utc::now() - chrono::Duration::hours(hours_ago as i64);
             }

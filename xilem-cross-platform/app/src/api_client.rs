@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn, error, instrument, span, Level};
+use tracing::{debug, error, info, instrument, span, warn, Level};
 use uuid::Uuid;
 
 use crate::config::AppConfig;
@@ -22,7 +22,11 @@ pub trait ApiClientTrait: Send + Sync {
     async fn create_session(&self, request: CreateSessionRequest) -> Result<Session>;
     async fn get_session(&self, session_id: &str) -> Result<Session>;
     async fn complete_session(&self, session_id: &str) -> Result<()>;
-    async fn submit_response(&self, session_id: &str, request: SubmitResponseRequest) -> Result<SubmitResponseResponse>;
+    async fn submit_response(
+        &self,
+        session_id: &str,
+        request: SubmitResponseRequest,
+    ) -> Result<SubmitResponseResponse>;
     async fn get_session_responses(&self, session_id: &str) -> Result<Vec<serde_json::Value>>;
     async fn get_learner_performance(&self, learner_id: &str) -> Result<PerformanceData>;
     async fn health_check(&self) -> Result<()>;
@@ -66,16 +70,23 @@ impl RealApiClient {
         auth.as_ref().map(|token| format!("Bearer {}", token))
     }
 
-    async fn post_with_retry<T: Serialize, R: DeserializeOwned>(&self, path: &str, body: &T) -> Result<R> {
+    async fn post_with_retry<T: Serialize, R: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &T,
+    ) -> Result<R> {
         let mut last_error = None;
 
         for attempt in 1..=self.retry_attempts {
             match self.post(path, body).await {
                 Ok(result) => return Ok(result),
                 Err(e) => {
-                    warn!("API request attempt {}/{} failed: {}", attempt, self.retry_attempts, e);
+                    warn!(
+                        "API request attempt {}/{} failed: {}",
+                        attempt, self.retry_attempts, e
+                    );
                     last_error = Some(e);
-                    
+
                     if attempt < self.retry_attempts {
                         // Exponential backoff
                         let delay = Duration::from_millis(100 * 2_u64.pow(attempt - 1));
@@ -95,9 +106,12 @@ impl RealApiClient {
             match self.get(path).await {
                 Ok(result) => return Ok(result),
                 Err(e) => {
-                    warn!("API request attempt {}/{} failed: {}", attempt, self.retry_attempts, e);
+                    warn!(
+                        "API request attempt {}/{} failed: {}",
+                        attempt, self.retry_attempts, e
+                    );
                     last_error = Some(e);
-                    
+
                     if attempt < self.retry_attempts {
                         // Exponential backoff
                         let delay = Duration::from_millis(100 * 2_u64.pow(attempt - 1));
@@ -162,18 +176,23 @@ impl ApiClientTrait for RealApiClient {
     #[instrument(level = "info", fields(username = %username), skip(password))]
     async fn login(&self, username: String, password: String) -> Result<User> {
         info!(username = %username, "Attempting user login");
-        
-        let request = LoginRequest { username: username.clone(), password };
-        let response: TokenResponse = self.post_with_retry("/api/auth/login", &request).await
+
+        let request = LoginRequest {
+            username: username.clone(),
+            password,
+        };
+        let response: TokenResponse = self
+            .post_with_retry("/api/auth/login", &request)
+            .await
             .map_err(|e| {
                 warn!(username = %username, error = %e, "Login request failed");
                 e
             })?;
-        
+
         // Store the token
         self.set_auth_token(response.access_token).await;
         debug!(username = %username, "Authentication token stored");
-        
+
         // Get user info
         let user = self.get_user_info().await?;
         info!(
@@ -218,7 +237,11 @@ impl ApiClientTrait for RealApiClient {
         Ok(())
     }
 
-    async fn submit_response(&self, session_id: &str, request: SubmitResponseRequest) -> Result<SubmitResponseResponse> {
+    async fn submit_response(
+        &self,
+        session_id: &str,
+        request: SubmitResponseRequest,
+    ) -> Result<SubmitResponseResponse> {
         let path = format!("/api/sessions/{}/responses", session_id);
         self.post_with_retry(&path, &request).await
     }
@@ -299,14 +322,12 @@ impl ApiClientTrait for MockApiClient {
 
     async fn get_learner_sessions(&self, learner_id: &str) -> Result<Vec<serde_json::Value>> {
         info!("Mock getting sessions for learner: {}", learner_id);
-        Ok(vec![
-            serde_json::json!({
-                "id": Uuid::new_v4().to_string(),
-                "learner_id": learner_id,
-                "status": "completed",
-                "created_at": chrono::Utc::now(),
-            }),
-        ])
+        Ok(vec![serde_json::json!({
+            "id": Uuid::new_v4().to_string(),
+            "learner_id": learner_id,
+            "status": "completed",
+            "created_at": chrono::Utc::now(),
+        })])
     }
 
     async fn create_session(&self, request: CreateSessionRequest) -> Result<Session> {
@@ -340,7 +361,11 @@ impl ApiClientTrait for MockApiClient {
         Ok(())
     }
 
-    async fn submit_response(&self, session_id: &str, request: SubmitResponseRequest) -> Result<SubmitResponseResponse> {
+    async fn submit_response(
+        &self,
+        session_id: &str,
+        request: SubmitResponseRequest,
+    ) -> Result<SubmitResponseResponse> {
         info!("Mock submitting response for session: {}", session_id);
         Ok(SubmitResponseResponse {
             response_id: Uuid::new_v4().to_string(),
@@ -353,16 +378,14 @@ impl ApiClientTrait for MockApiClient {
 
     async fn get_session_responses(&self, session_id: &str) -> Result<Vec<serde_json::Value>> {
         info!("Mock getting responses for session: {}", session_id);
-        Ok(vec![
-            serde_json::json!({
-                "id": Uuid::new_v4().to_string(),
-                "session_id": session_id,
-                "task_type": "PairwiseOrder",
-                "correct": true,
-                "response_time_ms": 1500,
-                "created_at": chrono::Utc::now(),
-            }),
-        ])
+        Ok(vec![serde_json::json!({
+            "id": Uuid::new_v4().to_string(),
+            "session_id": session_id,
+            "task_type": "PairwiseOrder",
+            "correct": true,
+            "response_time_ms": 1500,
+            "created_at": chrono::Utc::now(),
+        })])
     }
 
     async fn get_learner_performance(&self, learner_id: &str) -> Result<PerformanceData> {
@@ -440,7 +463,7 @@ impl AdaptiveApiClient {
                 // Failed - mark API as unavailable
                 let mut available = self.is_real_available.write().await;
                 *available = false;
-                
+
                 if self.fallback_to_mock {
                     warn!("Real API failed, falling back to mock: {}", e);
                     // Note: We can't easily fallback here without duplicating logic
@@ -470,7 +493,11 @@ impl AdaptiveApiClient {
 #[async_trait::async_trait]
 impl ApiClientTrait for AdaptiveApiClient {
     async fn login(&self, username: String, password: String) -> Result<User> {
-        match self.real_client.login(username.clone(), password.clone()).await {
+        match self
+            .real_client
+            .login(username.clone(), password.clone())
+            .await
+        {
             Ok(user) => {
                 let mut available = self.is_real_available.write().await;
                 *available = true;
@@ -479,7 +506,7 @@ impl ApiClientTrait for AdaptiveApiClient {
             Err(e) => {
                 let mut available = self.is_real_available.write().await;
                 *available = false;
-                
+
                 if self.fallback_to_mock {
                     warn!("Real login failed, using mock: {}", e);
                     self.mock_client.login(username, password).await
@@ -506,7 +533,9 @@ impl ApiClientTrait for AdaptiveApiClient {
         } else if self.fallback_to_mock {
             self.mock_client.get_user_info().await
         } else {
-            Err(anyhow::anyhow!("Real API unavailable and fallback disabled"))
+            Err(anyhow::anyhow!(
+                "Real API unavailable and fallback disabled"
+            ))
         }
     }
 
@@ -526,7 +555,9 @@ impl ApiClientTrait for AdaptiveApiClient {
         } else if self.fallback_to_mock {
             self.mock_client.create_learner(display_name).await
         } else {
-            Err(anyhow::anyhow!("Real API unavailable and fallback disabled"))
+            Err(anyhow::anyhow!(
+                "Real API unavailable and fallback disabled"
+            ))
         }
     }
 
@@ -546,7 +577,9 @@ impl ApiClientTrait for AdaptiveApiClient {
         } else if self.fallback_to_mock {
             self.mock_client.get_learner(learner_id).await
         } else {
-            Err(anyhow::anyhow!("Real API unavailable and fallback disabled"))
+            Err(anyhow::anyhow!(
+                "Real API unavailable and fallback disabled"
+            ))
         }
     }
 
@@ -566,7 +599,9 @@ impl ApiClientTrait for AdaptiveApiClient {
         } else if self.fallback_to_mock {
             self.mock_client.get_learner_sessions(learner_id).await
         } else {
-            Err(anyhow::anyhow!("Real API unavailable and fallback disabled"))
+            Err(anyhow::anyhow!(
+                "Real API unavailable and fallback disabled"
+            ))
         }
     }
 
@@ -586,7 +621,9 @@ impl ApiClientTrait for AdaptiveApiClient {
         } else if self.fallback_to_mock {
             self.mock_client.create_session(request).await
         } else {
-            Err(anyhow::anyhow!("Real API unavailable and fallback disabled"))
+            Err(anyhow::anyhow!(
+                "Real API unavailable and fallback disabled"
+            ))
         }
     }
 
@@ -606,7 +643,9 @@ impl ApiClientTrait for AdaptiveApiClient {
         } else if self.fallback_to_mock {
             self.mock_client.get_session(session_id).await
         } else {
-            Err(anyhow::anyhow!("Real API unavailable and fallback disabled"))
+            Err(anyhow::anyhow!(
+                "Real API unavailable and fallback disabled"
+            ))
         }
     }
 
@@ -626,13 +665,23 @@ impl ApiClientTrait for AdaptiveApiClient {
         } else if self.fallback_to_mock {
             self.mock_client.complete_session(session_id).await
         } else {
-            Err(anyhow::anyhow!("Real API unavailable and fallback disabled"))
+            Err(anyhow::anyhow!(
+                "Real API unavailable and fallback disabled"
+            ))
         }
     }
 
-    async fn submit_response(&self, session_id: &str, request: SubmitResponseRequest) -> Result<SubmitResponseResponse> {
+    async fn submit_response(
+        &self,
+        session_id: &str,
+        request: SubmitResponseRequest,
+    ) -> Result<SubmitResponseResponse> {
         if *self.is_real_available.read().await {
-            match self.real_client.submit_response(session_id, request.clone()).await {
+            match self
+                .real_client
+                .submit_response(session_id, request.clone())
+                .await
+            {
                 Ok(response) => Ok(response),
                 Err(e) => {
                     if self.fallback_to_mock {
@@ -646,7 +695,9 @@ impl ApiClientTrait for AdaptiveApiClient {
         } else if self.fallback_to_mock {
             self.mock_client.submit_response(session_id, request).await
         } else {
-            Err(anyhow::anyhow!("Real API unavailable and fallback disabled"))
+            Err(anyhow::anyhow!(
+                "Real API unavailable and fallback disabled"
+            ))
         }
     }
 
@@ -666,7 +717,9 @@ impl ApiClientTrait for AdaptiveApiClient {
         } else if self.fallback_to_mock {
             self.mock_client.get_session_responses(session_id).await
         } else {
-            Err(anyhow::anyhow!("Real API unavailable and fallback disabled"))
+            Err(anyhow::anyhow!(
+                "Real API unavailable and fallback disabled"
+            ))
         }
     }
 
@@ -686,7 +739,9 @@ impl ApiClientTrait for AdaptiveApiClient {
         } else if self.fallback_to_mock {
             self.mock_client.get_learner_performance(learner_id).await
         } else {
-            Err(anyhow::anyhow!("Real API unavailable and fallback disabled"))
+            Err(anyhow::anyhow!(
+                "Real API unavailable and fallback disabled"
+            ))
         }
     }
 

@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use xilem::{view::{flex, label, button, Axis}, Color, TextAlignment, WidgetView};
+use xilem::{
+    view::{button, flex, label, Axis},
+    Color, TextAlignment, WidgetView,
+};
 
 use crate::{components::*, visualization_components::*, AppData};
 
@@ -39,33 +42,58 @@ pub fn widget_gallery_screen(data: &AppData) -> impl WidgetView<AppData> {
         .direction(Axis::Vertical),
     );
 
-    let section2 = card("Basic Components", flex((
-        card("Sample Card", label("Card content")),
-        progress_bar(0.42, "Upload Progress".into()),
-        metric_display("Accuracy", format!("{:.1}%", demo_metrics.accuracy_rate * 100.0), Color::from_rgb8(0, 200, 0)),
-        task_card(&demo_task),
-        answer_options(vec!["Alpha".into(), "Bravo".into(), "Charlie".into()], answer_on_select.clone()),
-        performance_chart(&demo_metrics),
-        loading_overlay("Processing data..."),
-        toast_notification("Demo toast from gallery".into(), true),
-        labeled_input("Your name", "Alice".into(), Arc::new(|_d, _s| {})),
-        checkbox(false, "I agree", Arc::new(|_d, _b| {})),
-    )).direction(Axis::Vertical));
+    let section2 = card(
+        "Basic Components",
+        flex((
+            card("Sample Card", label("Card content")),
+            progress_bar(0.42, "Upload Progress".into()),
+            metric_display(
+                "Accuracy",
+                format!("{:.1}%", demo_metrics.accuracy_rate * 100.0),
+                Color::from_rgb8(0, 200, 0),
+            ),
+            task_card(&demo_task),
+            answer_options(
+                vec!["Alpha".into(), "Bravo".into(), "Charlie".into()],
+                answer_on_select.clone(),
+            ),
+            performance_chart(&demo_metrics),
+            loading_overlay("Processing data..."),
+            toast_notification("Demo toast from gallery".into(), true),
+            labeled_input("Your name", "Alice".into(), Arc::new(|_d, _s| {})),
+            checkbox(false, "I agree", Arc::new(|_d, _b| {})),
+        ))
+        .direction(Axis::Vertical),
+    );
 
-    let section3 = card("Charts", flex((
-        learning_curve_chart(&data.session_responses, 400, 240),
-        response_time_histogram_chart(&rt_vec, 400, 240),
-        performance_heatmap_chart(&data.session_responses, 400, 240),
-        metrics_radar_chart(&demo_metrics, 400, 240),
-        progress_ring_chart(demo_metrics.accuracy_rate * 100.0, "Accuracy", 120),
-        scatter_plot_chart(&[(0.0, 1.0), (1.0, 0.6), (2.0, 0.8)], 400, 240, "x", "y", "Demo Scatter"),
-        sparkline(&[0.1, 0.3, 0.2, 0.5, 0.7, 0.4], 120, 24, Color::from_rgb8(0, 123, 255)),
-    )).direction(Axis::Vertical));
+    let section3 = card(
+        "Charts",
+        flex((
+            learning_curve_chart(&data.session_responses, 400, 240),
+            response_time_histogram_chart(&rt_vec, 400, 240),
+            performance_heatmap_chart(&data.session_responses, 400, 240),
+            metrics_radar_chart(&demo_metrics, 400, 240),
+            progress_ring_chart(demo_metrics.accuracy_rate * 100.0, "Accuracy", 120),
+            scatter_plot_chart(
+                &[(0.0, 1.0), (1.0, 0.6), (2.0, 0.8)],
+                400,
+                240,
+                "x",
+                "y",
+                "Demo Scatter",
+            ),
+            sparkline(
+                &[0.1, 0.3, 0.2, 0.5, 0.7, 0.4],
+                120,
+                24,
+                Color::from_rgb8(0, 123, 255),
+            ),
+        ))
+        .direction(Axis::Vertical),
+    );
 
     card(
         "🧪 Hidden Widget Gallery",
         flex((section1, section2, section3)).direction(Axis::Vertical),
     )
 }
-
-

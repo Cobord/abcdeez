@@ -1,7 +1,7 @@
-use std::time::{Duration, Instant};
-use tracing::{debug, info, warn, instrument, span, Level};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
+use tracing::{debug, info, instrument, span, warn, Level};
 
 /// Performance metrics for critical operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,7 +31,7 @@ impl PerformanceTracker {
             let _guard = span.enter();
             debug!(operation = %operation_name, "Starting performance tracking");
         }
-        
+
         Self {
             operation_name: operation_name.to_string(),
             start_time: Instant::now(),
@@ -50,7 +50,7 @@ impl PerformanceTracker {
     pub fn finish(self) -> PerformanceMetrics {
         let duration = self.start_time.elapsed();
         let _guard = self.span.enter();
-        
+
         let metrics = PerformanceMetrics {
             operation_name: self.operation_name.clone(),
             duration,
@@ -113,7 +113,7 @@ impl AsyncPerformanceTracker {
     /// Start tracking an async operation
     pub fn start(operation_name: &str) -> Self {
         debug!(operation = %operation_name, "Starting async performance tracking");
-        
+
         Self {
             operation_name: operation_name.to_string(),
             start_time: Instant::now(),
@@ -130,7 +130,7 @@ impl AsyncPerformanceTracker {
     #[instrument(level = "debug", fields(operation = %self.operation_name))]
     pub async fn finish(self) -> PerformanceMetrics {
         let duration = self.start_time.elapsed();
-        
+
         let metrics = PerformanceMetrics {
             operation_name: self.operation_name.clone(),
             duration,
@@ -165,7 +165,7 @@ impl CriticalPathMonitor {
     #[instrument(level = "info", fields(operation = %operation_name))]
     pub fn start(operation_name: &str) -> Self {
         info!(operation = %operation_name, "Starting critical path monitoring");
-        
+
         Self {
             checkpoints: Vec::new(),
             start_time: Instant::now(),
@@ -177,7 +177,7 @@ impl CriticalPathMonitor {
     pub fn checkpoint(&mut self, checkpoint_name: &str) {
         let now = Instant::now();
         self.checkpoints.push((checkpoint_name.to_string(), now));
-        
+
         let elapsed_since_start = now.duration_since(self.start_time);
         debug!(
             operation = %self.operation_name,
@@ -197,7 +197,7 @@ impl CriticalPathMonitor {
         // Generate metrics for each checkpoint
         for (checkpoint_name, checkpoint_time) in &self.checkpoints {
             let segment_duration = checkpoint_time.duration_since(previous_time);
-            
+
             metrics.push(PerformanceMetrics {
                 operation_name: format!("{}::{}", self.operation_name, checkpoint_name),
                 duration: segment_duration,
@@ -231,7 +231,7 @@ impl CriticalPathMonitor {
 /// Utility functions for common performance tracking scenarios
 pub mod utils {
     use super::*;
-    
+
     /// Track database operation performance
     #[instrument(level = "debug", fields(query_type = %query_type), skip(operation))]
     pub async fn track_database_operation<F, T>(
@@ -287,17 +287,11 @@ pub mod utils {
     }
 
     /// Track adaptive algorithm performance
-    pub fn track_algorithm_performance<F, T>(
-        algorithm_name: &str,
-        operation: F,
-    ) -> T
+    pub fn track_algorithm_performance<F, T>(algorithm_name: &str, operation: F) -> T
     where
         F: FnOnce() -> T,
     {
-        track_performance!(
-            &format!("algorithm::{}", algorithm_name),
-            { operation() }
-        )
+        track_performance!(&format!("algorithm::{}", algorithm_name), { operation() })
     }
 }
 
@@ -311,10 +305,10 @@ mod tests {
     fn test_performance_tracker() {
         let mut tracker = PerformanceTracker::start("test_operation");
         tracker.add_context("test_key", "test_value");
-        
+
         // Simulate some work
         thread::sleep(Duration::from_millis(10));
-        
+
         let metrics = tracker.finish();
         assert_eq!(metrics.operation_name, "test_operation");
         assert!(metrics.duration >= Duration::from_millis(10));
@@ -324,13 +318,13 @@ mod tests {
     #[test]
     fn test_critical_path_monitor() {
         let mut monitor = CriticalPathMonitor::start("test_critical_path");
-        
+
         thread::sleep(Duration::from_millis(5));
         monitor.checkpoint("step1");
-        
+
         thread::sleep(Duration::from_millis(5));
         monitor.checkpoint("step2");
-        
+
         let metrics = monitor.finish();
         assert_eq!(metrics.len(), 2);
         assert!(metrics[0].operation_name.contains("step1"));
@@ -341,10 +335,10 @@ mod tests {
     async fn test_async_performance_tracker() {
         let mut tracker = AsyncPerformanceTracker::start("test_async_operation");
         tracker.add_context("async_test", "true");
-        
+
         // Simulate async work
         tokio::time::sleep(Duration::from_millis(10)).await;
-        
+
         let metrics = tracker.finish().await;
         assert_eq!(metrics.operation_name, "test_async_operation");
         assert!(metrics.duration >= Duration::from_millis(10));

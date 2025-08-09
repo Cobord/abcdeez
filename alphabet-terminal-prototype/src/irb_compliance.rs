@@ -55,11 +55,14 @@ pub struct TrainingRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Jurisdiction {
-    US, // United States - 45 CFR 46
-    EU, // European Union - GDPR
+    US,     // United States - 45 CFR 46
+    EU,     // European Union - GDPR
     Canada, // TCPS2
-    UK, // GCP-ICH
-    Other { name: String, regulations: Vec<String> },
+    UK,     // GCP-ICH
+    Other {
+        name: String,
+        regulations: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,19 +86,19 @@ pub struct ComplianceSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExemptCategory {
-    EducationalSettings,    // 45 CFR 46.101(b)(1)
-    EducationalTests,       // 45 CFR 46.101(b)(2)
-    SurveyInterview,        // 45 CFR 46.101(b)(3)
+    EducationalSettings,       // 45 CFR 46.101(b)(1)
+    EducationalTests,          // 45 CFR 46.101(b)(2)
+    SurveyInterview,           // 45 CFR 46.101(b)(3)
     PublicBehaviorObservation, // 45 CFR 46.101(b)(4)
-    PublicBenefitPrograms,  // 45 CFR 46.101(b)(5)
-    FoodTasting,           // 45 CFR 46.101(b)(6)
-    SecondaryResearch,     // 45 CFR 46.101(b)(7)
-    BroadConsent,          // 45 CFR 46.101(b)(8)
+    PublicBenefitPrograms,     // 45 CFR 46.101(b)(5)
+    FoodTasting,               // 45 CFR 46.101(b)(6)
+    SecondaryResearch,         // 45 CFR 46.101(b)(7)
+    BroadConsent,              // 45 CFR 46.101(b)(8)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExpeditedCategory {
-    MinimalRiskBehavioral,  // Category 7
+    MinimalRiskBehavioral, // Category 7
     DataRecords,           // Category 5
     VoiceRecordings,       // Category 7
     ModerateExercise,      // Category 4
@@ -104,9 +107,9 @@ pub enum ExpeditedCategory {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum VulnerablePopulation {
-    Children,              // Subpart D
-    Prisoners,             // Subpart C
-    PregnantWomen,         // Subpart B (historical)
+    Children,      // Subpart D
+    Prisoners,     // Subpart C
+    PregnantWomen, // Subpart B (historical)
     CognitiveImpairment,
     Economically,
     Educationally,
@@ -158,18 +161,18 @@ pub struct PotentialHarm {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Probability {
-    Unlikely,    // < 10%
-    Possible,    // 10-50%
-    Likely,      // 50-90%
-    Certain,     // > 90%
+    Unlikely, // < 10%
+    Possible, // 10-50%
+    Likely,   // 50-90%
+    Certain,  // > 90%
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Severity {
-    Negligible,  // No lasting impact
-    Minor,       // Temporary discomfort
-    Moderate,    // Lasting but manageable impact
-    Major,       // Serious lasting impact
+    Negligible,   // No lasting impact
+    Minor,        // Temporary discomfort
+    Moderate,     // Lasting but manageable impact
+    Major,        // Serious lasting impact
     Catastrophic, // Life-threatening or permanently disabling
 }
 
@@ -184,11 +187,11 @@ pub struct MitigationMeasure {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MitigationType {
-    Prevention,       // Prevent risk occurrence
-    Detection,        // Early detection of problems
-    Response,         // Immediate response procedures
-    Recovery,         // Post-incident recovery
-    Communication,    // Communication protocols
+    Prevention,    // Prevent risk occurrence
+    Detection,     // Early detection of problems
+    Response,      // Immediate response procedures
+    Recovery,      // Post-incident recovery
+    Communication, // Communication protocols
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -506,10 +509,10 @@ pub enum Beneficiary {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RiskBenefitRatio {
-    Favorable,    // Benefits outweigh risks
-    Acceptable,   // Risks acceptable given benefits
-    Unfavorable,  // Risks outweigh benefits
-    Uncertain,    // Insufficient information
+    Favorable,   // Benefits outweigh risks
+    Acceptable,  // Risks acceptable given benefits
+    Unfavorable, // Risks outweigh benefits
+    Uncertain,   // Insufficient information
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -635,11 +638,13 @@ impl IRBComplianceGenerator {
     }
 
     pub fn add_risk_assessment(&mut self, assessment: RiskAssessment) {
-        self.risk_assessments.insert(assessment.assessment_id.clone(), assessment);
+        self.risk_assessments
+            .insert(assessment.assessment_id.clone(), assessment);
     }
 
     pub fn add_consent_template(&mut self, template: ConsentTemplate) {
-        self.consent_templates.insert(template.template_id.clone(), template);
+        self.consent_templates
+            .insert(template.template_id.clone(), template);
     }
 
     pub fn generate_irb_application(
@@ -718,7 +723,10 @@ impl IRBComplianceGenerator {
         Ok(generated_files)
     }
 
-    pub fn assess_compliance_status(&self, experiment: &MultiSessionExperiment) -> ComplianceStatus {
+    pub fn assess_compliance_status(
+        &self,
+        experiment: &MultiSessionExperiment,
+    ) -> ComplianceStatus {
         let mut issues = Vec::new();
         let mut recommendations = Vec::new();
 
@@ -744,7 +752,12 @@ impl IRBComplianceGenerator {
         }
 
         // Check PI qualifications
-        if self.principal_investigator.human_subjects_training.completion_date < chrono::Utc::now().naive_utc().date() - chrono::Duration::days(365) {
+        if self
+            .principal_investigator
+            .human_subjects_training
+            .completion_date
+            < chrono::Utc::now().naive_utc().date() - chrono::Duration::days(365)
+        {
             issues.push("PI human subjects training may be expired".to_string());
             recommendations.push("Refresh human subjects protection training".to_string());
         }
@@ -773,7 +786,7 @@ impl IRBComplianceGenerator {
         citation_manager: &CitationManager,
     ) -> Result<StudySummary, String> {
         let methodology_report = citation_manager.generate_methodology_report(&experiment.id);
-        
+
         Ok(StudySummary {
             background_rationale: format!(
                 "This study investigates learning processes using adaptive experimental methods. {}",
@@ -804,7 +817,7 @@ impl IRBComplianceGenerator {
         experiment: &MultiSessionExperiment,
     ) -> Result<RiskBenefitAnalysis, String> {
         let mut identified_risks = Vec::new();
-        
+
         // Analyze risks from assessments
         for assessment in self.risk_assessments.values() {
             for harm in &assessment.potential_harms {
@@ -814,7 +827,9 @@ impl IRBComplianceGenerator {
                     probability: format!("{:?}", harm.probability),
                     severity: format!("{:?}", harm.severity),
                     affected_population: harm.affected_groups.join(", "),
-                    mitigation_strategy: assessment.mitigation_measures.iter()
+                    mitigation_strategy: assessment
+                        .mitigation_measures
+                        .iter()
                         .map(|m| m.description.clone())
                         .collect::<Vec<_>>()
                         .join("; "),
@@ -832,7 +847,8 @@ impl IRBComplianceGenerator {
             },
             AnticipatedBenefit {
                 benefit_type: BenefitType::SocietalBenefit,
-                description: "Improved educational methods and adaptive learning systems".to_string(),
+                description: "Improved educational methods and adaptive learning systems"
+                    .to_string(),
                 beneficiary: Beneficiary::Society,
                 likelihood: "Moderate".to_string(),
                 magnitude: "Moderate".to_string(),
@@ -852,7 +868,10 @@ impl IRBComplianceGenerator {
         })
     }
 
-    fn generate_subject_selection(&self, experiment: &MultiSessionExperiment) -> Result<SubjectSelection, String> {
+    fn generate_subject_selection(
+        &self,
+        experiment: &MultiSessionExperiment,
+    ) -> Result<SubjectSelection, String> {
         Ok(SubjectSelection {
             inclusion_criteria: vec![
                 "Age 18 or older".to_string(),
@@ -866,22 +885,29 @@ impl IRBComplianceGenerator {
                 "Inability to use computer interfaces".to_string(),
             ],
             target_enrollment: 100, // Default estimate
-            recruitment_methods: vec![
-                RecruitmentMethod {
-                    method_name: "Online recruitment".to_string(),
-                    description: "Recruitment through university subject pool".to_string(),
-                    materials: vec!["Recruitment flyer".to_string(), "Email announcement".to_string()],
-                    personnel_involved: vec![self.principal_investigator.name.clone()],
-                    coercion_safeguards: vec!["No coercion or undue inducement".to_string()],
-                },
-            ],
+            recruitment_methods: vec![RecruitmentMethod {
+                method_name: "Online recruitment".to_string(),
+                description: "Recruitment through university subject pool".to_string(),
+                materials: vec![
+                    "Recruitment flyer".to_string(),
+                    "Email announcement".to_string(),
+                ],
+                personnel_involved: vec![self.principal_investigator.name.clone()],
+                coercion_safeguards: vec!["No coercion or undue inducement".to_string()],
+            }],
             vulnerable_populations: Vec::new(),
-            population_justification: "Adult volunteers are appropriate for this learning research".to_string(),
-            equitable_selection: "Recruitment is open to all eligible individuals regardless of demographics".to_string(),
+            population_justification: "Adult volunteers are appropriate for this learning research"
+                .to_string(),
+            equitable_selection:
+                "Recruitment is open to all eligible individuals regardless of demographics"
+                    .to_string(),
         })
     }
 
-    fn generate_consent_process(&self, experiment: &MultiSessionExperiment) -> Result<ConsentProcess, String> {
+    fn generate_consent_process(
+        &self,
+        experiment: &MultiSessionExperiment,
+    ) -> Result<ConsentProcess, String> {
         Ok(ConsentProcess {
             consent_required: true,
             consent_type: ConsentType::Electronic,
@@ -896,20 +922,30 @@ impl IRBComplianceGenerator {
 
     fn generate_data_management_section(&self) -> Result<DataManagement, String> {
         Ok(DataManagement {
-            data_collection_plan: "Data collected through secure online platform with automated backup".to_string(),
+            data_collection_plan:
+                "Data collected through secure online platform with automated backup".to_string(),
             data_security_measures: vec![
                 "Encryption of data in transit and at rest".to_string(),
                 "Access controls with user authentication".to_string(),
                 "Regular security audits and updates".to_string(),
                 "De-identification procedures for analysis data".to_string(),
             ],
-            data_sharing_plan: format!("{:?}: {}", 
+            data_sharing_plan: format!(
+                "{:?}: {}",
                 self.data_protection_measures.sharing_plan.sharing_scope,
-                self.data_protection_measures.sharing_plan.sharing_conditions.join(", ")
+                self.data_protection_measures
+                    .sharing_plan
+                    .sharing_conditions
+                    .join(", ")
             ),
-            data_retention_plan: format!("Raw data retained for {} years, analyzed data for {} years",
-                self.data_protection_measures.retention_schedule.raw_data_years,
-                self.data_protection_measures.retention_schedule.analyzed_data_years
+            data_retention_plan: format!(
+                "Raw data retained for {} years, analyzed data for {} years",
+                self.data_protection_measures
+                    .retention_schedule
+                    .raw_data_years,
+                self.data_protection_measures
+                    .retention_schedule
+                    .analyzed_data_years
             ),
             quality_assurance: vec![
                 "Automated data validation checks".to_string(),
@@ -924,7 +960,10 @@ impl IRBComplianceGenerator {
         })
     }
 
-    fn generate_monitoring_plan(&self, experiment: &MultiSessionExperiment) -> Result<StudyMonitoringPlan, String> {
+    fn generate_monitoring_plan(
+        &self,
+        experiment: &MultiSessionExperiment,
+    ) -> Result<StudyMonitoringPlan, String> {
         Ok(StudyMonitoringPlan {
             monitoring_approach: MonitoringApproach::SelfMonitoring,
             monitoring_personnel: vec![self.principal_investigator.name.clone()],
@@ -938,7 +977,10 @@ impl IRBComplianceGenerator {
         })
     }
 
-    fn identify_supporting_documents(&self, experiment: &MultiSessionExperiment) -> Result<Vec<SupportingDocument>, String> {
+    fn identify_supporting_documents(
+        &self,
+        experiment: &MultiSessionExperiment,
+    ) -> Result<Vec<SupportingDocument>, String> {
         let mut documents = Vec::new();
 
         documents.push(SupportingDocument {
@@ -972,7 +1014,8 @@ impl IRBComplianceGenerator {
     }
 
     fn format_irb_application(&self, application: &IRBApplication) -> String {
-        format!(r#"
+        format!(
+            r#"
 # IRB APPLICATION
 
 **Application ID:** {}
@@ -1063,74 +1106,108 @@ impl IRBComplianceGenerator {
             application.study_title,
             application.principal_investigator.name,
             application.generated_at.format("%Y-%m-%d"),
-            
             application.study_summary.background_rationale,
-            application.study_summary.research_objectives.iter().enumerate()
+            application
+                .study_summary
+                .research_objectives
+                .iter()
+                .enumerate()
                 .map(|(i, obj)| format!("{}. {}", i + 1, obj))
                 .collect::<Vec<_>>()
                 .join("\n"),
             application.study_summary.study_design,
             application.study_summary.methodology,
             application.study_summary.statistical_analysis_plan,
-            
-            application.risk_benefit_analysis.identified_risks.iter()
-                .map(|risk| format!("- **{}**: {} (Probability: {}, Severity: {})", 
-                    risk.risk_type, risk.description, risk.probability, risk.severity))
+            application
+                .risk_benefit_analysis
+                .identified_risks
+                .iter()
+                .map(|risk| format!(
+                    "- **{}**: {} (Probability: {}, Severity: {})",
+                    risk.risk_type, risk.description, risk.probability, risk.severity
+                ))
                 .collect::<Vec<_>>()
                 .join("\n"),
-            application.risk_benefit_analysis.risk_minimization.iter()
+            application
+                .risk_benefit_analysis
+                .risk_minimization
+                .iter()
                 .map(|measure| format!("- {}", measure))
                 .collect::<Vec<_>>()
                 .join("\n"),
-            application.risk_benefit_analysis.anticipated_benefits.iter()
-                .map(|benefit| format!("- **{:?}**: {} (Likelihood: {}, Magnitude: {})",
-                    benefit.benefit_type, benefit.description, benefit.likelihood, benefit.magnitude))
+            application
+                .risk_benefit_analysis
+                .anticipated_benefits
+                .iter()
+                .map(|benefit| format!(
+                    "- **{:?}**: {} (Likelihood: {}, Magnitude: {})",
+                    benefit.benefit_type,
+                    benefit.description,
+                    benefit.likelihood,
+                    benefit.magnitude
+                ))
                 .collect::<Vec<_>>()
                 .join("\n"),
             application.risk_benefit_analysis.risk_benefit_ratio,
             application.risk_benefit_analysis.justification,
-            
-            application.subject_selection.inclusion_criteria.iter()
+            application
+                .subject_selection
+                .inclusion_criteria
+                .iter()
                 .map(|criterion| format!("- {}", criterion))
                 .collect::<Vec<_>>()
                 .join("\n"),
-            application.subject_selection.exclusion_criteria.iter()
+            application
+                .subject_selection
+                .exclusion_criteria
+                .iter()
                 .map(|criterion| format!("- {}", criterion))
                 .collect::<Vec<_>>()
                 .join("\n"),
             application.subject_selection.target_enrollment,
-            application.subject_selection.recruitment_methods.iter()
+            application
+                .subject_selection
+                .recruitment_methods
+                .iter()
                 .map(|method| format!("**{}**: {}", method.method_name, method.description))
                 .collect::<Vec<_>>()
                 .join("\n\n"),
-            
             application.consent_process.consent_type,
             application.consent_process.consent_timing,
             application.consent_process.consent_personnel.join(", "),
-            
             application.data_management.data_collection_plan,
-            application.data_management.data_security_measures.iter()
+            application
+                .data_management
+                .data_security_measures
+                .iter()
                 .map(|measure| format!("- {}", measure))
                 .collect::<Vec<_>>()
                 .join("\n"),
             application.data_management.data_sharing_plan,
             application.data_management.data_retention_plan,
-            
             application.monitoring_plan.monitoring_approach,
             application.monitoring_plan.monitoring_personnel.join(", "),
             application.monitoring_plan.reporting_schedule,
-            
-            application.supporting_documents.iter()
-                .map(|doc| format!("- **{:?}**: {} (v{})", doc.document_type, doc.document_name, doc.version))
+            application
+                .supporting_documents
+                .iter()
+                .map(|doc| format!(
+                    "- **{:?}**: {} (v{})",
+                    doc.document_type, doc.document_name, doc.version
+                ))
                 .collect::<Vec<_>>()
                 .join("\n"),
-            
             chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
         )
     }
 
-    fn generate_consent_form(&self, template: &ConsentTemplate, application: &IRBApplication) -> String {
-        let mut consent = format!(r#"
+    fn generate_consent_form(
+        &self,
+        template: &ConsentTemplate,
+        application: &IRBApplication,
+    ) -> String {
+        let mut consent = format!(
+            r#"
 # INFORMED CONSENT TO PARTICIPATE IN RESEARCH
 
 **Study Title:** {}
@@ -1139,14 +1216,19 @@ impl IRBComplianceGenerator {
 
 You are being invited to participate in a research study. Before you agree to participate, please read this consent form carefully and ask any questions you may have.
 
-"#, application.study_title, application.principal_investigator.name, self.institution_info.name);
+"#,
+            application.study_title,
+            application.principal_investigator.name,
+            self.institution_info.name
+        );
 
         for element in &template.consent_elements {
             consent.push_str(&self.format_consent_element(element, application));
             consent.push_str("\n\n");
         }
 
-        consent.push_str(r#"
+        consent.push_str(
+            r#"
 ## CONSENT
 
 By clicking "I agree" below, you indicate that:
@@ -1157,20 +1239,27 @@ By clicking "I agree" below, you indicate that:
 
 **Contact Information:**
 If you have questions about this study, contact:
-"#);
+"#,
+        );
 
-        consent.push_str(&format!("**Principal Investigator:** {} ({})\n", 
-            application.principal_investigator.name, 
-            application.principal_investigator.email));
-        
-        consent.push_str(&format!("**IRB Contact:** {} ({})\n", 
-            self.institution_info.irb_contact, 
-            self.institution_info.irb_email));
+        consent.push_str(&format!(
+            "**Principal Investigator:** {} ({})\n",
+            application.principal_investigator.name, application.principal_investigator.email
+        ));
+
+        consent.push_str(&format!(
+            "**IRB Contact:** {} ({})\n",
+            self.institution_info.irb_contact, self.institution_info.irb_email
+        ));
 
         consent
     }
 
-    fn format_consent_element(&self, element: &ConsentElement, application: &IRBApplication) -> String {
+    fn format_consent_element(
+        &self,
+        element: &ConsentElement,
+        application: &IRBApplication,
+    ) -> String {
         match element.element_type {
             ConsentElementType::StudyPurpose => {
                 format!("## PURPOSE OF THE STUDY\n\n{}", application.study_summary.background_rationale)
@@ -1206,7 +1295,8 @@ If you have questions about this study, contact:
     }
 
     fn generate_risk_assessment_report(&self, application: &IRBApplication) -> String {
-        let mut report = format!(r#"
+        let mut report = format!(
+            r#"
 # RISK ASSESSMENT REPORT
 
 **Study:** {}
@@ -1218,10 +1308,14 @@ This report provides a comprehensive risk assessment for the proposed research s
 
 ## IDENTIFIED RISKS
 
-"#, application.study_title, chrono::Utc::now().format("%Y-%m-%d"));
+"#,
+            application.study_title,
+            chrono::Utc::now().format("%Y-%m-%d")
+        );
 
         for risk in &application.risk_benefit_analysis.identified_risks {
-            report.push_str(&format!(r#"
+            report.push_str(&format!(
+                r#"
 ### {} Risk
 
 **Description:** {}
@@ -1230,30 +1324,48 @@ This report provides a comprehensive risk assessment for the proposed research s
 **Affected Population:** {}
 **Mitigation Strategy:** {}
 
-"#, risk.risk_type, risk.description, risk.probability, risk.severity, risk.affected_population, risk.mitigation_strategy));
+"#,
+                risk.risk_type,
+                risk.description,
+                risk.probability,
+                risk.severity,
+                risk.affected_population,
+                risk.mitigation_strategy
+            ));
         }
 
-        report.push_str(r#"
+        report.push_str(
+            r#"
 ## RISK MINIMIZATION MEASURES
 
-"#);
+"#,
+        );
 
         for measure in &application.risk_benefit_analysis.risk_minimization {
             report.push_str(&format!("- {}\n", measure));
         }
 
-        report.push_str(r#"
+        report.push_str(
+            r#"
 ## OVERALL RISK ASSESSMENT
 
-"#);
-        report.push_str(&format!("**Risk-Benefit Ratio:** {:?}\n", application.risk_benefit_analysis.risk_benefit_ratio));
-        report.push_str(&format!("**Justification:** {}\n", application.risk_benefit_analysis.justification));
+"#,
+        );
+        report.push_str(&format!(
+            "**Risk-Benefit Ratio:** {:?}\n",
+            application.risk_benefit_analysis.risk_benefit_ratio
+        ));
+        report.push_str(&format!(
+            "**Justification:** {}\n",
+            application.risk_benefit_analysis.justification
+        ));
 
         report
     }
 
     fn generate_data_management_plan(&self) -> String {
-        format!(r#"
+        format!(
+            r#"
 # DATA MANAGEMENT PLAN
 
 ## DATA COLLECTION
@@ -1296,51 +1408,89 @@ This report provides a comprehensive risk assessment for the proposed research s
 ---
 *Generated on {}*
 "#,
-            self.data_protection_measures.collection_methods.iter()
-                .map(|method| format!("- **{}**: {}", method.method_name, method.data_types.join(", ")))
+            self.data_protection_measures
+                .collection_methods
+                .iter()
+                .map(|method| format!(
+                    "- **{}**: {}",
+                    method.method_name,
+                    method.data_types.join(", ")
+                ))
                 .collect::<Vec<_>>()
                 .join("\n"),
-            
-            self.data_protection_measures.storage_plan.primary_storage.location_type,
-            self.data_protection_measures.storage_plan.primary_storage.geographic_location,
-            
+            self.data_protection_measures
+                .storage_plan
+                .primary_storage
+                .location_type,
+            self.data_protection_measures
+                .storage_plan
+                .primary_storage
+                .geographic_location,
             if let Some(backup) = &self.data_protection_measures.storage_plan.backup_storage {
-                format!("{:?} - {}", backup.location_type, backup.geographic_location)
+                format!(
+                    "{:?} - {}",
+                    backup.location_type, backup.geographic_location
+                )
             } else {
                 "No backup storage configured".to_string()
             },
-            
-            if self.data_protection_measures.storage_plan.encryption_required {
-                format!("Required ({})", 
-                    self.data_protection_measures.storage_plan.encryption_standard
-                        .as_ref().unwrap_or(&"AES-256".to_string()))
+            if self
+                .data_protection_measures
+                .storage_plan
+                .encryption_required
+            {
+                format!(
+                    "Required ({})",
+                    self.data_protection_measures
+                        .storage_plan
+                        .encryption_standard
+                        .as_ref()
+                        .unwrap_or(&"AES-256".to_string())
+                )
             } else {
                 "Not required".to_string()
             },
-            
-            self.data_protection_measures.access_controls.authentication_required,
+            self.data_protection_measures
+                .access_controls
+                .authentication_required,
             self.data_protection_measures.access_controls.audit_logging,
-            
             self.data_protection_measures.sharing_plan.sharing_scope,
-            self.data_protection_measures.sharing_plan.sharing_conditions.join(", "),
-            
-            self.data_protection_measures.retention_schedule.raw_data_years,
-            self.data_protection_measures.retention_schedule.analyzed_data_years,
-            self.data_protection_measures.retention_schedule.consent_forms_years,
-            
-            self.data_protection_measures.destruction_procedures.electronic_data_method,
-            self.data_protection_measures.destruction_procedures.physical_records_method,
-            self.data_protection_measures.destruction_procedures.verification_required,
-            
-            self.data_protection_measures.incident_response.response_team.join(", "),
-            self.data_protection_measures.incident_response.investigation_procedures,
-            
+            self.data_protection_measures
+                .sharing_plan
+                .sharing_conditions
+                .join(", "),
+            self.data_protection_measures
+                .retention_schedule
+                .raw_data_years,
+            self.data_protection_measures
+                .retention_schedule
+                .analyzed_data_years,
+            self.data_protection_measures
+                .retention_schedule
+                .consent_forms_years,
+            self.data_protection_measures
+                .destruction_procedures
+                .electronic_data_method,
+            self.data_protection_measures
+                .destruction_procedures
+                .physical_records_method,
+            self.data_protection_measures
+                .destruction_procedures
+                .verification_required,
+            self.data_protection_measures
+                .incident_response
+                .response_team
+                .join(", "),
+            self.data_protection_measures
+                .incident_response
+                .investigation_procedures,
             chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
         )
     }
 
     fn format_monitoring_plan(&self, plan: &StudyMonitoringPlan) -> String {
-        format!(r#"
+        format!(
+            r#"
 # STUDY MONITORING PLAN
 
 ## MONITORING APPROACH
@@ -1363,18 +1513,19 @@ This report provides a comprehensive risk assessment for the proposed research s
             plan.monitoring_approach,
             plan.monitoring_personnel.join(", "),
             plan.reporting_schedule,
-            
-            plan.safety_monitoring.iter()
+            plan.safety_monitoring
+                .iter()
                 .map(|item| format!("- {}", item))
                 .collect::<Vec<_>>()
                 .join("\n"),
-            
             if let Some(dmb) = &plan.data_monitoring_board {
-                format!("**Charter:** {}\n**Meeting Schedule:** {}", dmb.charter, dmb.meeting_schedule)
+                format!(
+                    "**Charter:** {}\n**Meeting Schedule:** {}",
+                    dmb.charter, dmb.meeting_schedule
+                )
             } else {
                 "No Data Monitoring Board required for this study".to_string()
             },
-            
             chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
         )
     }
@@ -1400,16 +1551,21 @@ impl Default for IRBComplianceGenerator {
                 institution: "Default Institution".to_string(),
                 email: "pi@default.edu".to_string(),
                 phone: "555-0101".to_string(),
-                qualifications: vec!["PhD in Research".to_string(), "Human Subjects Training".to_string()],
+                qualifications: vec![
+                    "PhD in Research".to_string(),
+                    "Human Subjects Training".to_string(),
+                ],
                 human_subjects_training: TrainingRecord {
                     program_name: "CITI Program".to_string(),
                     completion_date: chrono::Utc::now().naive_utc().date(),
-                    expiration_date: Some(chrono::Utc::now().naive_utc().date() + chrono::Duration::days(365)),
+                    expiration_date: Some(
+                        chrono::Utc::now().naive_utc().date() + chrono::Duration::days(365),
+                    ),
                     certificate_number: Some("CITI-DEFAULT-123456".to_string()),
                     refresher_required: false,
                 },
                 previous_irb_approvals: Vec::new(),
-            }
+            },
         )
     }
 }
@@ -1450,15 +1606,16 @@ impl Default for DataProtectionPlan {
     fn default() -> Self {
         Self {
             data_classification: DataClassification::Confidential,
-            collection_methods: vec![
-                CollectionMethod {
-                    method_name: "Online data collection".to_string(),
-                    data_types: vec!["Response data".to_string(), "Timing data".to_string()],
-                    security_measures: vec!["HTTPS encryption".to_string(), "Authentication".to_string()],
-                    personnel_authorized: vec!["Principal Investigator".to_string()],
-                    location: "Secure research platform".to_string(),
-                }
-            ],
+            collection_methods: vec![CollectionMethod {
+                method_name: "Online data collection".to_string(),
+                data_types: vec!["Response data".to_string(), "Timing data".to_string()],
+                security_measures: vec![
+                    "HTTPS encryption".to_string(),
+                    "Authentication".to_string(),
+                ],
+                personnel_authorized: vec!["Principal Investigator".to_string()],
+                location: "Secure research platform".to_string(),
+            }],
             storage_plan: StoragePlan {
                 primary_storage: StorageLocation {
                     location_type: LocationType::InstitutionalServers,
@@ -1473,14 +1630,12 @@ impl Default for DataProtectionPlan {
             },
             access_controls: AccessControls {
                 authentication_required: true,
-                authorization_levels: vec![
-                    AuthorizationLevel {
-                        role_name: "Principal Investigator".to_string(),
-                        permissions: vec![Permission::Read, Permission::Write, Permission::Export],
-                        personnel_assigned: vec!["PI".to_string()],
-                        training_required: true,
-                    }
-                ],
+                authorization_levels: vec![AuthorizationLevel {
+                    role_name: "Principal Investigator".to_string(),
+                    permissions: vec![Permission::Read, Permission::Write, Permission::Export],
+                    personnel_assigned: vec!["PI".to_string()],
+                    training_required: true,
+                }],
                 audit_logging: true,
                 access_review_frequency: "Quarterly".to_string(),
             },
@@ -1506,18 +1661,28 @@ impl Default for DataProtectionPlan {
                 responsible_party: "Principal Investigator".to_string(),
             },
             incident_response: IncidentResponse {
-                response_team: vec!["Principal Investigator".to_string(), "IT Security".to_string()],
-                notification_procedures: vec![
-                    NotificationProcedure {
-                        incident_type: "Data breach".to_string(),
-                        notification_timeline: "Within 24 hours".to_string(),
-                        recipients: vec!["IRB".to_string(), "IT Security".to_string()],
-                        content_requirements: vec!["Incident description".to_string(), "Affected data".to_string()],
-                    }
+                response_team: vec![
+                    "Principal Investigator".to_string(),
+                    "IT Security".to_string(),
                 ],
-                investigation_procedures: "Immediate containment, forensic analysis, and remediation".to_string(),
-                remediation_procedures: "System patching, access review, and participant notification if required".to_string(),
-                documentation_requirements: vec!["Incident report".to_string(), "Timeline of events".to_string()],
+                notification_procedures: vec![NotificationProcedure {
+                    incident_type: "Data breach".to_string(),
+                    notification_timeline: "Within 24 hours".to_string(),
+                    recipients: vec!["IRB".to_string(), "IT Security".to_string()],
+                    content_requirements: vec![
+                        "Incident description".to_string(),
+                        "Affected data".to_string(),
+                    ],
+                }],
+                investigation_procedures:
+                    "Immediate containment, forensic analysis, and remediation".to_string(),
+                remediation_procedures:
+                    "System patching, access review, and participant notification if required"
+                        .to_string(),
+                documentation_requirements: vec![
+                    "Incident report".to_string(),
+                    "Timeline of events".to_string(),
+                ],
             },
         }
     }
@@ -1551,7 +1716,9 @@ mod tests {
             human_subjects_training: TrainingRecord {
                 program_name: "CITI Training".to_string(),
                 completion_date: chrono::Utc::now().naive_utc().date(),
-                expiration_date: Some(chrono::Utc::now().naive_utc().date() + chrono::Duration::days(1095)),
+                expiration_date: Some(
+                    chrono::Utc::now().naive_utc().date() + chrono::Duration::days(1095),
+                ),
                 certificate_number: Some("12345".to_string()),
                 refresher_required: false,
             },
@@ -1570,25 +1737,22 @@ mod tests {
             study_component: "Learning tasks".to_string(),
             risk_category: RiskCategory::Psychological,
             risk_level: RiskLevel::MinimalRisk,
-            potential_harms: vec![
-                PotentialHarm {
-                    harm_type: "Mild frustration".to_string(),
-                    description: "Participants may experience mild frustration with difficult tasks".to_string(),
-                    probability: Probability::Possible,
-                    severity: Severity::Minor,
-                    affected_groups: vec!["All participants".to_string()],
-                    reversibility: true,
-                }
-            ],
-            mitigation_measures: vec![
-                MitigationMeasure {
-                    measure_type: MitigationType::Prevention,
-                    description: "Clear instructions and practice trials".to_string(),
-                    implementation_timeline: "Before study start".to_string(),
-                    responsible_person: "PI".to_string(),
-                    effectiveness_rating: 0.8,
-                }
-            ],
+            potential_harms: vec![PotentialHarm {
+                harm_type: "Mild frustration".to_string(),
+                description: "Participants may experience mild frustration with difficult tasks"
+                    .to_string(),
+                probability: Probability::Possible,
+                severity: Severity::Minor,
+                affected_groups: vec!["All participants".to_string()],
+                reversibility: true,
+            }],
+            mitigation_measures: vec![MitigationMeasure {
+                measure_type: MitigationType::Prevention,
+                description: "Clear instructions and practice trials".to_string(),
+                implementation_timeline: "Before study start".to_string(),
+                responsible_person: "PI".to_string(),
+                effectiveness_rating: 0.8,
+            }],
             monitoring_plan: MonitoringPlan {
                 monitoring_frequency: MonitoringFrequency::Continuous,
                 monitoring_methods: Vec::new(),

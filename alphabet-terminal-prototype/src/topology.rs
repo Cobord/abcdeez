@@ -170,10 +170,8 @@ impl Topology {
                 Some(forward.min(backward))
             }
             TopologyType::PartialOrder | TopologyType::GeneralGraph => {
-                let path = self.shortest_path(
-                    &self.nodes[from_idx].label,
-                    &self.nodes[to_idx].label,
-                )?;
+                let path =
+                    self.shortest_path(&self.nodes[from_idx].label, &self.nodes[to_idx].label)?;
                 Some(path.len().saturating_sub(1))
             }
         }

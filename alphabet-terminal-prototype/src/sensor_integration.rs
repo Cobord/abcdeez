@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// External Physiological Sensor Integration System
 /// Provides integration for EEG, GSR, eye-tracking, and other biometric sensors
@@ -65,9 +65,33 @@ pub enum SensorType {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum EEGChannel {
-    Fp1, Fp2, F3, F4, C3, C4, P3, P4, O1, O2,
-    F7, F8, T3, T4, T5, T6, Fz, Cz, Pz,
-    AF3, AF4, FC1, FC2, CP1, CP2, PO3, PO4,
+    Fp1,
+    Fp2,
+    F3,
+    F4,
+    C3,
+    C4,
+    P3,
+    P4,
+    O1,
+    O2,
+    F7,
+    F8,
+    T3,
+    T4,
+    T5,
+    T6,
+    Fz,
+    Cz,
+    Pz,
+    AF3,
+    AF4,
+    FC1,
+    FC2,
+    CP1,
+    CP2,
+    PO3,
+    PO4,
     Custom(String),
 }
 
@@ -141,13 +165,13 @@ pub struct SensorReading {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SensorData {
     EEG {
-        channels: HashMap<EEGChannel, f64>, // microvolts
+        channels: HashMap<EEGChannel, f64>,   // microvolts
         impedances: HashMap<EEGChannel, f64>, // ohms
         artifacts_detected: Vec<ArtifactType>,
     },
     GSR {
-        conductance: f64, // microsiemens
-        resistance: f64, // ohms
+        conductance: f64,         // microsiemens
+        resistance: f64,          // ohms
         temperature: Option<f64>, // skin temperature
     },
     EyeTracking {
@@ -159,7 +183,7 @@ pub enum SensorData {
     },
     HeartRate {
         bpm: f64,
-        hrv: Option<f64>, // heart rate variability (RMSSD)
+        hrv: Option<f64>,               // heart rate variability (RMSSD)
         rr_intervals: Option<Vec<f64>>, // milliseconds
     },
     BloodPressure {
@@ -183,7 +207,7 @@ pub enum SensorData {
 pub struct GazePoint {
     pub x: f64, // screen coordinates (pixels or normalized)
     pub y: f64,
-    pub z: Option<f64>, // depth if available
+    pub z: Option<f64>,  // depth if available
     pub confidence: f64, // 0.0 to 1.0
 }
 
@@ -324,9 +348,13 @@ impl SensorManager {
     }
 
     /// Add a sensor to the system
-    pub fn add_sensor(&mut self, config: SensorConfig, sensor: Box<dyn SensorInterface>) -> Result<(), String> {
+    pub fn add_sensor(
+        &mut self,
+        config: SensorConfig,
+        sensor: Box<dyn SensorInterface>,
+    ) -> Result<(), String> {
         self.sensors.insert(config.sensor_id.clone(), sensor);
-        
+
         // Initialize data buffer for this sensor
         {
             let mut buffer = self.data_buffer.lock().unwrap();
@@ -337,7 +365,11 @@ impl SensorManager {
     }
 
     /// Start a new sensor session
-    pub fn start_session(&mut self, session_id: String, participant_id: String) -> Result<(), String> {
+    pub fn start_session(
+        &mut self,
+        session_id: String,
+        participant_id: String,
+    ) -> Result<(), String> {
         if self.session.is_some() {
             return Err("Session already active".to_string());
         }
@@ -349,7 +381,7 @@ impl SensorManager {
                 eprintln!("Failed to connect sensor {}: {}", sensor_id, e);
                 continue;
             }
-            
+
             // Get sensor configuration
             let device_info = sensor.get_device_info();
             active_sensors.push(SensorConfig {
@@ -400,7 +432,9 @@ impl SensorManager {
             match sensor.calibrate() {
                 Ok(calibration_data) => {
                     if let Some(ref mut session) = self.session {
-                        session.calibration_data.insert(sensor_id.clone(), calibration_data);
+                        session
+                            .calibration_data
+                            .insert(sensor_id.clone(), calibration_data);
                     }
                 }
                 Err(e) => {
@@ -482,22 +516,25 @@ impl SensorManager {
     /// Get real-time sensor data summary
     pub fn get_real_time_summary(&self) -> HashMap<String, SensorSummary> {
         let mut summaries = HashMap::new();
-        
+
         for (sensor_id, sensor) in &self.sensors {
             let latest_reading = sensor.get_latest_reading();
             let quality = sensor.check_quality();
             let is_connected = sensor.is_connected();
-            
-            summaries.insert(sensor_id.clone(), SensorSummary {
-                sensor_id: sensor_id.clone(),
-                is_connected,
-                latest_reading,
-                quality,
-                buffer_size: {
-                    let buffer = self.data_buffer.lock().unwrap();
-                    buffer.get(sensor_id).map(|b| b.len()).unwrap_or(0)
+
+            summaries.insert(
+                sensor_id.clone(),
+                SensorSummary {
+                    sensor_id: sensor_id.clone(),
+                    is_connected,
+                    latest_reading,
+                    quality,
+                    buffer_size: {
+                        let buffer = self.data_buffer.lock().unwrap();
+                        buffer.get(sensor_id).map(|b| b.len()).unwrap_or(0)
+                    },
                 },
-            });
+            );
         }
 
         summaries
@@ -507,7 +544,7 @@ impl SensorManager {
     pub fn finalize_session(mut self) -> Result<SensorSession, String> {
         if let Some(mut session) = self.session.take() {
             session.end_time = Some(chrono::Utc::now());
-            
+
             // Stop recording if still active
             if *self.recording_active.lock().unwrap() {
                 self.stop_recording()?;
@@ -516,7 +553,9 @@ impl SensorManager {
             // Collect all buffered data
             let buffer = self.data_buffer.lock().unwrap();
             for (sensor_id, readings) in buffer.iter() {
-                session.sensor_data.insert(sensor_id.clone(), readings.iter().cloned().collect());
+                session
+                    .sensor_data
+                    .insert(sensor_id.clone(), readings.iter().cloned().collect());
             }
             drop(buffer);
 
@@ -569,7 +608,7 @@ impl SensorManager {
                     let mut buffer = data_buffer.lock().unwrap();
                     if let Some(sensor_buffer) = buffer.get_mut("mock_sensor") {
                         sensor_buffer.push_back(mock_reading);
-                        
+
                         // Keep buffer size manageable
                         while sensor_buffer.len() > 10000 {
                             sensor_buffer.pop_front();
@@ -655,7 +694,7 @@ impl SensorInterface for MockEEGSensor {
 
         // Simulate calibration
         thread::sleep(Duration::from_millis(500));
-        
+
         Ok(CalibrationData {
             sensor_id: "mock_eeg".to_string(),
             calibration_type: CalibrationType::EEGImpedanceCheck,
@@ -682,7 +721,7 @@ impl SensorInterface for MockEEGSensor {
             channels.insert(EEGChannel::Fp1, rand::random::<f64>() * 20.0 - 10.0);
             channels.insert(EEGChannel::Fp2, rand::random::<f64>() * 20.0 - 10.0);
             channels.insert(EEGChannel::Cz, rand::random::<f64>() * 20.0 - 10.0);
-            
+
             Some(SensorReading {
                 timestamp: chrono::Utc::now(),
                 sensor_id: "mock_eeg".to_string(),
@@ -794,7 +833,7 @@ impl SensorInterface for MockGSRSensor {
             let variation = rand::random::<f64>() * 1.0 - 0.5; // ±0.5 μS
             let conductance = base_conductance + variation;
             let resistance = 1.0 / conductance * 1_000_000.0; // convert to ohms
-            
+
             Some(SensorReading {
                 timestamp: chrono::Utc::now(),
                 sensor_id: "mock_gsr".to_string(),
@@ -895,7 +934,7 @@ impl SensorInterface for MockEyeTracker {
         // Simulate calibration process
         thread::sleep(Duration::from_millis(2000)); // Calibration takes time
         self.calibrated = true;
-        
+
         Ok(CalibrationData {
             sensor_id: "mock_eyetracker".to_string(),
             calibration_type: CalibrationType::EyeTrackingGaze,
@@ -921,13 +960,13 @@ impl SensorInterface for MockEyeTracker {
             // Generate mock eye tracking data
             let screen_width = 1920.0;
             let screen_height = 1080.0;
-            
+
             // Simulate gaze wandering around screen center
             let center_x = screen_width / 2.0;
             let center_y = screen_height / 2.0;
             let noise_x = (rand::random::<f64>() - 0.5) * 200.0; // ±100 pixels
             let noise_y = (rand::random::<f64>() - 0.5) * 200.0;
-            
+
             Some(SensorReading {
                 timestamp: chrono::Utc::now(),
                 sensor_id: "mock_eyetracker".to_string(),
@@ -939,7 +978,9 @@ impl SensorInterface for MockEyeTracker {
                         confidence: 0.9 + rand::random::<f64>() * 0.1,
                     },
                     pupil_diameter: Some(3.0 + rand::random::<f64>() * 2.0), // 3-5mm
-                    fixation_duration: Some(Duration::from_millis(150 + (rand::random::<u64>() % 300))),
+                    fixation_duration: Some(Duration::from_millis(
+                        150 + (rand::random::<u64>() % 300),
+                    )),
                     saccade_velocity: None, // Only set during saccades
                     blink_detected: rand::random::<f64>() < 0.02, // 2% chance of blink
                 },
@@ -957,7 +998,7 @@ impl SensorInterface for MockEyeTracker {
 
     fn check_quality(&self) -> DataQuality {
         let mut quality_issues = Vec::new();
-        
+
         if !self.calibrated {
             quality_issues.push(QualityIssue {
                 issue_type: QualityIssueType::CalibrationDrift,
@@ -969,7 +1010,11 @@ impl SensorInterface for MockEyeTracker {
 
         DataQuality {
             sensor_id: "mock_eyetracker".to_string(),
-            overall_quality: if self.calibrated { QualityLevel::Excellent } else { QualityLevel::Poor },
+            overall_quality: if self.calibrated {
+                QualityLevel::Excellent
+            } else {
+                QualityLevel::Poor
+            },
             signal_to_noise_ratio: if self.calibrated { 30.0 } else { 5.0 },
             data_loss_percentage: if self.calibrated { 0.2 } else { 15.0 },
             artifact_percentage: 1.0,
@@ -992,21 +1037,21 @@ mod tests {
     #[test]
     fn test_mock_eeg_sensor() {
         let mut sensor = MockEEGSensor::new();
-        
+
         // Test connection
         assert!(!sensor.is_connected());
         sensor.connect().unwrap();
         assert!(sensor.is_connected());
-        
+
         // Test calibration
         let calibration = sensor.calibrate().unwrap();
         assert!(calibration.success);
-        
+
         // Test recording
         sensor.start_recording().unwrap();
         let reading = sensor.get_latest_reading();
         assert!(reading.is_some());
-        
+
         let quality = sensor.check_quality();
         assert!(matches!(quality.overall_quality, QualityLevel::Good));
     }
@@ -1014,12 +1059,17 @@ mod tests {
     #[test]
     fn test_mock_gsr_sensor() {
         let mut sensor = MockGSRSensor::new();
-        
+
         sensor.connect().unwrap();
         sensor.start_recording().unwrap();
-        
+
         let reading = sensor.get_latest_reading().unwrap();
-        if let SensorData::GSR { conductance, resistance, temperature } = reading.data {
+        if let SensorData::GSR {
+            conductance,
+            resistance,
+            temperature,
+        } = reading.data
+        {
             assert!(conductance > 0.0);
             assert!(resistance > 0.0);
             assert!(temperature.is_some());
@@ -1031,16 +1081,16 @@ mod tests {
     #[test]
     fn test_mock_eye_tracker() {
         let mut tracker = MockEyeTracker::new();
-        
+
         tracker.connect().unwrap();
-        
+
         // Should fail before calibration
         assert!(tracker.start_recording().is_err());
-        
+
         // Calibrate and try again
         tracker.calibrate().unwrap();
         tracker.start_recording().unwrap();
-        
+
         let reading = tracker.get_latest_reading().unwrap();
         if let SensorData::EyeTracking { gaze_point, .. } = reading.data {
             assert!(gaze_point.confidence > 0.8);
@@ -1054,7 +1104,7 @@ mod tests {
     #[test]
     fn test_sensor_session_workflow() {
         let mut manager = SensorManager::new();
-        
+
         // Add mock sensors
         let eeg_config = SensorConfig {
             sensor_id: "eeg".to_string(),
@@ -1078,12 +1128,16 @@ mod tests {
             },
         };
 
-        manager.add_sensor(eeg_config, Box::new(MockEEGSensor::new())).unwrap();
-        
+        manager
+            .add_sensor(eeg_config, Box::new(MockEEGSensor::new()))
+            .unwrap();
+
         // Start session
-        manager.start_session("test_session".to_string(), "participant_1".to_string()).unwrap();
+        manager
+            .start_session("test_session".to_string(), "participant_1".to_string())
+            .unwrap();
         assert!(manager.session.is_some());
-        
+
         // Check that we can get real-time summary
         let summary = manager.get_real_time_summary();
         assert!(!summary.is_empty());

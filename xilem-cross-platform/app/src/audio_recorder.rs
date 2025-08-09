@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, Host, Sample, SampleFormat, SampleRate, StreamConfig};
 use hound::{WavSpec, WavWriter};
@@ -8,7 +9,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use chrono::{DateTime, Utc};
 
 /// Audio recorder using CPAL for cross-platform microphone capture
 #[derive(Debug)]
@@ -75,7 +75,7 @@ impl Default for AudioConfig {
 impl AudioRecorder {
     pub fn new() -> Result<Self, AudioError> {
         let host = cpal::default_host();
-        
+
         Ok(AudioRecorder {
             host,
             input_device: None,
@@ -88,7 +88,8 @@ impl AudioRecorder {
 
     pub fn initialize(&mut self, config: AudioConfig) -> Result<(), AudioError> {
         // Get the default input device
-        let input_device = self.host
+        let input_device = self
+            .host
             .default_input_device()
             .ok_or(AudioError::DeviceNotFound)?;
 
@@ -103,7 +104,8 @@ impl AudioRecorder {
                 && config_range.min_sample_rate() <= SampleRate(config.sample_rate)
                 && config_range.max_sample_rate() >= SampleRate(config.sample_rate)
             {
-                compatible_config = Some(config_range.with_sample_rate(SampleRate(config.sample_rate)));
+                compatible_config =
+                    Some(config_range.with_sample_rate(SampleRate(config.sample_rate)));
                 break;
             }
         }
@@ -123,7 +125,9 @@ impl AudioRecorder {
             return Err(AudioError::RecordingInProgress);
         }
 
-        let device = self.input_device.as_ref()
+        let device = self
+            .input_device
+            .as_ref()
             .ok_or(AudioError::DeviceNotFound)?
             .clone();
 
@@ -139,29 +143,33 @@ impl AudioRecorder {
         };
 
         let is_recording_clone = Arc::clone(&self.is_recording);
-        
+
         // Create the input stream
-        let stream = device.build_input_stream(
-            &config,
-            move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                let is_rec = is_recording_clone.lock().unwrap();
-                if *is_rec {
-                    for &sample in data {
-                        if producer.push(sample).is_err() {
-                            // Buffer is full, skip this sample
-                            break;
+        let stream = device
+            .build_input_stream(
+                &config,
+                move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    let is_rec = is_recording_clone.lock().unwrap();
+                    if *is_rec {
+                        for &sample in data {
+                            if producer.push(sample).is_err() {
+                                // Buffer is full, skip this sample
+                                break;
+                            }
                         }
                     }
-                }
-            },
-            move |err| {
-                eprintln!("Audio input stream error: {}", err);
-            },
-            None,
-        ).map_err(|e| AudioError::StreamError(e.to_string()))?;
+                },
+                move |err| {
+                    eprintln!("Audio input stream error: {}", err);
+                },
+                None,
+            )
+            .map_err(|e| AudioError::StreamError(e.to_string()))?;
 
         // Start the stream
-        stream.play().map_err(|e| AudioError::StreamError(e.to_string()))?;
+        stream
+            .play()
+            .map_err(|e| AudioError::StreamError(e.to_string()))?;
 
         *is_recording = true;
 
@@ -169,7 +177,7 @@ impl AudioRecorder {
         let is_recording_thread = Arc::clone(&self.is_recording);
         let sample_rate = self.sample_rate;
         let channels = self.channels;
-        
+
         let recording_thread = thread::spawn(move || -> Result<(), AudioError> {
             let spec = WavSpec {
                 channels,
@@ -183,7 +191,7 @@ impl AudioRecorder {
 
             let mut consumer = consumer;
             let start_time = Instant::now();
-            
+
             // Keep the stream alive
             let _stream = stream;
 
@@ -194,10 +202,11 @@ impl AudioRecorder {
                 // Write samples from the ring buffer to the file
                 let mut samples_written = 0;
                 while let Some(sample) = consumer.pop() {
-                    writer.write_sample(sample)
+                    writer
+                        .write_sample(sample)
                         .map_err(|e| AudioError::FileError(e.to_string()))?;
                     samples_written += 1;
-                    
+
                     // Process in batches to avoid holding the lock too long
                     if samples_written >= 1024 {
                         break;
@@ -209,11 +218,15 @@ impl AudioRecorder {
             }
 
             // Finalize the WAV file
-            writer.finalize()
+            writer
+                .finalize()
                 .map_err(|e| AudioError::FileError(e.to_string()))?;
 
             println!("Audio recording saved to: {:?}", output_path);
-            println!("Recording duration: {:.2} seconds", start_time.elapsed().as_secs_f64());
+            println!(
+                "Recording duration: {:.2} seconds",
+                start_time.elapsed().as_secs_f64()
+            );
 
             Ok(())
         });
@@ -235,7 +248,9 @@ impl AudioRecorder {
         // Wait for the recording thread to finish
         if let Some(thread) = self.recording_thread.take() {
             thread.join().unwrap_or_else(|_| {
-                Err(AudioError::StreamError("Recording thread panicked".to_string()))
+                Err(AudioError::StreamError(
+                    "Recording thread panicked".to_string(),
+                ))
             })?;
         }
 
@@ -247,15 +262,16 @@ impl AudioRecorder {
     }
 
     pub fn get_available_devices(&self) -> Vec<String> {
-        self.host.input_devices()
-            .map(|devices| {
-                devices.filter_map(|device| device.name().ok()).collect()
-            })
+        self.host
+            .input_devices()
+            .map(|devices| devices.filter_map(|device| device.name().ok()).collect())
             .unwrap_or_default()
     }
 
     pub fn get_supported_configs(&self) -> Result<Vec<(u32, u16)>, AudioError> {
-        let device = self.input_device.as_ref()
+        let device = self
+            .input_device
+            .as_ref()
             .ok_or(AudioError::DeviceNotFound)?;
 
         let configs = device
@@ -267,7 +283,7 @@ impl AudioRecorder {
             let min_rate = config.min_sample_rate().0;
             let max_rate = config.max_sample_rate().0;
             let channels = config.channels();
-            
+
             // Add common sample rates within the supported range
             for &rate in &[8000, 16000, 22050, 44100, 48000, 96000] {
                 if rate >= min_rate && rate <= max_rate {
@@ -293,14 +309,17 @@ impl Drop for AudioRecorder {
 /// Helper function to create audio file paths
 pub fn create_audio_file_path(participant_id: &str, session_id: &str) -> PathBuf {
     let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-    let filename = format!("recording_{}_{}__{}.wav", participant_id, session_id, timestamp);
-    
+    let filename = format!(
+        "recording_{}_{}__{}.wav",
+        participant_id, session_id, timestamp
+    );
+
     // Create audio directory if it doesn't exist
     let audio_dir = PathBuf::from("audio_recordings");
     std::fs::create_dir_all(&audio_dir).unwrap_or_else(|e| {
         eprintln!("Failed to create audio directory: {}", e);
     });
-    
+
     audio_dir.join(filename)
 }
 
@@ -325,7 +344,9 @@ mod tests {
     #[test]
     fn test_create_audio_file_path() {
         let path = create_audio_file_path("test_participant", "test_session");
-        assert!(path.to_string_lossy().contains("recording_test_participant_test_session"));
+        assert!(path
+            .to_string_lossy()
+            .contains("recording_test_participant_test_session"));
         assert!(path.extension() == Some(std::ffi::OsStr::new("wav")));
     }
 }

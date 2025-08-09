@@ -3,14 +3,10 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{
-    components::*, 
-    visualization_components::*,
-    AppData, Screen,
-};
+use crate::{components::*, visualization_components::*, AppData, Screen};
 
-use graph_learning_core::tasks::{TaskResponse, TaskType};
 use graph_learning_core::learner::OperationType;
+use graph_learning_core::tasks::{TaskResponse, TaskType};
 
 pub fn visualizations_screen(data: &mut AppData) -> impl WidgetView<AppData> {
     let has_data = !data.session_responses.is_empty();
@@ -27,26 +23,33 @@ pub fn visualizations_screen(data: &mut AppData) -> impl WidgetView<AppData> {
         card(
             "📊 Visualizations",
             flex((
-                label(format!("You have {} data points", data.session_responses.len()))
-                    .alignment(TextAlignment::Middle),
+                label(format!(
+                    "You have {} data points",
+                    data.session_responses.len()
+                ))
+                .alignment(TextAlignment::Middle),
                 prose("Complete at least 5 tasks to unlock full visualizations")
                     .brush(Color::from_rgb8(128, 128, 128))
                     .alignment(TextAlignment::Middle),
                 // Show what's available with limited data
                 if data.session_responses.len() >= 2 {
-                    Some(flex((
-                        label("Available with current data:").brush(Color::from_rgb8(102, 126, 234)),
-                        sparkline(
-                            &data.session_responses
-                                .iter()
-                                .map(|r| if r.correct { 1.0 } else { 0.0 })
-                                .collect::<Vec<_>>(),
-                            200,
-                            30,
-                            Color::from_rgb8(46, 213, 115),
-                        ),
-                    ))
-                    .direction(Axis::Vertical))
+                    Some(
+                        flex((
+                            label("Available with current data:")
+                                .brush(Color::from_rgb8(102, 126, 234)),
+                            sparkline(
+                                &data
+                                    .session_responses
+                                    .iter()
+                                    .map(|r| if r.correct { 1.0 } else { 0.0 })
+                                    .collect::<Vec<_>>(),
+                                200,
+                                30,
+                                Color::from_rgb8(46, 213, 115),
+                            ),
+                        ))
+                        .direction(Axis::Vertical),
+                    )
                 } else {
                     None
                 },
@@ -72,11 +75,13 @@ pub fn visualizations_screen(data: &mut AppData) -> impl WidgetView<AppData> {
     // Session comparisons if multiple sessions exist
     let session_comparison = if let Some(controller) = &data.research_controller {
         if controller.sessions.len() >= 2 {
-            let session_data: Vec<Vec<graph_learning_core::tasks::TaskResponse>> = controller.sessions
+            let session_data: Vec<Vec<graph_learning_core::tasks::TaskResponse>> = controller
+                .sessions
                 .iter()
                 .map(|s| {
-                    s.data_points.iter().map(|dp| {
-                        graph_learning_core::tasks::TaskResponse {
+                    s.data_points
+                        .iter()
+                        .map(|dp| graph_learning_core::tasks::TaskResponse {
                             task: graph_learning_core::tasks::Task {
                                 task_type: TaskType::Successor {
                                     item: dp.stimulus.clone(),
@@ -91,11 +96,11 @@ pub fn visualizations_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                             correct: dp.correct,
                             response_time_ms: dp.response_time_ms,
                             timestamp: dp.timestamp,
-                        }
-                    }).collect()
+                        })
+                        .collect()
                 })
                 .collect();
-            
+
             Some(card(
                 "📈 Session Comparisons",
                 session_comparison_chart(&session_data, 800, 400),
@@ -125,49 +130,59 @@ pub fn visualizations_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             flex((
                 label("Last 10 Accuracy:").alignment(TextAlignment::Start),
                 if data.session_responses.len() >= 10 {
-                    let recent_accuracy = data.session_responses
+                    let recent_accuracy = data
+                        .session_responses
                         .iter()
                         .rev()
                         .take(10)
                         .filter(|r| r.correct)
-                        .count() as f64 / 10.0;
-                    Some(label(format!("{:.0}%", recent_accuracy * 100.0))
-                        .brush(get_metric_color(recent_accuracy))
-                        .alignment(TextAlignment::End))
+                        .count() as f64
+                        / 10.0;
+                    Some(
+                        label(format!("{:.0}%", recent_accuracy * 100.0))
+                            .brush(get_metric_color(recent_accuracy))
+                            .alignment(TextAlignment::End),
+                    )
                 } else {
-                    Some(label("N/A")
-                        .brush(Color::from_rgb8(128, 128, 128))
-                        .alignment(TextAlignment::End))
+                    Some(
+                        label("N/A")
+                            .brush(Color::from_rgb8(128, 128, 128))
+                            .alignment(TextAlignment::End),
+                    )
                 },
             ))
             .direction(Axis::Horizontal),
             // Trend indicators
             if data.session_responses.len() >= 20 {
-                let first_half = &data.session_responses[..data.session_responses.len()/2];
-                let second_half = &data.session_responses[data.session_responses.len()/2..];
-                let first_acc = first_half.iter().filter(|r| r.correct).count() as f64 / first_half.len() as f64;
-                let second_acc = second_half.iter().filter(|r| r.correct).count() as f64 / second_half.len() as f64;
+                let first_half = &data.session_responses[..data.session_responses.len() / 2];
+                let second_half = &data.session_responses[data.session_responses.len() / 2..];
+                let first_acc = first_half.iter().filter(|r| r.correct).count() as f64
+                    / first_half.len() as f64;
+                let second_acc = second_half.iter().filter(|r| r.correct).count() as f64
+                    / second_half.len() as f64;
                 let trend = second_acc - first_acc;
-                
-                Some(flex((
-                    label("Performance Trend:").alignment(TextAlignment::Start),
-                    label(if trend > 0.1 {
-                        "📈 Improving"
-                    } else if trend < -0.1 {
-                        "📉 Declining"
-                    } else {
-                        "➡️ Stable"
-                    })
-                    .brush(if trend > 0.1 {
-                        Color::from_rgb8(46, 213, 115)
-                    } else if trend < -0.1 {
-                        Color::from_rgb8(255, 71, 87)
-                    } else {
-                        Color::from_rgb8(0, 123, 255)
-                    })
-                    .alignment(TextAlignment::End),
-                ))
-                .direction(Axis::Horizontal))
+
+                Some(
+                    flex((
+                        label("Performance Trend:").alignment(TextAlignment::Start),
+                        label(if trend > 0.1 {
+                            "📈 Improving"
+                        } else if trend < -0.1 {
+                            "📉 Declining"
+                        } else {
+                            "➡️ Stable"
+                        })
+                        .brush(if trend > 0.1 {
+                            Color::from_rgb8(46, 213, 115)
+                        } else if trend < -0.1 {
+                            Color::from_rgb8(255, 71, 87)
+                        } else {
+                            Color::from_rgb8(0, 123, 255)
+                        })
+                        .alignment(TextAlignment::End),
+                    ))
+                    .direction(Axis::Horizontal),
+                )
             } else {
                 None
             },
@@ -184,16 +199,16 @@ pub fn visualizations_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 flex((
                     label("Response Time Analysis:").alignment(TextAlignment::Start),
                     {
-                        let times: Vec<f64> = data.session_responses
+                        let times: Vec<f64> = data
+                            .session_responses
                             .iter()
                             .map(|r| r.response_time_ms as f64)
                             .collect();
                         let avg = times.iter().sum::<f64>() / times.len() as f64;
-                        let variance = times.iter()
-                            .map(|t| (t - avg).powi(2))
-                            .sum::<f64>() / times.len() as f64;
+                        let variance = times.iter().map(|t| (t - avg).powi(2)).sum::<f64>()
+                            / times.len() as f64;
                         let std_dev = variance.sqrt();
-                        
+
                         flex((
                             label(format!("Mean: {:.0}ms", avg))
                                 .brush(get_speed_color(avg))
@@ -208,30 +223,33 @@ pub fn visualizations_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 .direction(Axis::Vertical),
                 // Learning efficiency
                 if data.session_responses.len() >= 10 {
-                    let windows: Vec<f64> = data.session_responses
+                    let windows: Vec<f64> = data
+                        .session_responses
                         .windows(5)
                         .map(|w| w.iter().filter(|r| r.correct).count() as f64 / 5.0)
                         .collect();
-                    
+
                     let improvement = if windows.len() >= 2 {
                         windows.last().unwrap() - windows.first().unwrap()
                     } else {
                         0.0
                     };
-                    
-                    Some(flex((
-                        label("Learning Efficiency:").alignment(TextAlignment::Start),
-                        label(format!("{:+.1}% improvement", improvement * 100.0))
-                            .brush(if improvement > 0.0 {
-                                Color::from_rgb8(46, 213, 115)
-                            } else if improvement < 0.0 {
-                                Color::from_rgb8(255, 71, 87)
-                            } else {
-                                Color::from_rgb8(128, 128, 128)
-                            })
-                            .alignment(TextAlignment::End),
-                    ))
-                    .direction(Axis::Horizontal))
+
+                    Some(
+                        flex((
+                            label("Learning Efficiency:").alignment(TextAlignment::Start),
+                            label(format!("{:+.1}% improvement", improvement * 100.0))
+                                .brush(if improvement > 0.0 {
+                                    Color::from_rgb8(46, 213, 115)
+                                } else if improvement < 0.0 {
+                                    Color::from_rgb8(255, 71, 87)
+                                } else {
+                                    Color::from_rgb8(128, 128, 128)
+                                })
+                                .alignment(TextAlignment::End),
+                        ))
+                        .direction(Axis::Horizontal),
+                    )
                 } else {
                     None
                 },

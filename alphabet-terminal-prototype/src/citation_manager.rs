@@ -11,7 +11,7 @@ use std::path::PathBuf;
 pub struct CitationManager {
     pub references: HashMap<String, Reference>,
     pub methodology_citations: HashMap<String, Vec<String>>, // method -> reference_ids
-    pub software_citations: HashMap<String, String>, // software -> reference_id
+    pub software_citations: HashMap<String, String>,         // software -> reference_id
     pub used_methods: HashSet<String>,
     pub bibliography_style: BibliographyStyle,
 }
@@ -171,11 +171,13 @@ impl CitationManager {
     }
 
     pub fn add_method_citation(&mut self, method_name: &str, reference_ids: Vec<String>) {
-        self.methodology_citations.insert(method_name.to_string(), reference_ids);
+        self.methodology_citations
+            .insert(method_name.to_string(), reference_ids);
     }
 
     pub fn add_software_citation(&mut self, software_name: &str, reference_id: String) {
-        self.software_citations.insert(software_name.to_string(), reference_id);
+        self.software_citations
+            .insert(software_name.to_string(), reference_id);
     }
 
     pub fn mark_method_used(&mut self, method_name: &str) {
@@ -192,7 +194,7 @@ impl CitationManager {
         for method_name in &self.used_methods {
             if let Some(reference_ids) = self.methodology_citations.get(method_name) {
                 all_reference_ids.extend(reference_ids.iter().cloned());
-                
+
                 methods_used.push(MethodCitation {
                     method_name: method_name.clone(),
                     description: self.get_method_description(method_name),
@@ -207,7 +209,7 @@ impl CitationManager {
         for (software_name, reference_id) in &self.software_citations {
             if self.is_software_used(software_name) {
                 all_reference_ids.insert(reference_id.clone());
-                
+
                 if let Some(reference) = self.references.get(reference_id) {
                     software_used.push(SoftwareCitation {
                         software_name: software_name.clone(),
@@ -236,7 +238,11 @@ impl CitationManager {
         }
     }
 
-    pub fn export_bibliography(&self, path: &PathBuf, format: BibliographyFormat) -> std::io::Result<()> {
+    pub fn export_bibliography(
+        &self,
+        path: &PathBuf,
+        format: BibliographyFormat,
+    ) -> std::io::Result<()> {
         let content = match format {
             BibliographyFormat::BibTeX => self.generate_bibtex(),
             BibliographyFormat::RIS => self.generate_ris(),
@@ -256,14 +262,19 @@ impl CitationManager {
 
     pub fn search_references(&self, query: &str) -> Vec<&Reference> {
         let query_lower = query.to_lowercase();
-        
-        self.references.values()
+
+        self.references
+            .values()
             .filter(|reference| {
-                reference.title.to_lowercase().contains(&query_lower) ||
-                reference.authors.iter().any(|author| 
-                    author.last_name.to_lowercase().contains(&query_lower)) ||
-                reference.keywords.iter().any(|keyword|
-                    keyword.to_lowercase().contains(&query_lower))
+                reference.title.to_lowercase().contains(&query_lower)
+                    || reference
+                        .authors
+                        .iter()
+                        .any(|author| author.last_name.to_lowercase().contains(&query_lower))
+                    || reference
+                        .keywords
+                        .iter()
+                        .any(|keyword| keyword.to_lowercase().contains(&query_lower))
             })
             .collect()
     }
@@ -311,13 +322,19 @@ impl CitationManager {
             },
             doi: None,
             url: None,
-            abstract_text: Some("A comprehensive introduction to Bayesian data analysis".to_string()),
-            keywords: vec!["Bayesian statistics".to_string(), "MCMC".to_string(), "Data analysis".to_string()],
+            abstract_text: Some(
+                "A comprehensive introduction to Bayesian data analysis".to_string(),
+            ),
+            keywords: vec![
+                "Bayesian statistics".to_string(),
+                "MCMC".to_string(),
+                "Data analysis".to_string(),
+            ],
             notes: "Standard reference for Bayesian analysis methods".to_string(),
             citation_count: 5000,
             added_date: chrono::Utc::now(),
         };
-        
+
         self.add_reference(reference);
         self.add_method_citation("bayesian_inference", vec!["kruschke2014".to_string()]);
 
@@ -344,12 +361,16 @@ impl CitationManager {
             doi: None,
             url: Some("http://burrsettles.com/pub/settles.activelearning.pdf".to_string()),
             abstract_text: Some("Comprehensive survey of active learning methods".to_string()),
-            keywords: vec!["Active learning".to_string(), "Machine learning".to_string(), "Adaptive systems".to_string()],
+            keywords: vec![
+                "Active learning".to_string(),
+                "Machine learning".to_string(),
+                "Adaptive systems".to_string(),
+            ],
             notes: "Foundational reference for adaptive learning algorithms".to_string(),
             citation_count: 3500,
             added_date: chrono::Utc::now(),
         };
-        
+
         self.add_reference(adaptive_ref);
         self.add_method_citation("adaptive_scheduling", vec!["settles2009".to_string()]);
     }
@@ -386,13 +407,20 @@ impl CitationManager {
             },
             doi: Some("10.18637/jss.v067.i01".to_string()),
             url: Some("https://www.jstatsoft.org/article/view/v067i01".to_string()),
-            abstract_text: Some("Description of the lme4 package for fitting linear mixed-effects models".to_string()),
-            keywords: vec!["Mixed-effects models".to_string(), "R".to_string(), "Hierarchical models".to_string()],
+            abstract_text: Some(
+                "Description of the lme4 package for fitting linear mixed-effects models"
+                    .to_string(),
+            ),
+            keywords: vec![
+                "Mixed-effects models".to_string(),
+                "R".to_string(),
+                "Hierarchical models".to_string(),
+            ],
             notes: "Primary reference for lme4 mixed-effects modeling".to_string(),
             citation_count: 15000,
             added_date: chrono::Utc::now(),
         };
-        
+
         self.add_reference(lme4_ref);
         self.add_method_citation("mixed_effects_modeling", vec!["bates2015".to_string()]);
         self.add_software_citation("lme4", "bates2015".to_string());
@@ -418,13 +446,19 @@ impl CitationManager {
             },
             doi: None,
             url: None,
-            abstract_text: Some("Comprehensive treatment of statistical power analysis".to_string()),
-            keywords: vec!["Power analysis".to_string(), "Effect size".to_string(), "Sample size".to_string()],
+            abstract_text: Some(
+                "Comprehensive treatment of statistical power analysis".to_string(),
+            ),
+            keywords: vec![
+                "Power analysis".to_string(),
+                "Effect size".to_string(),
+                "Sample size".to_string(),
+            ],
             notes: "Classic reference for power analysis methodology".to_string(),
             citation_count: 25000,
             added_date: chrono::Utc::now(),
         };
-        
+
         self.add_reference(power_ref);
         self.add_method_citation("power_analysis", vec!["cohen1988".to_string()]);
     }
@@ -459,13 +493,19 @@ impl CitationManager {
             },
             doi: None,
             url: None,
-            abstract_text: Some("Comprehensive guide to experimental design and analysis".to_string()),
-            keywords: vec!["Experimental design".to_string(), "Counterbalancing".to_string(), "ANOVA".to_string()],
+            abstract_text: Some(
+                "Comprehensive guide to experimental design and analysis".to_string(),
+            ),
+            keywords: vec![
+                "Experimental design".to_string(),
+                "Counterbalancing".to_string(),
+                "ANOVA".to_string(),
+            ],
             notes: "Standard reference for counterbalancing and experimental design".to_string(),
             citation_count: 3000,
             added_date: chrono::Utc::now(),
         };
-        
+
         self.add_reference(counterbalancing_ref);
         self.add_method_citation("counterbalancing", vec!["keppel2004".to_string()]);
         self.add_method_citation("latin_squares", vec!["keppel2004".to_string()]);
@@ -492,13 +532,20 @@ impl CitationManager {
             },
             doi: None,
             url: Some("https://www.R-project.org/".to_string()),
-            abstract_text: Some("R is a free software environment for statistical computing and graphics".to_string()),
-            keywords: vec!["R".to_string(), "Statistical software".to_string(), "Open source".to_string()],
+            abstract_text: Some(
+                "R is a free software environment for statistical computing and graphics"
+                    .to_string(),
+            ),
+            keywords: vec![
+                "R".to_string(),
+                "Statistical software".to_string(),
+                "Open source".to_string(),
+            ],
             notes: "Primary statistical computing environment".to_string(),
             citation_count: 50000,
             added_date: chrono::Utc::now(),
         };
-        
+
         self.add_reference(r_ref);
         self.add_software_citation("R", "rcoreteam2023".to_string());
 
@@ -506,7 +553,8 @@ impl CitationManager {
         let scipy_ref = Reference {
             id: "virtanen2020".to_string(),
             reference_type: ReferenceType::Journal,
-            title: "SciPy 1.0: Fundamental Algorithms for Scientific Computing in Python".to_string(),
+            title: "SciPy 1.0: Fundamental Algorithms for Scientific Computing in Python"
+                .to_string(),
             authors: vec![Author {
                 first_name: "Pauli".to_string(),
                 last_name: "Virtanen".to_string(),
@@ -524,13 +572,19 @@ impl CitationManager {
             },
             doi: Some("10.1038/s41592-019-0686-2".to_string()),
             url: Some("https://doi.org/10.1038/s41592-019-0686-2".to_string()),
-            abstract_text: Some("SciPy is an open-source scientific computing library for Python".to_string()),
-            keywords: vec!["Python".to_string(), "Scientific computing".to_string(), "Statistics".to_string()],
+            abstract_text: Some(
+                "SciPy is an open-source scientific computing library for Python".to_string(),
+            ),
+            keywords: vec![
+                "Python".to_string(),
+                "Scientific computing".to_string(),
+                "Statistics".to_string(),
+            ],
             notes: "Primary Python scientific computing library".to_string(),
             citation_count: 8000,
             added_date: chrono::Utc::now(),
         };
-        
+
         self.add_reference(scipy_ref);
         self.add_software_citation("SciPy", "virtanen2020".to_string());
         self.add_software_citation("Python", "virtanen2020".to_string());
@@ -555,13 +609,13 @@ impl CitationManager {
                 params.insert("prior_type".to_string(), "Non-informative".to_string());
                 params.insert("mcmc_chains".to_string(), "4".to_string());
                 params.insert("iterations".to_string(), "2000".to_string());
-            },
+            }
             "power_analysis" => {
                 params.insert("alpha".to_string(), "0.05".to_string());
                 params.insert("power".to_string(), "0.80".to_string());
                 params.insert("effect_size".to_string(), "Cohen's d = 0.5".to_string());
-            },
-            _ => {},
+            }
+            _ => {}
         }
         params
     }
@@ -578,8 +632,10 @@ impl CitationManager {
 
     fn is_software_used(&self, software_name: &str) -> bool {
         // Check if software is mentioned in used methods
-        self.used_methods.iter().any(|method| method.contains(software_name)) ||
-        matches!(software_name, "R" | "Python" | "SciPy" | "lme4")
+        self.used_methods
+            .iter()
+            .any(|method| method.contains(software_name))
+            || matches!(software_name, "R" | "Python" | "SciPy" | "lme4")
     }
 
     fn extract_version(&self, reference: &Reference) -> String {
@@ -599,13 +655,17 @@ impl CitationManager {
         }
     }
 
-    fn get_statistical_citations(&self, reference_ids: &HashSet<String>) -> Vec<StatisticalCitation> {
+    fn get_statistical_citations(
+        &self,
+        reference_ids: &HashSet<String>,
+    ) -> Vec<StatisticalCitation> {
         let mut citations = Vec::new();
-        
+
         if reference_ids.contains("bates2015") {
             citations.push(StatisticalCitation {
                 procedure_name: "Linear Mixed-Effects Models".to_string(),
-                description: "Hierarchical models for repeated measures and nested data".to_string(),
+                description: "Hierarchical models for repeated measures and nested data"
+                    .to_string(),
                 assumptions: vec![
                     "Residuals normally distributed".to_string(),
                     "Random effects normally distributed".to_string(),
@@ -642,12 +702,12 @@ impl CitationManager {
 
     fn format_bibliography(&self, reference_ids: &HashSet<String>) -> Vec<FormattedCitation> {
         let mut bibliography = Vec::new();
-        
+
         for reference_id in reference_ids {
             if let Some(reference) = self.references.get(reference_id) {
                 let formatted_text = self.format_reference(reference);
                 let in_text_citation = self.format_in_text_citation(reference);
-                
+
                 bibliography.push(FormattedCitation {
                     reference_id: reference_id.clone(),
                     formatted_text,
@@ -655,7 +715,7 @@ impl CitationManager {
                 });
             }
         }
-        
+
         // Sort alphabetically by first author's last name
         bibliography.sort_by(|a, b| a.formatted_text.cmp(&b.formatted_text));
         bibliography
@@ -676,16 +736,22 @@ impl CitationManager {
         let title = &reference.title;
 
         match &reference.publication {
-            Publication::Journal { name, volume, issue, pages, .. } => {
+            Publication::Journal {
+                name,
+                volume,
+                issue,
+                pages,
+                ..
+            } => {
                 let mut citation = format!("{}. ({}). {}. *{}*", authors, year, title, name);
-                
+
                 if let Some(vol) = volume {
                     citation.push_str(&format!(", *{}*", vol));
                     if let Some(iss) = issue {
                         citation.push_str(&format!("({})", iss));
                     }
                 }
-                
+
                 if let Some(pgs) = pages {
                     citation.push_str(&format!(", {}", pgs));
                 }
@@ -696,13 +762,16 @@ impl CitationManager {
 
                 citation.push('.');
                 citation
-            },
+            }
             Publication::Book { publisher, .. } => {
                 format!("{}. ({}). *{}*. {}.", authors, year, title, publisher)
-            },
+            }
             Publication::Software { version, .. } => {
-                format!("{}. ({}). *{}* (Version {}) [Computer software].", authors, year, title, version)
-            },
+                format!(
+                    "{}. ({}). *{}* (Version {}) [Computer software].",
+                    authors, year, title, version
+                )
+            }
             _ => format!("{}. ({}). {}.", authors, year, title),
         }
     }
@@ -724,8 +793,17 @@ impl CitationManager {
 
         if authors.len() == 1 {
             let author = &authors[0];
-            let middle = author.middle_initial.as_ref().map(|m| format!(" {}.", m)).unwrap_or_default();
-            format!("{}, {}.{}", author.last_name, author.first_name.chars().next().unwrap(), middle)
+            let middle = author
+                .middle_initial
+                .as_ref()
+                .map(|m| format!(" {}.", m))
+                .unwrap_or_default();
+            format!(
+                "{}, {}.{}",
+                author.last_name,
+                author.first_name.chars().next().unwrap(),
+                middle
+            )
         } else if authors.len() <= 20 {
             let mut result = String::new();
             for (i, author) in authors.iter().enumerate() {
@@ -736,24 +814,55 @@ impl CitationManager {
                         result.push_str(", ");
                     }
                 }
-                let middle = author.middle_initial.as_ref().map(|m| format!(" {}.", m)).unwrap_or_default();
-                result.push_str(&format!("{}, {}.{}", author.last_name, author.first_name.chars().next().unwrap(), middle));
+                let middle = author
+                    .middle_initial
+                    .as_ref()
+                    .map(|m| format!(" {}.", m))
+                    .unwrap_or_default();
+                result.push_str(&format!(
+                    "{}, {}.{}",
+                    author.last_name,
+                    author.first_name.chars().next().unwrap(),
+                    middle
+                ));
             }
             result
         } else {
             // More than 20 authors - use et al.
-            let first_19: String = authors.iter().take(19)
+            let first_19: String = authors
+                .iter()
+                .take(19)
                 .enumerate()
                 .map(|(i, author)| {
                     let prefix = if i == 0 { "" } else { ", " };
-                    let middle = author.middle_initial.as_ref().map(|m| format!(" {}.", m)).unwrap_or_default();
-                    format!("{}{}, {}.{}", prefix, author.last_name, author.first_name.chars().next().unwrap(), middle)
+                    let middle = author
+                        .middle_initial
+                        .as_ref()
+                        .map(|m| format!(" {}.", m))
+                        .unwrap_or_default();
+                    format!(
+                        "{}{}, {}.{}",
+                        prefix,
+                        author.last_name,
+                        author.first_name.chars().next().unwrap(),
+                        middle
+                    )
                 })
                 .collect();
-            
+
             let last_author = authors.last().unwrap();
-            let middle = last_author.middle_initial.as_ref().map(|m| format!(" {}.", m)).unwrap_or_default();
-            format!("{}, ... {}, {}.{}", first_19, last_author.last_name, last_author.first_name.chars().next().unwrap(), middle)
+            let middle = last_author
+                .middle_initial
+                .as_ref()
+                .map(|m| format!(" {}.", m))
+                .unwrap_or_default();
+            format!(
+                "{}, ... {}, {}.{}",
+                first_19,
+                last_author.last_name,
+                last_author.first_name.chars().next().unwrap(),
+                middle
+            )
         }
     }
 
@@ -762,7 +871,8 @@ impl CitationManager {
             return "Unknown Author".to_string();
         }
 
-        authors.iter()
+        authors
+            .iter()
             .enumerate()
             .map(|(i, author)| {
                 if i == 0 {
@@ -780,7 +890,8 @@ impl CitationManager {
             return "Unknown Author".to_string();
         }
 
-        authors.iter()
+        authors
+            .iter()
             .enumerate()
             .map(|(i, author)| {
                 if i == 0 {
@@ -799,35 +910,56 @@ impl CitationManager {
                 if reference.authors.len() == 1 {
                     format!("({}, {})", reference.authors[0].last_name, reference.year)
                 } else if reference.authors.len() == 2 {
-                    format!("({} & {}, {})", 
-                        reference.authors[0].last_name, 
-                        reference.authors[1].last_name, 
-                        reference.year)
+                    format!(
+                        "({} & {}, {})",
+                        reference.authors[0].last_name,
+                        reference.authors[1].last_name,
+                        reference.year
+                    )
                 } else if reference.authors.len() <= 20 {
-                    format!("({} et al., {})", reference.authors[0].last_name, reference.year)
+                    format!(
+                        "({} et al., {})",
+                        reference.authors[0].last_name, reference.year
+                    )
                 } else {
-                    format!("({} et al., {})", reference.authors[0].last_name, reference.year)
+                    format!(
+                        "({} et al., {})",
+                        reference.authors[0].last_name, reference.year
+                    )
                 }
-            },
-            _ => format!("({}, {})", reference.authors.first().map(|a| &a.last_name).unwrap_or(&"Unknown".to_string()), reference.year),
+            }
+            _ => format!(
+                "({}, {})",
+                reference
+                    .authors
+                    .first()
+                    .map(|a| &a.last_name)
+                    .unwrap_or(&"Unknown".to_string()),
+                reference.year
+            ),
         }
     }
 
     fn format_methods_section(&self, report: &MethodologyReport) -> String {
         let mut methods = String::new();
-        
+
         methods.push_str("# Methods\n\n");
-        
+
         if !report.methods_used.is_empty() {
             methods.push_str("## Methodology\n\n");
             for method in &report.methods_used {
-                methods.push_str(&format!("**{}**: {}", method.method_name, method.description));
+                methods.push_str(&format!(
+                    "**{}**: {}",
+                    method.method_name, method.description
+                ));
                 if !method.justification.is_empty() {
                     methods.push_str(&format!(" {}", method.justification));
                 }
-                
+
                 // Add citations
-                let citations: Vec<String> = method.references.iter()
+                let citations: Vec<String> = method
+                    .references
+                    .iter()
                     .map(|ref_id| self.get_in_text_citation(ref_id))
                     .collect();
                 if !citations.is_empty() {
@@ -840,10 +972,15 @@ impl CitationManager {
         if !report.software_used.is_empty() {
             methods.push_str("## Software\n\n");
             methods.push_str("Analysis was conducted using ");
-            let software_citations: Vec<String> = report.software_used.iter()
+            let software_citations: Vec<String> = report
+                .software_used
+                .iter()
                 .map(|software| {
                     let citation = self.get_in_text_citation(&software.reference_id);
-                    format!("{} {} {}", software.software_name, software.version, citation)
+                    format!(
+                        "{} {} {}",
+                        software.software_name, software.version, citation
+                    )
                 })
                 .collect();
             methods.push_str(&software_citations.join(", "));
@@ -853,8 +990,13 @@ impl CitationManager {
         if !report.statistical_procedures.is_empty() {
             methods.push_str("## Statistical Analysis\n\n");
             for procedure in &report.statistical_procedures {
-                methods.push_str(&format!("**{}**: {}", procedure.procedure_name, procedure.description));
-                let citations: Vec<String> = procedure.references.iter()
+                methods.push_str(&format!(
+                    "**{}**: {}",
+                    procedure.procedure_name, procedure.description
+                ));
+                let citations: Vec<String> = procedure
+                    .references
+                    .iter()
                     .map(|ref_id| self.get_in_text_citation(ref_id))
                     .collect();
                 if !citations.is_empty() {
@@ -869,12 +1011,12 @@ impl CitationManager {
 
     fn generate_bibtex(&self) -> String {
         let mut bibtex = String::new();
-        
+
         for reference in self.references.values() {
             bibtex.push_str(&self.format_bibtex_entry(reference));
             bibtex.push('\n');
         }
-        
+
         bibtex
     }
 
@@ -888,23 +1030,30 @@ impl CitationManager {
         };
 
         let mut entry = format!("@{}{{{}}},\n", entry_type, reference.id);
-        
+
         // Authors
-        let author_str = reference.authors.iter()
+        let author_str = reference
+            .authors
+            .iter()
             .map(|a| format!("{}, {}", a.last_name, a.first_name))
             .collect::<Vec<_>>()
             .join(" and ");
         entry.push_str(&format!("  author = {{{}}},\n", author_str));
-        
+
         // Title
         entry.push_str(&format!("  title = {{{}}},\n", reference.title));
-        
+
         // Year
         entry.push_str(&format!("  year = {{{}}},\n", reference.year));
-        
+
         // Publication-specific fields
         match &reference.publication {
-            Publication::Journal { name, volume, pages, .. } => {
+            Publication::Journal {
+                name,
+                volume,
+                pages,
+                ..
+            } => {
                 entry.push_str(&format!("  journal = {{{}}},\n", name));
                 if let Some(vol) = volume {
                     entry.push_str(&format!("  volume = {{{}}},\n", vol));
@@ -912,11 +1061,11 @@ impl CitationManager {
                 if let Some(pgs) = pages {
                     entry.push_str(&format!("  pages = {{{}}},\n", pgs));
                 }
-            },
+            }
             Publication::Book { publisher, .. } => {
                 entry.push_str(&format!("  publisher = {{{}}},\n", publisher));
-            },
-            _ => {},
+            }
+            _ => {}
         }
 
         if let Some(doi) = &reference.doi {
@@ -929,18 +1078,18 @@ impl CitationManager {
 
     fn generate_ris(&self) -> String {
         let mut ris = String::new();
-        
+
         for reference in self.references.values() {
             ris.push_str(&self.format_ris_entry(reference));
             ris.push_str("\n\n");
         }
-        
+
         ris
     }
 
     fn format_ris_entry(&self, reference: &Reference) -> String {
         let mut entry = String::new();
-        
+
         // Type
         let ty = match reference.reference_type {
             ReferenceType::Journal => "JOUR",
@@ -949,21 +1098,29 @@ impl CitationManager {
             _ => "GEN",
         };
         entry.push_str(&format!("TY  - {}\n", ty));
-        
+
         // Authors
         for author in &reference.authors {
-            entry.push_str(&format!("AU  - {}, {}\n", author.last_name, author.first_name));
+            entry.push_str(&format!(
+                "AU  - {}, {}\n",
+                author.last_name, author.first_name
+            ));
         }
-        
+
         // Title
         entry.push_str(&format!("TI  - {}\n", reference.title));
-        
+
         // Year
         entry.push_str(&format!("PY  - {}\n", reference.year));
-        
+
         // Publication details
         match &reference.publication {
-            Publication::Journal { name, volume, pages, .. } => {
+            Publication::Journal {
+                name,
+                volume,
+                pages,
+                ..
+            } => {
                 entry.push_str(&format!("JO  - {}\n", name));
                 if let Some(vol) = volume {
                     entry.push_str(&format!("VL  - {}\n", vol));
@@ -971,11 +1128,11 @@ impl CitationManager {
                 if let Some(pgs) = pages {
                     entry.push_str(&format!("SP  - {}\n", pgs));
                 }
-            },
+            }
             Publication::Book { publisher, .. } => {
                 entry.push_str(&format!("PB  - {}\n", publisher));
-            },
-            _ => {},
+            }
+            _ => {}
         }
 
         if let Some(doi) = &reference.doi {
@@ -989,22 +1146,26 @@ impl CitationManager {
     fn generate_endnote(&self) -> String {
         // Simplified EndNote format
         let mut endnote = String::new();
-        
+
         for reference in self.references.values() {
             endnote.push_str(&format!("{}\n", self.format_apa(reference)));
         }
-        
+
         endnote
     }
 
     fn generate_formatted_bibliography(&self) -> String {
         let mut bibliography = String::new();
         bibliography.push_str("# References\n\n");
-        
+
         for reference in self.references.values() {
-            bibliography.push_str(&format!("{}. {}\n\n", reference.id, self.format_reference(reference)));
+            bibliography.push_str(&format!(
+                "{}. {}\n\n",
+                reference.id,
+                self.format_reference(reference)
+            ));
         }
-        
+
         bibliography
     }
 
@@ -1073,10 +1234,13 @@ mod tests {
     fn test_add_method_citation() {
         let mut manager = CitationManager::new();
         manager.mark_method_used("bayesian_inference");
-        
+
         let report = manager.generate_methodology_report("test_experiment");
         assert!(!report.methods_used.is_empty());
-        assert!(report.methods_used.iter().any(|m| m.method_name == "bayesian_inference"));
+        assert!(report
+            .methods_used
+            .iter()
+            .any(|m| m.method_name == "bayesian_inference"));
     }
 
     #[test]
@@ -1084,7 +1248,7 @@ mod tests {
         let manager = CitationManager::new();
         let reference = manager.references.get("kruschke2014").unwrap();
         let formatted = manager.format_apa(reference);
-        
+
         assert!(formatted.contains("Kruschke"));
         assert!(formatted.contains("2014"));
         assert!(formatted.contains("Academic Press"));
@@ -1101,7 +1265,7 @@ mod tests {
     fn test_bibtex_generation() {
         let manager = CitationManager::new();
         let bibtex = manager.generate_bibtex();
-        
+
         assert!(bibtex.contains("@book{kruschke2014"));
         assert!(bibtex.contains("author = {Kruschke, John}"));
         assert!(bibtex.contains("year = {2014}"));
@@ -1112,12 +1276,18 @@ mod tests {
         let mut manager = CitationManager::new();
         manager.mark_method_used("bayesian_inference");
         manager.mark_method_used("power_analysis");
-        
+
         let report = manager.generate_methodology_report("test_experiment");
-        
+
         assert_eq!(report.methods_used.len(), 2);
         assert!(!report.bibliography.is_empty());
-        assert!(report.methods_used.iter().any(|m| m.method_name == "bayesian_inference"));
-        assert!(report.methods_used.iter().any(|m| m.method_name == "power_analysis"));
+        assert!(report
+            .methods_used
+            .iter()
+            .any(|m| m.method_name == "bayesian_inference"));
+        assert!(report
+            .methods_used
+            .iter()
+            .any(|m| m.method_name == "power_analysis"));
     }
 }

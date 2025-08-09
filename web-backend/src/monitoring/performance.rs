@@ -5,7 +5,10 @@ use tracing::info;
 
 use crate::{
     error::AppResult,
-    monitoring::{global_metrics, PerformanceMetrics, EndpointPerformanceMetrics, EndpointPerformanceDetails, SlowEndpointInfo},
+    monitoring::{
+        global_metrics, EndpointPerformanceDetails, EndpointPerformanceMetrics, PerformanceMetrics,
+        SlowEndpointInfo,
+    },
     state::AppState,
 };
 
@@ -18,36 +21,39 @@ pub async fn get_endpoint_performance(
     }
 
     let snapshot = global_metrics().get_snapshot().await;
-    
+
     let mut endpoint_performance = std::collections::HashMap::new();
-    
+
     for (endpoint, metrics) in &snapshot.endpoint_metrics {
         let p50 = metrics.response_time_histogram.calculate_percentile(50.0);
         let p95 = metrics.response_time_histogram.calculate_percentile(95.0);
         let p99 = metrics.response_time_histogram.calculate_percentile(99.0);
         let p999 = metrics.response_time_histogram.calculate_percentile(99.9);
-        
+
         let error_rate = if metrics.total_requests > 0 {
             (metrics.error_count as f64 / metrics.total_requests as f64) * 100.0
         } else {
             0.0
         };
-        
-        endpoint_performance.insert(endpoint.clone(), EndpointPerformanceDetails {
-            total_requests: metrics.total_requests,
-            avg_response_time_ms: metrics.avg_duration_ms,
-            min_response_time_ms: metrics.response_time_histogram.min_response_time_ms,
-            max_response_time_ms: metrics.response_time_histogram.max_response_time_ms,
-            p50_response_time_ms: p50,
-            p95_response_time_ms: p95,
-            p99_response_time_ms: p99,
-            p999_response_time_ms: p999,
-            error_rate_percent: error_rate,
-            last_accessed: metrics.last_accessed,
-            histogram_buckets: metrics.response_time_histogram.buckets.clone(),
-        });
+
+        endpoint_performance.insert(
+            endpoint.clone(),
+            EndpointPerformanceDetails {
+                total_requests: metrics.total_requests,
+                avg_response_time_ms: metrics.avg_duration_ms,
+                min_response_time_ms: metrics.response_time_histogram.min_response_time_ms,
+                max_response_time_ms: metrics.response_time_histogram.max_response_time_ms,
+                p50_response_time_ms: p50,
+                p95_response_time_ms: p95,
+                p99_response_time_ms: p99,
+                p999_response_time_ms: p999,
+                error_rate_percent: error_rate,
+                last_accessed: metrics.last_accessed,
+                histogram_buckets: metrics.response_time_histogram.buckets.clone(),
+            },
+        );
     }
-    
+
     Ok(Json(EndpointPerformanceMetrics {
         endpoints: endpoint_performance,
         total_endpoints: snapshot.endpoint_metrics.len(),
@@ -80,10 +86,10 @@ pub async fn get_performance_metrics(
 
     // Calculate percentiles using histogram-based approach
     let (p50, p90, p95, p99, p999) = calculate_histogram_percentiles(&snapshot.endpoint_metrics);
-    
+
     // Calculate database-specific percentiles
     let (db_p50, db_p95, db_p99) = calculate_database_percentiles(&snapshot.endpoint_metrics);
-    
+
     // Find slowest endpoints
     let slowest_endpoints = find_slowest_endpoints(&snapshot.endpoint_metrics);
 
@@ -130,10 +136,12 @@ pub async fn get_performance_metrics(
     Ok(Json(performance))
 }
 
-fn calculate_histogram_percentiles(endpoint_metrics: &std::collections::HashMap<String, crate::monitoring::EndpointMetrics>) -> (f64, f64, f64, f64, f64) {
+fn calculate_histogram_percentiles(
+    endpoint_metrics: &std::collections::HashMap<String, crate::monitoring::EndpointMetrics>,
+) -> (f64, f64, f64, f64, f64) {
     // Aggregate all histograms to calculate global percentiles
     let mut combined_histogram = crate::monitoring::ResponseTimeHistogram::new();
-    
+
     for metrics in endpoint_metrics.values() {
         // Skip database queries endpoint to avoid double counting
         // Merge histograms by adding bucket counts
@@ -142,37 +150,50 @@ fn calculate_histogram_percentiles(endpoint_metrics: &std::collections::HashMap<
                 combined_histogram.buckets[i].count += bucket.count;
             }
         }
-        
+
         combined_histogram.total_samples += metrics.response_time_histogram.total_samples;
-        combined_histogram.min_response_time_ms = combined_histogram.min_response_time_ms
+        combined_histogram.min_response_time_ms = combined_histogram
+            .min_response_time_ms
             .min(metrics.response_time_histogram.min_response_time_ms);
-        combined_histogram.max_response_time_ms = combined_histogram.max_response_time_ms
+        combined_histogram.max_response_time_ms = combined_histogram
+            .max_response_time_ms
             .max(metrics.response_time_histogram.max_response_time_ms);
     }
-    
+
     let p50 = combined_histogram.calculate_percentile(50.0);
     let p90 = combined_histogram.calculate_percentile(90.0);
     let p95 = combined_histogram.calculate_percentile(95.0);
     let p99 = combined_histogram.calculate_percentile(99.0);
     let p999 = combined_histogram.calculate_percentile(99.9);
-    
+
     (p50, p90, p95, p99, p999)
 }
 
-fn calculate_database_percentiles(endpoint_metrics: &std::collections::HashMap<String, crate::monitoring::EndpointMetrics>) -> (f64, f64, f64) {
+fn calculate_database_percentiles(
+    endpoint_metrics: &std::collections::HashMap<String, crate::monitoring::EndpointMetrics>,
+) -> (f64, f64, f64) {
     // Get database-specific metrics
     if let Some(db_metrics) = endpoint_metrics.get("database_queries") {
-        let p50 = db_metrics.response_time_histogram.calculate_percentile(50.0);
-        let p95 = db_metrics.response_time_histogram.calculate_percentile(95.0);
-        let p99 = db_metrics.response_time_histogram.calculate_percentile(99.0);
+        let p50 = db_metrics
+            .response_time_histogram
+            .calculate_percentile(50.0);
+        let p95 = db_metrics
+            .response_time_histogram
+            .calculate_percentile(95.0);
+        let p99 = db_metrics
+            .response_time_histogram
+            .calculate_percentile(99.0);
         (p50, p95, p99)
     } else {
         (0.0, 0.0, 0.0)
     }
 }
 
-fn find_slowest_endpoints(endpoint_metrics: &std::collections::HashMap<String, crate::monitoring::EndpointMetrics>) -> Vec<SlowEndpointInfo> {
-    let mut endpoint_perf: Vec<_> = endpoint_metrics.iter()
+fn find_slowest_endpoints(
+    endpoint_metrics: &std::collections::HashMap<String, crate::monitoring::EndpointMetrics>,
+) -> Vec<SlowEndpointInfo> {
+    let mut endpoint_perf: Vec<_> = endpoint_metrics
+        .iter()
         .filter(|(endpoint, _)| *endpoint != "database_queries") // Exclude internal database tracking
         .map(|(endpoint, metrics)| {
             let p95 = metrics.response_time_histogram.calculate_percentile(95.0);
@@ -184,11 +205,15 @@ fn find_slowest_endpoints(endpoint_metrics: &std::collections::HashMap<String, c
             }
         })
         .collect();
-    
+
     // Sort by P95 response time descending and take top 5
-    endpoint_perf.sort_by(|a, b| b.p95_response_time_ms.partial_cmp(&a.p95_response_time_ms).unwrap_or(std::cmp::Ordering::Equal));
+    endpoint_perf.sort_by(|a, b| {
+        b.p95_response_time_ms
+            .partial_cmp(&a.p95_response_time_ms)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     endpoint_perf.truncate(5);
-    
+
     endpoint_perf
 }
 

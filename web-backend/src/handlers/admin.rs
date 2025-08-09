@@ -703,13 +703,13 @@ async fn has_admin_permissions(user_id: &Uuid, state: &AppState) -> AppResult<bo
         .acquire()
         .await
         .map_err(|e| AppError::DatabaseError(e))?;
-    
+
     let role: Option<String> = sqlx::query_scalar(query)
         .bind(user_id.to_string())
         .fetch_optional(&mut *conn)
         .await
         .map_err(|e| AppError::DatabaseError(e))?;
-    
+
     match role.as_deref() {
         Some("admin") | Some("superuser") => Ok(true),
         _ => Ok(false),

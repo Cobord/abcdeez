@@ -1,7 +1,7 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, Query, State, Request,
+        Path, Query, Request, State,
     },
     http::StatusCode,
     response::Response,
@@ -182,16 +182,12 @@ async fn handle_session_socket_with_correlation(
         session_id = %session_id,
         "WebSocket session connection established"
     );
-    
+
     handle_session_socket_internal(socket, state, session_id, Some(correlation_id)).await;
 }
 
 // Keep the original function for backward compatibility
-async fn handle_session_socket(
-    socket: WebSocket,
-    state: Arc<AppState>,
-    session_id: Uuid,
-) {
+async fn handle_session_socket(socket: WebSocket, state: Arc<AppState>, session_id: Uuid) {
     handle_session_socket_internal(socket, state, session_id, None).await;
 }
 
@@ -202,9 +198,11 @@ async fn handle_session_socket_internal(
     correlation_id: Option<String>,
 ) {
     let (mut sender, mut receiver) = socket.split();
-    
+
     // Wait for authentication message
-    let authenticated_claims = match authenticate_websocket(&mut sender, &mut receiver, &state).await {
+    let authenticated_claims = match authenticate_websocket(&mut sender, &mut receiver, &state)
+        .await
+    {
         Ok(claims) => claims,
         Err(e) => {
             if let Some(ref corr_id) = correlation_id {
@@ -212,40 +210,57 @@ async fn handle_session_socket_internal(
             } else {
                 tracing::warn!("WebSocket authentication failed: {}", e);
             }
-            let _ = sender.send(Message::Text(serde_json::to_string(&ServerMessage::AuthenticationResult {
-                success: false,
-                message: "Authentication failed".to_string(),
-                user_id: None,
-                timestamp: chrono::Utc::now().timestamp(),
-            }).unwrap())).await;
+            let _ = sender
+                .send(Message::Text(
+                    serde_json::to_string(&ServerMessage::AuthenticationResult {
+                        success: false,
+                        message: "Authentication failed".to_string(),
+                        user_id: None,
+                        timestamp: chrono::Utc::now().timestamp(),
+                    })
+                    .unwrap(),
+                ))
+                .await;
             let _ = sender.close().await;
             return;
         }
     };
-    
+
     // Verify session belongs to authenticated user
-    if let Err(e) = verify_session_access(&state, session_id, &authenticated_claims.sub.to_string()).await {
+    if let Err(e) =
+        verify_session_access(&state, session_id, &authenticated_claims.sub.to_string()).await
+    {
         if let Some(ref corr_id) = correlation_id {
             tracing::warn!(correlation_id = %corr_id, "Session access denied: {}", e);
         } else {
             tracing::warn!("Session access denied: {}", e);
         }
-        let _ = sender.send(Message::Text(serde_json::to_string(&ServerMessage::Error {
-            message: "Session access denied".to_string(),
-            timestamp: chrono::Utc::now().timestamp(),
-        }).unwrap())).await;
+        let _ = sender
+            .send(Message::Text(
+                serde_json::to_string(&ServerMessage::Error {
+                    message: "Session access denied".to_string(),
+                    timestamp: chrono::Utc::now().timestamp(),
+                })
+                .unwrap(),
+            ))
+            .await;
         let _ = sender.close().await;
         return;
     }
-    
+
     // Send authentication success
-    let _ = sender.send(Message::Text(serde_json::to_string(&ServerMessage::AuthenticationResult {
-        success: true,
-        message: "Authentication successful".to_string(),
-        user_id: Some(authenticated_claims.sub.to_string()),
-        timestamp: chrono::Utc::now().timestamp(),
-    }).unwrap())).await;
-    
+    let _ = sender
+        .send(Message::Text(
+            serde_json::to_string(&ServerMessage::AuthenticationResult {
+                success: true,
+                message: "Authentication successful".to_string(),
+                user_id: Some(authenticated_claims.sub.to_string()),
+                timestamp: chrono::Utc::now().timestamp(),
+            })
+            .unwrap(),
+        ))
+        .await;
+
     if let Some(ref corr_id) = correlation_id {
         tracing::info!(
             correlation_id = %corr_id,
@@ -347,48 +362,72 @@ async fn handle_session_socket_internal(
 
 async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>) {
     let (mut sender, mut receiver) = socket.split();
-    
+
     // Wait for authentication message
-    let authenticated_claims = match authenticate_websocket(&mut sender, &mut receiver, &state).await {
-        Ok(claims) => claims,
-        Err(e) => {
-            tracing::warn!("Analytics WebSocket authentication failed: {}", e);
-            let _ = sender.send(Message::Text(serde_json::to_string(&ServerMessage::AuthenticationResult {
-                success: false,
-                message: "Authentication failed".to_string(),
-                user_id: None,
-                timestamp: chrono::Utc::now().timestamp(),
-            }).unwrap())).await;
-            let _ = sender.close().await;
-            return;
-        }
-    };
-    
+    let authenticated_claims =
+        match authenticate_websocket(&mut sender, &mut receiver, &state).await {
+            Ok(claims) => claims,
+            Err(e) => {
+                tracing::warn!("Analytics WebSocket authentication failed: {}", e);
+                let _ = sender
+                    .send(Message::Text(
+                        serde_json::to_string(&ServerMessage::AuthenticationResult {
+                            success: false,
+                            message: "Authentication failed".to_string(),
+                            user_id: None,
+                            timestamp: chrono::Utc::now().timestamp(),
+                        })
+                        .unwrap(),
+                    ))
+                    .await;
+                let _ = sender.close().await;
+                return;
+            }
+        };
+
     // Check for analytics permission
-    if !authenticated_claims.permissions.contains(&"analytics_access".to_string())
+    if !authenticated_claims
+        .permissions
+        .contains(&"analytics_access".to_string())
         && authenticated_claims.role != "admin"
         && authenticated_claims.role != "researcher"
     {
-        tracing::warn!("Analytics access denied for user: {}", authenticated_claims.username);
-        let _ = sender.send(Message::Text(serde_json::to_string(&ServerMessage::AuthenticationResult {
-            success: false,
-            message: "Analytics access denied".to_string(),
-            user_id: Some(authenticated_claims.sub.to_string()),
-            timestamp: chrono::Utc::now().timestamp(),
-        }).unwrap())).await;
+        tracing::warn!(
+            "Analytics access denied for user: {}",
+            authenticated_claims.username
+        );
+        let _ = sender
+            .send(Message::Text(
+                serde_json::to_string(&ServerMessage::AuthenticationResult {
+                    success: false,
+                    message: "Analytics access denied".to_string(),
+                    user_id: Some(authenticated_claims.sub.to_string()),
+                    timestamp: chrono::Utc::now().timestamp(),
+                })
+                .unwrap(),
+            ))
+            .await;
         let _ = sender.close().await;
         return;
     }
-    
+
     // Send authentication success
-    let _ = sender.send(Message::Text(serde_json::to_string(&ServerMessage::AuthenticationResult {
-        success: true,
-        message: "Analytics access granted".to_string(),
-        user_id: Some(authenticated_claims.sub.to_string()),
-        timestamp: chrono::Utc::now().timestamp(),
-    }).unwrap())).await;
-    
-    tracing::info!("Analytics WebSocket connected for user {}", authenticated_claims.username);
+    let _ = sender
+        .send(Message::Text(
+            serde_json::to_string(&ServerMessage::AuthenticationResult {
+                success: true,
+                message: "Analytics access granted".to_string(),
+                user_id: Some(authenticated_claims.sub.to_string()),
+                timestamp: chrono::Utc::now().timestamp(),
+            })
+            .unwrap(),
+        ))
+        .await;
+
+    tracing::info!(
+        "Analytics WebSocket connected for user {}",
+        authenticated_claims.username
+    );
 
     // Create analytics service
     let analytics_service = AnalyticsService::new_with_config(
@@ -656,7 +695,7 @@ async fn handle_client_message(
         ClientMessage::Heartbeat => {
             // Client heartbeat received, no action needed
         }
-        
+
         ClientMessage::Authenticate { token: _ } => {
             // Authentication should have been handled before entering this function
             tracing::warn!("Unexpected authenticate message received after authentication");
@@ -729,7 +768,7 @@ async fn authenticate_websocket(
             Ok(Message::Text(text)) => {
                 let client_msg: ClientMessage = serde_json::from_str(&text)
                     .map_err(|_| "Invalid message format".to_string())?;
-                
+
                 match client_msg {
                     ClientMessage::Authenticate { token } => {
                         // Validate JWT token
@@ -742,8 +781,9 @@ async fn authenticate_websocket(
                             &token,
                             &DecodingKey::from_secret(state.config.jwt_secret.as_bytes()),
                             &validation,
-                        ).map_err(|e| format!("Invalid token: {:?}", e))?;
-                        
+                        )
+                        .map_err(|e| format!("Invalid token: {:?}", e))?;
+
                         Ok(token_data.claims)
                     }
                     _ => Err("First message must be authentication".to_string()),
@@ -766,7 +806,10 @@ async fn verify_session_access(
     let session_id_bytes = session_id.as_bytes();
     let user_id_bytes = user_id.as_bytes();
 
-    let mut conn = state.db_pool.acquire().await
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
         .map_err(|e| format!("Database error: {}", e))?;
 
     let session_exists = sqlx::query_scalar::<_, bool>(

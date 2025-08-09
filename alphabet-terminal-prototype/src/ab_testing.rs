@@ -1,8 +1,8 @@
+use crate::config::LearnerConfig;
 use crate::experimental_design::ExperimentalDesign;
 use crate::power_analysis::PowerAnalyzer;
 use crate::statistical_validation::StatisticalValidator;
 use crate::statistics::TestResult;
-use crate::config::LearnerConfig;
 use crate::topology::Topology;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -81,26 +81,26 @@ pub enum InterventionType {
 pub enum AllocationStrategy {
     /// Simple randomization with fixed proportions
     FixedRandomization { proportions: Vec<f64> },
-    
+
     /// Block randomization to ensure balance
     BlockRandomization { block_size: usize },
-    
+
     /// Stratified randomization based on participant characteristics
     StratifiedRandomization { strata: Vec<String> },
-    
+
     /// Multi-armed bandit with exploration/exploitation
     MultiarmedBandit {
         strategy: BanditStrategy,
         exploration_rate: f64,
         burn_in_samples: usize,
     },
-    
+
     /// Adaptive allocation based on observed performance
     AdaptiveAllocation {
         reallocation_frequency: usize,
         min_allocation_per_arm: f64,
     },
-    
+
     /// Sequential probability ratio test
     SequentialTesting {
         alpha_spending_function: AlphaSpendingFunction,
@@ -144,10 +144,18 @@ pub struct StoppingCriteria {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InterimAnalysisFrequency {
-    FixedSampleSize { every_n_participants: usize },
-    FixedTime { every_n_hours: u32 },
-    AdaptiveLooking { information_fraction: f64 },
-    CalendarTime { schedule: Vec<chrono::DateTime<chrono::Utc>> },
+    FixedSampleSize {
+        every_n_participants: usize,
+    },
+    FixedTime {
+        every_n_hours: u32,
+    },
+    AdaptiveLooking {
+        information_fraction: f64,
+    },
+    CalendarTime {
+        schedule: Vec<chrono::DateTime<chrono::Utc>>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -319,11 +327,23 @@ pub enum RecommendationStrength {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TestRecommendation {
-    ImplementWinner { variant_id: String, confidence: f64 },
-    ContinueTesting { reason: String, estimated_completion_date: chrono::DateTime<chrono::Utc> },
-    StopForFutility { reason: String },
-    RequiresManualReview { concerns: Vec<String> },
-    InconclusiveResults { next_steps: Vec<String> },
+    ImplementWinner {
+        variant_id: String,
+        confidence: f64,
+    },
+    ContinueTesting {
+        reason: String,
+        estimated_completion_date: chrono::DateTime<chrono::Utc>,
+    },
+    StopForFutility {
+        reason: String,
+    },
+    RequiresManualReview {
+        concerns: Vec<String>,
+    },
+    InconclusiveResults {
+        next_steps: Vec<String>,
+    },
 }
 
 /// Participant assignment tracking
@@ -372,9 +392,9 @@ impl ABTestFramework {
     ) -> Result<String, String> {
         // Validate test configuration
         self.validate_test_configuration(&variants, &allocation_strategy)?;
-        
+
         let test_id = uuid::Uuid::new_v4().to_string();
-        
+
         let test = ABTest {
             id: test_id.clone(),
             name,
@@ -392,7 +412,7 @@ impl ABTestFramework {
             started_at: None,
             ended_at: None,
         };
-        
+
         self.tests.insert(test_id.clone(), test);
         Ok(test_id)
     }
@@ -408,22 +428,21 @@ impl ABTestFramework {
         if let Some(existing) = self.assignments.get(&participant_id) {
             return Ok(existing.variant_id.clone());
         }
-        
+
         // Clone test data to avoid borrowing conflicts
         let test = {
-            let test_ref = self.tests.get(test_id)
-                .ok_or("Test not found")?;
-            
+            let test_ref = self.tests.get(test_id).ok_or("Test not found")?;
+
             if test_ref.status != TestStatus::Running {
                 return Err("Test is not currently running".to_string());
             }
-            
+
             test_ref.clone()
         };
-        
+
         // Select variant based on allocation strategy
         let variant_id = self.select_variant(&test, &context)?;
-        
+
         // Record assignment
         let assignment = ParticipantAssignment {
             participant_id: participant_id.clone(),
@@ -432,9 +451,9 @@ impl ABTestFramework {
             assignment_method: format!("{:?}", test.allocation_strategy),
             context: context.unwrap_or_default(),
         };
-        
+
         self.assignments.insert(participant_id, assignment);
-        
+
         Ok(variant_id)
     }
 
@@ -447,48 +466,49 @@ impl ABTestFramework {
         value: f64,
         timestamp: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<(), String> {
-        let assignment = self.assignments.get(participant_id)
+        let assignment = self
+            .assignments
+            .get(participant_id)
             .ok_or("Participant not assigned to any test")?;
-        
+
         // Store outcome data (in practice, this would go to a database)
         // For now, just validate and return success
-        
+
         // Check if interim analysis is needed
         self.check_interim_analysis(test_id)?;
-        
+
         Ok(())
     }
 
     /// Run interim analysis and check stopping criteria
     pub fn run_interim_analysis(&mut self, test_id: &str) -> Result<InterimAnalysisResult, String> {
         // Clone test data to avoid borrowing conflicts
-        let test = self.tests.get(test_id)
-            .ok_or("Test not found")?
-            .clone();
-        
+        let test = self.tests.get(test_id).ok_or("Test not found")?.clone();
+
         // Collect current data for all variants
         let variant_data = self.collect_variant_data(&test)?;
-        
+
         // Perform statistical tests
         let statistical_results = self.perform_statistical_tests(&test, &variant_data)?;
-        
+
         // Check stopping criteria
         let stopping_decision = self.evaluate_stopping_criteria(&test, &statistical_results)?;
-        
+
         // Check guard metrics (requires &mut self for RNG)
         let guard_violations = self.check_guard_metrics(&test, &variant_data)?;
-        
+
         // Generate recommendations
         let recommendations = self.generate_interim_recommendations(
             &stopping_decision,
             &guard_violations,
             &statistical_results,
         );
-        
+
         Ok(InterimAnalysisResult {
             test_id: test_id.to_string(),
             analysis_time: chrono::Utc::now(),
-            participant_counts: variant_data.iter()
+            participant_counts: variant_data
+                .iter()
                 .map(|(k, v)| (k.clone(), v.len()))
                 .collect(),
             statistical_results,
@@ -502,40 +522,40 @@ impl ABTestFramework {
     pub fn finalize_test(&mut self, test_id: &str) -> Result<ABTestResults, String> {
         // First check test status and clone test data
         let test_clone = {
-            let test = self.tests.get(test_id)
-                .ok_or("Test not found")?;
-            
+            let test = self.tests.get(test_id).ok_or("Test not found")?;
+
             if test.status != TestStatus::Running {
                 return Err("Test is not running".to_string());
             }
-            
+
             test.clone()
         };
-        
+
         // Collect all data
         let variant_data = self.collect_variant_data(&test_clone)?;
-        
+
         // Perform comprehensive analysis
         let primary_analysis = self.perform_primary_analysis(&test_clone, &variant_data)?;
         let secondary_analyses = self.perform_secondary_analyses(&test_clone, &variant_data)?;
         let variant_performance = self.calculate_variant_performance(&variant_data)?;
-        
+
         // Statistical tests with multiple testing correction
         let statistical_tests = self.perform_final_statistical_tests(&test_clone, &variant_data)?;
-        
+
         // Calculate confidence intervals
         let confidence_intervals = self.calculate_confidence_intervals(&variant_data, 0.95)?;
-        
+
         // Practical significance assessment
-        let practical_significance = self.assess_practical_significance(&test_clone, &primary_analysis)?;
-        
+        let practical_significance =
+            self.assess_practical_significance(&test_clone, &primary_analysis)?;
+
         // Generate final recommendation
         let recommendation = self.generate_final_recommendation(
             &primary_analysis,
             &practical_significance,
             &statistical_tests,
         )?;
-        
+
         let results = ABTestResults {
             primary_analysis,
             secondary_analyses,
@@ -546,14 +566,13 @@ impl ABTestFramework {
             recommendation,
             generated_at: chrono::Utc::now(),
         };
-        
+
         // Update test status and results
-        let test = self.tests.get_mut(test_id)
-            .ok_or("Test not found")?;
+        let test = self.tests.get_mut(test_id).ok_or("Test not found")?;
         test.status = TestStatus::Completed;
         test.ended_at = Some(chrono::Utc::now());
         test.results = Some(results.clone());
-        
+
         Ok(results)
     }
 
@@ -566,13 +585,13 @@ impl ABTestFramework {
         if variants.len() < 2 {
             return Err("At least 2 variants required".to_string());
         }
-        
+
         // Check allocation weights sum to 1.0
         let total_weight: f64 = variants.iter().map(|v| v.allocation_weight).sum();
         if (total_weight - 1.0).abs() > 0.001 {
             return Err("Allocation weights must sum to 1.0".to_string());
         }
-        
+
         // Validate variant IDs are unique
         let mut ids = HashSet::new();
         for variant in variants {
@@ -580,7 +599,7 @@ impl ABTestFramework {
                 return Err(format!("Duplicate variant ID: {}", variant.id));
             }
         }
-        
+
         Ok(())
     }
 
@@ -593,22 +612,24 @@ impl ABTestFramework {
             AllocationStrategy::FixedRandomization { proportions } => {
                 let rand_val: f64 = self.rng.gen();
                 let mut cumulative = 0.0;
-                
+
                 for (i, variant) in test.variants.iter().enumerate() {
                     cumulative += proportions.get(i).unwrap_or(&variant.allocation_weight);
                     if rand_val <= cumulative {
                         return Ok(variant.id.clone());
                     }
                 }
-                
+
                 // Fallback to last variant
                 Ok(test.variants.last().unwrap().id.clone())
             }
-            
-            AllocationStrategy::MultiarmedBandit { strategy, exploration_rate, burn_in_samples } => {
-                self.select_bandit_variant(test, strategy, *exploration_rate, *burn_in_samples)
-            }
-            
+
+            AllocationStrategy::MultiarmedBandit {
+                strategy,
+                exploration_rate,
+                burn_in_samples,
+            } => self.select_bandit_variant(test, strategy, *exploration_rate, *burn_in_samples),
+
             _ => {
                 // For other strategies, use simple randomization as fallback
                 let variant = test.variants.choose(&mut self.rng).unwrap();
@@ -626,13 +647,13 @@ impl ABTestFramework {
     ) -> Result<String, String> {
         // Simplified bandit implementation
         let total_assignments = self.assignments.len();
-        
+
         if total_assignments < burn_in_samples {
             // During burn-in, use uniform random allocation
             let variant = test.variants.choose(&mut self.rng).unwrap();
             return Ok(variant.id.clone());
         }
-        
+
         match strategy {
             BanditStrategy::EpsilonGreedy { epsilon } => {
                 if self.rng.gen::<f64>() < *epsilon {
@@ -644,11 +665,11 @@ impl ABTestFramework {
                     self.select_best_performing_variant(test)
                 }
             }
-            
+
             BanditStrategy::UCB1 { confidence_level } => {
                 self.select_ucb1_variant(test, *confidence_level)
             }
-            
+
             _ => {
                 // Fallback to random
                 let variant = test.variants.choose(&mut self.rng).unwrap();
@@ -685,18 +706,18 @@ impl ABTestFramework {
         variant_data: &HashMap<String, Vec<f64>>,
     ) -> Result<Vec<TestResult>, String> {
         let mut results = Vec::new();
-        
+
         if variant_data.len() < 2 {
             return Ok(results);
         }
-        
+
         // Perform pairwise comparisons
         let variants: Vec<_> = variant_data.keys().collect();
         for i in 0..variants.len() {
-            for j in i+1..variants.len() {
+            for j in i + 1..variants.len() {
                 let data1 = &variant_data[variants[i]];
                 let data2 = &variant_data[variants[j]];
-                
+
                 let hypothesis_result = self.statistical_validator.t_test(data1, data2, false);
                 let test_result = TestResult {
                     statistic: hypothesis_result.statistic,
@@ -708,7 +729,7 @@ impl ABTestFramework {
                 results.push(test_result);
             }
         }
-        
+
         Ok(results)
     }
 
@@ -725,15 +746,14 @@ impl ABTestFramework {
     ) -> Result<StoppingDecision, String> {
         // Evaluate various stopping criteria
         let mut reasons = Vec::new();
-        
+
         // Check for statistical significance
-        let has_significant_result = statistical_results.iter()
-            .any(|r| r.significant);
-        
+        let has_significant_result = statistical_results.iter().any(|r| r.significant);
+
         if has_significant_result {
             reasons.push("Significant result detected".to_string());
         }
-        
+
         // Check participant count
         let participant_count = self.assignments.len();
         if let Some(max_participants) = test.stopping_criteria.max_participants {
@@ -741,15 +761,15 @@ impl ABTestFramework {
                 reasons.push("Maximum participant count reached".to_string());
             }
         }
-        
+
         let decision = if !reasons.is_empty() {
             StoppingDecision::Stop { reasons }
         } else {
-            StoppingDecision::Continue { 
-                reason: "Stopping criteria not met".to_string() 
+            StoppingDecision::Continue {
+                reason: "Stopping criteria not met".to_string(),
             }
         };
-        
+
         Ok(decision)
     }
 
@@ -759,11 +779,12 @@ impl ABTestFramework {
         variant_data: &HashMap<String, Vec<f64>>,
     ) -> Result<Vec<GuardViolation>, String> {
         let mut violations = Vec::new();
-        
+
         // Check each guard metric
         for guard in &test.guard_metrics {
             // Simplified check - in practice would evaluate actual guard conditions
-            if self.rng.gen::<f64>() < 0.05 { // 5% chance of violation for demo
+            if self.rng.gen::<f64>() < 0.05 {
+                // 5% chance of violation for demo
                 violations.push(GuardViolation {
                     metric_name: guard.name.clone(),
                     threshold: guard.threshold.clone(),
@@ -773,7 +794,7 @@ impl ABTestFramework {
                 });
             }
         }
-        
+
         Ok(violations)
     }
 
@@ -784,7 +805,7 @@ impl ABTestFramework {
         statistical_results: &[TestResult],
     ) -> Vec<String> {
         let mut recommendations = Vec::new();
-        
+
         match stopping_decision {
             StoppingDecision::Stop { reasons } => {
                 recommendations.push("Consider stopping the test".to_string());
@@ -794,14 +815,14 @@ impl ABTestFramework {
                 recommendations.push(format!("Continue testing: {}", reason));
             }
         }
-        
+
         if !guard_violations.is_empty() {
             recommendations.push(format!(
                 "{} guard metric violation(s) detected - review immediately",
                 guard_violations.len()
             ));
         }
-        
+
         recommendations
     }
 
@@ -811,11 +832,11 @@ impl ABTestFramework {
         variant_data: &HashMap<String, Vec<f64>>,
     ) -> Result<PrimaryAnalysis, String> {
         let primary_metric = &test.hypothesis.primary_metric;
-        
+
         // Find the best performing variant
         let mut best_variant = None;
         let mut best_performance = f64::NEG_INFINITY;
-        
+
         for (variant_id, data) in variant_data {
             let mean_performance = data.iter().sum::<f64>() / data.len() as f64;
             if mean_performance > best_performance {
@@ -823,11 +844,11 @@ impl ABTestFramework {
                 best_variant = Some(variant_id.clone());
             }
         }
-        
+
         // Calculate effect size (simplified)
         let effect_size = 0.3; // Mock value
         let p_value = 0.02; // Mock value
-        
+
         Ok(PrimaryAnalysis {
             metric_name: primary_metric.clone(),
             winner: best_variant,
@@ -846,21 +867,21 @@ impl ABTestFramework {
     ) -> Result<Vec<SecondaryAnalysis>, String> {
         // Perform analysis for each secondary metric
         let mut analyses = Vec::new();
-        
+
         for metric in &test.success_metrics {
             if metric.is_primary {
                 continue;
             }
-            
+
             let mut results = HashMap::new();
             let mut effect_sizes = HashMap::new();
-            
+
             for (variant_id, data) in variant_data {
                 let mean_value = data.iter().sum::<f64>() / data.len() as f64;
                 results.insert(variant_id.clone(), mean_value);
                 effect_sizes.insert(variant_id.clone(), 0.2); // Mock effect size
             }
-            
+
             // Mock statistical test result
             let test_result = TestResult {
                 statistic: 2.5,
@@ -869,7 +890,7 @@ impl ABTestFramework {
                 test_name: "t-test".to_string(),
                 correction_applied: None,
             };
-            
+
             analyses.push(SecondaryAnalysis {
                 metric_name: metric.name.clone(),
                 results,
@@ -877,7 +898,7 @@ impl ABTestFramework {
                 effect_sizes,
             });
         }
-        
+
         Ok(analyses)
     }
 
@@ -886,25 +907,31 @@ impl ABTestFramework {
         variant_data: &HashMap<String, Vec<f64>>,
     ) -> Result<HashMap<String, VariantPerformance>, String> {
         let mut performance = HashMap::new();
-        
+
         for (variant_id, data) in variant_data {
             let mean_value = data.iter().sum::<f64>() / data.len() as f64;
-            
+
             let mut metric_values = HashMap::new();
             metric_values.insert("primary_metric".to_string(), mean_value);
-            
+
             let mut confidence_intervals = HashMap::new();
-            confidence_intervals.insert("primary_metric".to_string(), (mean_value - 0.1, mean_value + 0.1));
-            
-            performance.insert(variant_id.clone(), VariantPerformance {
-                participant_count: data.len(),
-                metric_values,
-                confidence_intervals,
-                allocation_history: Vec::new(), // Would be populated in practice
-                data_quality_score: 0.95,
-            });
+            confidence_intervals.insert(
+                "primary_metric".to_string(),
+                (mean_value - 0.1, mean_value + 0.1),
+            );
+
+            performance.insert(
+                variant_id.clone(),
+                VariantPerformance {
+                    participant_count: data.len(),
+                    metric_values,
+                    confidence_intervals,
+                    allocation_history: Vec::new(), // Would be populated in practice
+                    data_quality_score: 0.95,
+                },
+            );
         }
-        
+
         Ok(performance)
     }
 
@@ -922,14 +949,14 @@ impl ABTestFramework {
         confidence_level: f64,
     ) -> Result<HashMap<String, (f64, f64)>, String> {
         let mut intervals = HashMap::new();
-        
+
         for (variant_id, data) in variant_data {
             let mean = data.iter().sum::<f64>() / data.len() as f64;
             let margin = 0.1; // Simplified calculation
-            
+
             intervals.insert(variant_id.clone(), (mean - margin, mean + margin));
         }
-        
+
         Ok(intervals)
     }
 
@@ -940,7 +967,7 @@ impl ABTestFramework {
     ) -> Result<PracticalSignificanceAssessment, String> {
         let mut metric_improvements = HashMap::new();
         metric_improvements.insert("primary_metric".to_string(), primary_analysis.effect_size);
-        
+
         Ok(PracticalSignificanceAssessment {
             metric_improvements,
             cost_benefit_analysis: None,
@@ -967,7 +994,7 @@ impl ABTestFramework {
                 });
             }
         }
-        
+
         if statistical_tests.iter().any(|t| t.significant) {
             Ok(TestRecommendation::RequiresManualReview {
                 concerns: vec!["Mixed statistical results".to_string()],
@@ -1023,7 +1050,9 @@ impl Default for StoppingCriteria {
             statistical_power_threshold: 0.8,
             practical_significance_threshold: 0.1,
             futility_threshold: 0.1,
-            interim_analysis_frequency: InterimAnalysisFrequency::FixedSampleSize { every_n_participants: 50 },
+            interim_analysis_frequency: InterimAnalysisFrequency::FixedSampleSize {
+                every_n_participants: 50,
+            },
             early_stopping_enabled: true,
         }
     }
@@ -1063,7 +1092,7 @@ mod tests {
     #[test]
     fn test_ab_test_creation() {
         let mut framework = ABTestFramework::new(Some(12345));
-        
+
         let hypothesis = Hypothesis {
             primary_metric: "accuracy".to_string(),
             expected_effect_size: 0.3,
@@ -1071,7 +1100,7 @@ mod tests {
             null_value: 0.0,
             alternative_description: "Intervention improves accuracy".to_string(),
         };
-        
+
         let variants = vec![
             TestVariant {
                 id: "control".to_string(),
@@ -1094,25 +1123,29 @@ mod tests {
                     config: LearnerConfig::default(),
                     topology: Topology::alphabet(),
                     parameters: HashMap::new(),
-                    intervention_type: InterventionType::HintingStrategy { level: "enhanced".to_string() },
+                    intervention_type: InterventionType::HintingStrategy {
+                        level: "enhanced".to_string(),
+                    },
                 },
                 allocation_weight: 0.5,
                 expected_participants: Some(100),
             },
         ];
-        
+
         let allocation_strategy = AllocationStrategy::FixedRandomization {
             proportions: vec![0.5, 0.5],
         };
-        
-        let test_id = framework.create_test(
-            "Hint Enhancement Test".to_string(),
-            "Testing enhanced hinting strategy".to_string(),
-            hypothesis,
-            variants,
-            allocation_strategy,
-        ).unwrap();
-        
+
+        let test_id = framework
+            .create_test(
+                "Hint Enhancement Test".to_string(),
+                "Testing enhanced hinting strategy".to_string(),
+                hypothesis,
+                variants,
+                allocation_strategy,
+            )
+            .unwrap();
+
         assert!(!test_id.is_empty());
         assert!(framework.tests.contains_key(&test_id));
     }
@@ -1120,10 +1153,10 @@ mod tests {
     #[test]
     fn test_participant_assignment() {
         let mut framework = ABTestFramework::new(Some(54321));
-        
+
         // Create a simple test first (code omitted for brevity)
         // Then test assignment
-        
+
         // This test would be expanded with actual test creation
         assert_eq!(framework.assignments.len(), 0);
     }

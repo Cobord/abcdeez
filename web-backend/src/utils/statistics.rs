@@ -1,7 +1,7 @@
 /// Statistical utilities for data analysis
 use super::math;
-use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
 use rand::Rng;
+use statrs::distribution::{ContinuousCDF, FisherSnedecor, StudentsT};
 
 /// Calculate mean of a dataset
 pub fn mean(data: &[f64]) -> f64 {
