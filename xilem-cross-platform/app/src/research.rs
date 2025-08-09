@@ -774,7 +774,7 @@ impl ResearchAnalyzer {
                 title: format!("IRB Application: {}", study_title),
                 content: format!(
                     "IRB APPLICATION\n\nStudy Title: {}\nPrincipal Investigator: {}\nInstitution: {}\nPurpose: {}",
-                    study_summary.title, study_summary.principal_investigator, 
+                    study_summary.title, study_summary.principal_investigator,
                     study_summary.institution, study_summary.purpose
                 ),
                 generated_date: Utc::now(),

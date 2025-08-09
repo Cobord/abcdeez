@@ -206,7 +206,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                             .direction(Axis::Horizontal)
                         })
                         .collect();
-
                     Some(
                         flex((
                             label("Recent Sessions:").alignment(TextAlignment::Start),
@@ -257,7 +256,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     correct as f64 / s.data_points.len().max(1) as f64
                 })
                 .collect();
-
             card(
                 "📊 Statistical Analysis Dashboard",
                 flex((
@@ -285,7 +283,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                         ),
                     ))
                     .direction(Axis::Horizontal),
-
                     // Statistical Analysis Tools
                     flex((
                         label("🔬 Statistical Tests").alignment(TextAlignment::Start),
@@ -296,7 +293,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                         .flat_map(|s| s.data_points.iter())
                                         .map(|dp| dp.response_time_ms as f64)
                                         .collect();
-                                    
                                     if !response_times.is_empty() {
                                         let mean = response_times.iter().sum::<f64>() / response_times.len() as f64;
                                         let mut sorted_rt = response_times.clone();
@@ -306,7 +302,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                         } else {
                                             sorted_rt[sorted_rt.len()/2]
                                         };
-                                        
                                         data.success_message = Some(format!(
                                             "Response Times: Mean={:.1}ms, Median={:.1}ms, Min={:.1}ms, Max={:.1}ms",
                                             mean, median, sorted_rt[0], sorted_rt[sorted_rt.len()-1]
@@ -320,7 +315,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                         .map(|s| s.condition.name.clone())
                                         .collect::<std::collections::HashSet<_>>()
                                         .into_iter().collect();
-                                    
                                     if conditions.len() >= 2 {
                                         data.success_message = Some(format!(
                                             "T-test ready: {} vs {} (Demo: p=0.034, d=0.42, significant)",
@@ -337,7 +331,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                         .map(|s| s.condition.name.clone())
                                         .collect::<std::collections::HashSet<_>>()
                                         .into_iter().collect();
-                                    
                                     if conditions.len() >= 2 {
                                         data.success_message = Some(format!(
                                             "ANOVA: {} groups, F({},..)=3.47, p=0.021, η²=0.18 (Demo)",
@@ -350,7 +343,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                             }),
                         ))
                         .direction(Axis::Horizontal),
-
                         flex((
                             button("📈 Regression", |data: &mut AppData| {
                                 if let Some(controller) = &data.research_controller {
@@ -386,7 +378,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                         .direction(Axis::Horizontal),
                     ))
                     .direction(Axis::Vertical),
-
                     // Learning Analysis Results  
                     flex((
                         label("📈 Learning Analysis").alignment(TextAlignment::Start),
@@ -409,14 +400,12 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                     .direction(Axis::Horizontal)
                                 })
                                 .collect();
-                            
                             Some(flex(comparisons).direction(Axis::Vertical))
                         } else {
                             None
                         },
                     ))
                     .direction(Axis::Vertical),
-
                     // Power Analysis & Sample Size
                     flex((
                         label("⚡ Power Analysis").alignment(TextAlignment::Start),
@@ -445,7 +434,6 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                         .direction(Axis::Horizontal),
                     ))
                     .direction(Axis::Vertical),
-
                     // Advanced Analysis Tools
                     flex((
                         label("🔬 Advanced Analysis").alignment(TextAlignment::Start),

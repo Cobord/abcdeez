@@ -153,9 +153,9 @@ pub async fn enhanced_health_check(
         HealthStatus::Unhealthy => {
             error!(
                 "System UNHEALTHY - error_rate: {:.2}%, cpu: {:.1}%, db_pool_util: {:.1}%, disk_usage: {:.1}%, external_deps_down: {}", 
-                error_rate, 
-                cpu_usage, 
-                db_pool_stats.utilization_percent, 
+                error_rate,
+                cpu_usage,
+                db_pool_stats.utilization_percent,
                 disk_usage.usage_percent,
                 external_deps.iter().filter(|(_, status)| matches!(status.status, HealthStatus::Unhealthy)).count()
             );
