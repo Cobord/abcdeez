@@ -730,14 +730,13 @@ impl BatchJobService {
 
     /// Schedule daily audit retention cleanup job (typically run at night)
     pub async fn schedule_audit_cleanup(&self, dry_run: bool) -> Result<Uuid> {
-        let job_id = Uuid::new_v4();
         let payload = serde_json::json!({
             "scheduled_at": chrono::Utc::now(),
             "dry_run": dry_run,
             "job_type": "audit_retention_cleanup"
-        }).to_string();
+        });
 
-        self.schedule_job(job_id, JobType::AuditRetentionCleanup, &payload).await?;
+        let job_id = self.schedule_job( JobType::AuditRetentionCleanup, payload).await?;
         Ok(job_id)
     }
 
