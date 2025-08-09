@@ -5,6 +5,12 @@ edition = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 
+[package.metadata.wix]
+upgrade-guid = "36712322-67A0-456E-8888-21986D7CE8D2"
+path-guid = "8309AEAE-A932-484E-8DEE-2B375E29DCA7"
+license = false
+eula = false
+
 [features]
 default = ["sqlite"]
 sqlite = ["sqlx/sqlite"]

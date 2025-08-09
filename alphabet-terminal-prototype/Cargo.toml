@@ -41,6 +41,12 @@ libssl3 = "*"
 glibc = "*"
 openssl = "*"
 
+[package.metadata.wix]
+upgrade-guid = "93FBBB59-DB19-4C70-9C2C-7E79E4549998"
+path-guid = "25613094-4E7F-4EEA-9167-41101F8C2A45"
+license = false
+eula = false
+
 [dependencies]
 crossterm = { version = "0.27", optional = true }
 ratatui = { version = "0.26", optional = true }

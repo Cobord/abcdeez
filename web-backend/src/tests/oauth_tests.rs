@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::config::Config;
-use crate::models::User;
+use crate::models::user::User;
 use crate::services::oauth_service::OAuthProvider;
 use crate::services::{
     apple_auth_service::{AppleAuthService, AppleIdToken},
