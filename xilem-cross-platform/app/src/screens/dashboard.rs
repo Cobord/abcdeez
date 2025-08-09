@@ -502,6 +502,12 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
             button("🆕 New Session", |data: &mut AppData| {
                 data.current_screen = Screen::DomainSelection;
             }),
+            button("🎨 Visualizations", |data: &mut AppData| {
+                data.current_screen = Screen::Visualizations;
+            }),
+            button("🔬 Research", |data: &mut AppData| {
+                data.current_screen = Screen::ResearchDashboard;
+            }),
             button("⚙️ Settings", |data: &mut AppData| {
                 data.current_screen = Screen::Settings;
             }),

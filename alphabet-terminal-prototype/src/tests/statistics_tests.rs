@@ -286,7 +286,7 @@ fn test_goodness_of_fit() {
     // Generate plausible Ex-Gaussian data
     // (In production, we'd sample from the actual distribution)
     let mean = true_params.mu + true_params.tau;
-    let std = (true_params.sigma.powi(2) + true_params.tau.powi(2)).sqrt();
+    let _std = (true_params.sigma.powi(2) + true_params.tau.powi(2)).sqrt();
 
     // Create data that follows Ex-Gaussian shape:
     // Most points near the mode, with exponential tail

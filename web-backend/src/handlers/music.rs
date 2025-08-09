@@ -47,8 +47,37 @@ pub async fn audio(
     State(_state): State<Arc<AppState>>,
     Path(note): Path<String>,
 ) -> AppResult<Vec<u8>> {
-    // Return placeholder audio data
-    // In production, this would load actual audio files
+    // Generate simple sine wave audio for the requested note
     tracing::debug!("Audio requested for note: {}", note);
-    Ok(vec![0u8; 100]) // Placeholder audio data
+    
+    // Map note to frequency (simplified mapping)
+    let frequency = match note.as_str() {
+        "C" | "C4" => 261.63,
+        "D" | "D4" => 293.66,
+        "E" | "E4" => 329.63,
+        "F" | "F4" => 349.23,
+        "G" | "G4" => 392.00,
+        "A" | "A4" => 440.00,
+        "B" | "B4" => 493.88,
+        _ => 440.00, // Default to A4
+    };
+    
+    // Generate 1 second of audio at 44.1kHz sample rate
+    let sample_rate = 44100.0;
+    let duration = 1.0; // seconds
+    let samples = (sample_rate * duration) as usize;
+    
+    let mut audio_data = Vec::with_capacity(samples * 2); // 16-bit audio
+    
+    for i in 0..samples {
+        let t = i as f64 / sample_rate;
+        let sample = (2.0 * std::f64::consts::PI * frequency * t).sin();
+        let sample_i16 = (sample * 32767.0) as i16;
+        
+        // Convert to little-endian bytes
+        audio_data.push((sample_i16 & 0xFF) as u8);
+        audio_data.push((sample_i16 >> 8) as u8);
+    }
+    
+    Ok(audio_data)
 }

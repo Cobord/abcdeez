@@ -14,8 +14,8 @@ pub fn learning_curve_chart(
     width: u32,
     height: u32,
 ) -> impl WidgetView<AppData> {
-    // Generate the chart as RGB buffer
-    let chart_data = match create_learning_curve(responses, width, height) {
+    // Generate the chart as RGB buffer  
+    let _chart_data = match create_learning_curve(responses, width, height) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create learning curve: {}", e);
@@ -63,7 +63,7 @@ pub fn response_time_histogram_chart(
     height: u32,
 ) -> impl WidgetView<AppData> {
     // Generate the histogram
-    let chart_data = match create_response_time_histogram(response_times, width, height) {
+    let _chart_data = match create_response_time_histogram(response_times, width, height) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create histogram: {}", e);
@@ -106,7 +106,7 @@ pub fn performance_heatmap_chart(
     height: u32,
 ) -> impl WidgetView<AppData> {
     // Generate the heatmap
-    let chart_data = match create_performance_heatmap(responses, width, height) {
+    let _chart_data = match create_performance_heatmap(responses, width, height) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create heatmap: {}", e);
@@ -137,7 +137,7 @@ pub fn metrics_radar_chart(
     height: u32,
 ) -> impl WidgetView<AppData> {
     // Generate the radar chart
-    let chart_data = match create_metrics_radar_chart(metrics, width, height) {
+    let _chart_data = match create_metrics_radar_chart(metrics, width, height) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create radar chart: {}", e);
@@ -167,7 +167,7 @@ pub fn progress_ring_chart(
     size: u32,
 ) -> impl WidgetView<AppData> {
     // Generate the progress ring
-    let chart_data = match create_progress_ring(percentage, size, size, label_text) {
+    let _chart_data = match create_progress_ring(percentage, size, size, label_text) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create progress ring: {}", e);
@@ -185,19 +185,19 @@ pub fn progress_ring_chart(
 /// Create a scatter plot component
 pub fn scatter_plot_chart(
     data: &[(f64, f64)],
-    width: u32,
-    height: u32,
-    x_label: &str,
-    y_label: &str,
+    _width: u32,
+    _height: u32,
+    _x_label: &str,
+    _y_label: &str,
     title: &str,
 ) -> impl WidgetView<AppData> {
     // Generate the scatter plot
     // Note: scatter plot not implemented in visualizations.rs yet; show placeholder for now
-    let chart_data = match (|| -> Result<Vec<u8>, String> { Err("not implemented".into()) })() {
+    let _chart_data = match (|| -> Result<Vec<u8>, String> { Err("not implemented".into()) })() {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Failed to create scatter plot: {}", e);
-            vec![255; (width * height * 3) as usize]
+            vec![255; (400 * 300 * 3) as usize] // Default fallback size
         }
     };
 
@@ -330,8 +330,8 @@ pub fn sparkline(
 /// Create a comparison chart for multiple sessions
 pub fn session_comparison_chart(
     sessions: &[Vec<TaskResponse>],
-    width: u32,
-    height: u32,
+    _width: u32,
+    _height: u32,
 ) -> impl WidgetView<AppData> {
     flex((
         label("📊 Session Comparison").brush(Color::from_rgb8(102, 126, 234)),

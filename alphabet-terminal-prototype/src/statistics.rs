@@ -4,6 +4,15 @@ use statrs::statistics::Statistics;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssumptionCheckResult {
+    pub test_name: String,
+    pub assumption: String,
+    pub is_met: bool,
+    pub p_value: Option<f64>,
+    pub recommendation: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExGaussianParameters {
     pub mu: f64,
     pub sigma: f64,
@@ -146,42 +155,27 @@ impl ExGaussianModel {
         // Ex-Gaussian PDF is the convolution of a Gaussian and an exponential
         // f(x) = (λ/2) * exp(λ/2 * (2μ + λσ² - 2x)) * erfc((μ + λσ² - x)/(√2 * σ))
         let lambda = 1.0 / self.params.tau;
-        let normal = Normal::new(0.0, 1.0).unwrap();
+        let _normal = Normal::new(0.0, 1.0).unwrap();
 
         // Calculate the argument for the exponential term
         let exp_arg =
             (lambda / 2.0) * (2.0 * self.params.mu + lambda * self.params.sigma.powi(2) - 2.0 * x);
 
-        // Prevent numerical overflow/underflow with wider bounds
-        if exp_arg < -50.0 {
-            return 0.0;
-        }
-        if exp_arg > 50.0 {
-            // For very large exp_arg, the result would overflow
-            // Return a capped value instead
-            return 1e10;
-        }
+        // Compute in log-domain for stability
+        let log_exp = exp_arg;
 
         // Calculate the argument for the complementary error function
         let erfc_arg = (self.params.mu + lambda * self.params.sigma.powi(2) - x)
             / (self.params.sigma * std::f64::consts::SQRT_2);
 
-        // Check for extreme erfc arguments to prevent numerical issues
-        let erfc_val = if erfc_arg > 5.0 {
-            // For large positive values, erfc approaches 0
-            0.0
-        } else if erfc_arg < -5.0 {
-            // For large negative values, erfc approaches 2
-            2.0
-        } else {
-            // Use statrs to compute erfc
-            statrs::function::erf::erfc(erfc_arg)
-        };
+        // Use statrs to compute erfc, clamp final result only
+        let erfc_val = statrs::function::erf::erfc(erfc_arg);
 
         // Calculate the result with additional stability checks
         // The formula is: (λ/2) * exp(exp_arg) * erfc_val
         // where exp_arg = (λ/2) * (2μ + λσ² - 2x)
-        let result = (lambda / 2.0) * exp_arg.exp() * erfc_val;
+        let result = (lambda / 2.0) * log_exp.exp() * erfc_val;
+        if result.is_sign_negative() { return 0.0; }
 
         // Final sanity check to avoid NaN or Inf
         if result.is_finite() {
@@ -212,23 +206,14 @@ impl ExGaussianModel {
         // First term: Φ((x-μ)/σ)
         let term1 = normal.cdf((x - self.params.mu) / self.params.sigma);
 
-        // Second term exponential part
+        // Second term exponential part (log-domain)
         let exp_arg =
             (lambda / 2.0) * (2.0 * self.params.mu + lambda * self.params.sigma.powi(2) - 2.0 * x);
-
-        // Prevent overflow
-        if exp_arg > 50.0 {
-            return 0.0; // exp would be huge, making second term dominate incorrectly
-        }
 
         // Second term normal CDF part
         let term2_arg =
             (x - self.params.mu - lambda * self.params.sigma.powi(2)) / self.params.sigma;
-        let term2 = if exp_arg < -50.0 {
-            0.0 // exp is essentially 0
-        } else {
-            exp_arg.exp() * normal.cdf(term2_arg)
-        };
+        let term2 = exp_arg.exp() * normal.cdf(term2_arg);
 
         (term1 - term2).max(0.0).min(1.0)
     }
@@ -418,39 +403,37 @@ impl StrategyAnalysis {
     }
 
     fn calculate_correlation(response_times: &[f64], distances: &[usize]) -> f64 {
-        if response_times.len() != distances.len() || response_times.is_empty() {
+        let n = response_times.len();
+        if n != distances.len() || n == 0 {
             return 0.0;
         }
+        let n_f = n as f64;
 
-        let rt_mean = response_times.iter().sum::<f64>() / response_times.len() as f64;
-        let dist_mean = distances.iter().sum::<usize>() as f64 / distances.len() as f64;
+        let rt_mean = response_times.iter().sum::<f64>() / n_f;
+        let dist_mean = distances.iter().map(|&d| d as f64).sum::<f64>() / n_f;
 
-        let covariance: f64 = response_times
+        let cov_num: f64 = response_times
             .iter()
             .zip(distances.iter())
             .map(|(rt, d)| (rt - rt_mean) * (*d as f64 - dist_mean))
-            .sum::<f64>()
-            / response_times.len() as f64;
+            .sum();
+        // Unbiased covariance when n>1
+        let covariance = if n > 1 { cov_num / (n_f - 1.0) } else { 0.0 };
 
-        let rt_std = (response_times
+        let rt_var_num: f64 = response_times
             .iter()
             .map(|rt| (rt - rt_mean).powi(2))
-            .sum::<f64>()
-            / response_times.len() as f64)
-            .sqrt();
-
-        let dist_std = (distances
+            .sum();
+        let dist_var_num: f64 = distances
             .iter()
             .map(|d| (*d as f64 - dist_mean).powi(2))
-            .sum::<f64>()
-            / distances.len() as f64)
-            .sqrt();
+            .sum();
+        let rt_var = if n > 1 { rt_var_num / (n_f - 1.0) } else { 0.0 };
+        let dist_var = if n > 1 { dist_var_num / (n_f - 1.0) } else { 0.0 };
 
-        if rt_std > 0.0 && dist_std > 0.0 {
-            covariance / (rt_std * dist_std)
-        } else {
-            0.0
-        }
+        let denom = rt_var.sqrt() * dist_var.sqrt();
+        let r = if denom > 0.0 { covariance / denom } else { 0.0 };
+        r.max(-1.0).min(1.0)
     }
 
     fn find_strategy_transition(response_times: &[f64], distances: &[usize]) -> Option<usize> {
@@ -508,6 +491,7 @@ impl ResponseTimeDistribution {
             .sum::<f64>()
             / response_times.len() as f64;
         let std_dev = variance.sqrt();
+        if std_dev == 0.0 { return vec![]; }
 
         let mut outliers = Vec::new();
         for (i, &rt) in response_times.iter().enumerate() {
@@ -640,7 +624,7 @@ impl MultipleComparisonCorrection {
         p_values.iter().map(|&p| (p * n).min(1.0)).collect()
     }
 
-    /// Benjamini-Hochberg FDR correction
+    /// Benjamini-Hochberg FDR correction with enforced monotonicity
     fn benjamini_hochberg_correction(&self, p_values: &[f64]) -> Vec<f64> {
         if p_values.is_empty() {
             return vec![];
@@ -653,15 +637,25 @@ impl MultipleComparisonCorrection {
         // Sort by p-value
         indexed_p.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        let mut adjusted = vec![0.0; n];
-        let mut cummin = 1.0;
-
-        // Apply BH correction from largest to smallest p-value
-        for i in (0..n).rev() {
+        // Create adjustment vector in sorted order
+        let mut sorted_adjusted = vec![0.0; n];
+        
+        // Apply BH correction formula
+        for i in 0..n {
             let rank = i + 1;
-            let p_adj = (indexed_p[i].1 * n as f64 / rank as f64).min(cummin);
-            cummin = cummin.min(p_adj);
-            adjusted[indexed_p[i].0] = p_adj;
+            sorted_adjusted[i] = (indexed_p[i].1 * n as f64 / rank as f64).min(1.0);
+        }
+        
+        // Enforce monotonicity: adjusted p-values should be non-decreasing
+        // Work backwards to ensure larger p-values don't have smaller adjusted values
+        for i in (0..n-1).rev() {
+            sorted_adjusted[i] = sorted_adjusted[i].min(sorted_adjusted[i + 1]);
+        }
+        
+        // Map back to original indices
+        let mut adjusted = vec![0.0; n];
+        for i in 0..n {
+            adjusted[indexed_p[i].0] = sorted_adjusted[i];
         }
 
         adjusted
@@ -821,5 +815,217 @@ impl PowerAnalysis {
                 (d, analysis.calculate_power(n))
             })
             .collect()
+    }
+}
+
+/// Check assumptions for parametric statistical tests
+pub struct AssumptionChecker;
+
+impl AssumptionChecker {
+    /// Check all assumptions for t-test
+    pub fn check_t_test_assumptions(sample1: &[f64], sample2: Option<&[f64]>) -> Vec<AssumptionCheckResult> {
+        let mut results = Vec::new();
+        
+        // Check normality
+        results.push(Self::check_normality(sample1, "Sample 1"));
+        if let Some(s2) = sample2 {
+            results.push(Self::check_normality(s2, "Sample 2"));
+            
+            // Check homogeneity of variance for two-sample test
+            results.push(Self::check_homogeneity_of_variance(sample1, s2));
+        }
+        
+        // Check sample size
+        results.push(Self::check_sample_size(sample1.len(), "t-test"));
+        
+        // Check for outliers
+        results.push(Self::check_outliers(sample1, "Sample 1"));
+        
+        results
+    }
+    
+    /// Check normality using Shapiro-Wilk test approximation
+    pub fn check_normality(data: &[f64], sample_name: &str) -> AssumptionCheckResult {
+        let n = data.len();
+        
+        if n < 3 {
+            return AssumptionCheckResult {
+                test_name: "Normality".to_string(),
+                assumption: format!("Normal distribution for {}", sample_name),
+                is_met: false,
+                p_value: None,
+                recommendation: "Sample too small for normality test. Use non-parametric methods.".to_string(),
+            };
+        }
+        
+        // Calculate skewness and kurtosis as quick normality indicators
+        let mean = data.iter().sum::<f64>() / n as f64;
+        let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
+        let std_dev = variance.sqrt();
+        
+        let skewness = if std_dev > 0.0 {
+            let sum_cubed = data.iter().map(|x| ((x - mean) / std_dev).powi(3)).sum::<f64>();
+            sum_cubed * n as f64 / ((n - 1) as f64 * (n - 2) as f64)
+        } else {
+            0.0
+        };
+        
+        let kurtosis = if std_dev > 0.0 && n > 3 {
+            let sum_fourth = data.iter().map(|x| ((x - mean) / std_dev).powi(4)).sum::<f64>();
+            let k = sum_fourth * n as f64 * (n + 1) as f64 
+                / ((n - 1) as f64 * (n - 2) as f64 * (n - 3) as f64)
+                - 3.0 * (n - 1) as f64 * (n - 1) as f64 
+                / ((n - 2) as f64 * (n - 3) as f64);
+            k
+        } else {
+            0.0
+        };
+        
+        // Rules of thumb for normality
+        let skewness_ok = skewness.abs() < 2.0;
+        let kurtosis_ok = kurtosis.abs() < 7.0;
+        let is_normal = skewness_ok && kurtosis_ok;
+        
+        AssumptionCheckResult {
+            test_name: "Normality".to_string(),
+            assumption: format!("Normal distribution for {}", sample_name),
+            is_met: is_normal,
+            p_value: None,
+            recommendation: if is_normal {
+                "Data appears approximately normal.".to_string()
+            } else if n < 30 {
+                "Violation detected with small sample. Consider non-parametric test (e.g., Wilcoxon).".to_string()
+            } else {
+                "Violation detected but sample is large. T-test may still be robust.".to_string()
+            },
+        }
+    }
+    
+    /// Check homogeneity of variance using Levene's test approximation
+    pub fn check_homogeneity_of_variance(sample1: &[f64], sample2: &[f64]) -> AssumptionCheckResult {
+        let mean1 = sample1.iter().sum::<f64>() / sample1.len() as f64;
+        let mean2 = sample2.iter().sum::<f64>() / sample2.len() as f64;
+        
+        let var1 = sample1.iter().map(|x| (x - mean1).powi(2)).sum::<f64>() / (sample1.len() - 1) as f64;
+        let var2 = sample2.iter().map(|x| (x - mean2).powi(2)).sum::<f64>() / (sample2.len() - 1) as f64;
+        
+        let variance_ratio = var1.max(var2) / var1.min(var2);
+        
+        // Rule of thumb: variance ratio should be less than 4
+        let is_homogeneous = variance_ratio < 4.0;
+        
+        AssumptionCheckResult {
+            test_name: "Homogeneity of Variance".to_string(),
+            assumption: "Equal variances between groups".to_string(),
+            is_met: is_homogeneous,
+            p_value: None,
+            recommendation: if is_homogeneous {
+                "Variances appear homogeneous.".to_string()
+            } else {
+                format!("Variance ratio is {:.2}. Consider Welch's t-test for unequal variances.", variance_ratio)
+            },
+        }
+    }
+    
+    /// Check for sufficient sample size
+    pub fn check_sample_size(n: usize, test_type: &str) -> AssumptionCheckResult {
+        let min_size = match test_type {
+            "t-test" => 5,
+            "anova" => 10,
+            "regression" => 20,
+            _ => 30,
+        };
+        
+        let is_sufficient = n >= min_size;
+        
+        AssumptionCheckResult {
+            test_name: "Sample Size".to_string(),
+            assumption: format!("Sufficient sample size for {}", test_type),
+            is_met: is_sufficient,
+            p_value: None,
+            recommendation: if is_sufficient {
+                "Sample size is adequate.".to_string()
+            } else {
+                format!("Sample size ({}) is below recommended minimum ({}). Results may be unreliable.", n, min_size)
+            },
+        }
+    }
+    
+    /// Check for outliers using IQR method
+    pub fn check_outliers(data: &[f64], sample_name: &str) -> AssumptionCheckResult {
+        let mut sorted = data.to_vec();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        
+        let n = sorted.len();
+        let q1_idx = n / 4;
+        let q3_idx = 3 * n / 4;
+        
+        let q1 = sorted[q1_idx];
+        let q3 = sorted[q3_idx];
+        let iqr = q3 - q1;
+        
+        let lower_bound = q1 - 1.5 * iqr;
+        let upper_bound = q3 + 1.5 * iqr;
+        
+        let outliers: Vec<_> = data.iter()
+            .filter(|&&x| x < lower_bound || x > upper_bound)
+            .collect();
+        
+        let outlier_proportion = outliers.len() as f64 / n as f64;
+        let has_outliers = outlier_proportion > 0.05; // More than 5% outliers
+        
+        AssumptionCheckResult {
+            test_name: "Outliers".to_string(),
+            assumption: format!("No extreme outliers in {}", sample_name),
+            is_met: !has_outliers,
+            p_value: None,
+            recommendation: if !has_outliers {
+                "No concerning outliers detected.".to_string()
+            } else {
+                format!("{} outliers detected ({:.1}%). Consider robust methods or outlier removal.", 
+                    outliers.len(), outlier_proportion * 100.0)
+            },
+        }
+    }
+    
+    /// Check assumptions for ANOVA
+    pub fn check_anova_assumptions(groups: &[Vec<f64>]) -> Vec<AssumptionCheckResult> {
+        let mut results = Vec::new();
+        
+        // Check normality for each group
+        for (i, group) in groups.iter().enumerate() {
+            results.push(Self::check_normality(group, &format!("Group {}", i + 1)));
+        }
+        
+        // Check homogeneity across all groups
+        if groups.len() >= 2 {
+            let variances: Vec<f64> = groups.iter().map(|g| {
+                let mean = g.iter().sum::<f64>() / g.len() as f64;
+                g.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (g.len() - 1) as f64
+            }).collect();
+            
+            let max_var = variances.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+            let min_var = variances.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+            let variance_ratio = max_var / min_var;
+            
+            results.push(AssumptionCheckResult {
+                test_name: "Homogeneity of Variance".to_string(),
+                assumption: "Equal variances across groups".to_string(),
+                is_met: variance_ratio < 4.0,
+                p_value: None,
+                recommendation: if variance_ratio < 4.0 {
+                    "Variances appear homogeneous across groups.".to_string()
+                } else {
+                    format!("Variance ratio is {:.2}. Consider Welch's ANOVA or non-parametric Kruskal-Wallis test.", variance_ratio)
+                },
+            });
+        }
+        
+        // Check sample sizes
+        for (i, group) in groups.iter().enumerate() {
+            results.push(Self::check_sample_size(group.len(), &format!("ANOVA Group {}", i + 1)));
+        }
+        
+        results
     }
 }

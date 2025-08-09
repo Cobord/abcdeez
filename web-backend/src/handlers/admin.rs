@@ -84,8 +84,10 @@ pub async fn dashboard(
     claims: Extension<Claims>,
     Query(params): Query<SystemQuery>,
 ) -> AppResult<Json<SystemStatus>> {
-    // TODO: Add admin permission check
-    // For now, any authenticated user can access admin endpoints
+    // Check if user has admin permissions
+    if !has_admin_permissions(&claims.sub, &state).await? {
+        return Err(AppError::Forbidden);
+    }
 
     // Get database statistics
     let db_stats = get_database_status(&state.db_pool).await?;
@@ -691,4 +693,25 @@ pub async fn trigger_oauth_validation(
         "status": "scheduled",
         "message": "OAuth credential validation job scheduled successfully"
     })))
+}
+
+// Helper function to check admin permissions
+async fn has_admin_permissions(user_id: &Uuid, state: &AppState) -> AppResult<bool> {
+    let query = "SELECT role FROM users WHERE id = ?";
+    let mut conn = state
+        .db_pool
+        .acquire()
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+    
+    let role: Option<String> = sqlx::query_scalar(query)
+        .bind(user_id.to_string())
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|e| AppError::DatabaseError(e))?;
+    
+    match role.as_deref() {
+        Some("admin") | Some("superuser") => Ok(true),
+        _ => Ok(false),
+    }
 }

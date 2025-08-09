@@ -73,7 +73,7 @@ pub struct App {
     // Backend connection
     backend_client: Option<BackendClient>,
     session_token: Option<SessionToken>,
-    backend_enabled: bool,
+    _backend_enabled: bool,
     sync_status: SyncStatus,
 
     // UI State
@@ -125,7 +125,7 @@ impl App {
             current_task: None,
             backend_client,
             session_token: None,
-            backend_enabled,
+            _backend_enabled: backend_enabled,
             sync_status,
             input: String::new(),
             messages: vec!["Welcome to the Adaptive Learning System!".to_string()],

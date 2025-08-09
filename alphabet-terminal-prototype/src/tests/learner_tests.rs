@@ -165,13 +165,10 @@ fn test_strategy_tracking() {
 
     // Simulate a pattern that suggests serial scanning strategy:
     // Successive items should be easier (higher success rate)
-    let mut successor_correct = 0;
-    let mut non_successor_correct = 0;
 
     // Practice successor tasks (should improve if using serial strategy)
     for _ in 0..10 {
         learner.update_operation_proficiency(&OperationType::Successor, true);
-        successor_correct += 1;
     }
 
     // Practice non-adjacent tasks (harder with serial strategy)

@@ -150,12 +150,32 @@ impl LearnerModel {
         if let Some(prof) = self.operation_proficiencies.get_mut(&key) {
             prof.practice_count += 1;
 
-            let learning_rate = 0.1;
+            // Adaptive learning rate based on:
+            // 1. Current proficiency (learn faster when less proficient)
+            // 2. Practice count (decrease learning rate over time)
+            // 3. Recent performance (adjust based on consistency)
+            
+            // Base learning rate decreases with practice (power law)
+            let base_rate = 0.3 / (1.0 + prof.practice_count as f64).powf(0.5);
+            
+            // Adjust based on current proficiency level
+            // Learn faster in the middle range, slower at extremes
+            let proficiency_factor = 1.0 - (prof.theta.abs() / 3.0).min(1.0);
+            
+            // Calculate adaptive learning rate
+            let learning_rate = (base_rate * (0.5 + proficiency_factor)).max(0.01).min(0.5);
+            
             if success {
+                // Update with diminishing returns as proficiency increases
                 prof.theta += learning_rate * (1.0 - sigmoid(prof.theta));
             } else {
-                prof.theta -= learning_rate * sigmoid(prof.theta);
+                // Larger penalty for errors at high proficiency
+                let error_weight = if prof.theta > 1.0 { 1.5 } else { 1.0 };
+                prof.theta -= learning_rate * sigmoid(prof.theta) * error_weight;
             }
+            
+            // Ensure theta stays within reasonable bounds
+            prof.theta = prof.theta.max(-3.0).min(3.0);
         }
     }
 
@@ -209,10 +229,29 @@ impl LearnerModel {
         if let Some(mem) = self.memory_strengths.get(node_id) {
             let now = chrono::Utc::now();
             let time_since = now.signed_duration_since(mem.last_practice);
-            let hours_since = time_since.num_hours() as f64;
+            // Use sub-hour resolution to make short-interval tests meaningful
+            let hours_since = (time_since.num_seconds() as f64) / 3600.0;
 
             let decay_rate = self.calculate_decay_rate(mem.strength);
-            self.apply_forgetting_curve(mem.strength, hours_since, decay_rate)
+            let mut retention = self.apply_forgetting_curve(mem.strength, hours_since, decay_rate);
+
+            // Small primacy/recency boost to reflect empirically observed edge benefits
+            if let Some(embed) = self.node_embeddings.get(node_id) {
+                let n_nodes = self.node_embeddings.len().max(1) as f64;
+                // Normalize position to [0,1]
+                let pos_norm = if n_nodes > 1.0 {
+                    embed.position / (n_nodes - 1.0)
+                } else {
+                    0.0
+                };
+                // Cosine-based edge emphasis: peaks at edges, lowest in middle
+                let edge_emphasis = (std::f64::consts::PI * pos_norm).cos().abs();
+                // Keep boost very small so it doesn't break decay expectations
+                let boost = 1.0 + 0.01 * edge_emphasis; // up to +1%
+                retention = (retention * boost).min(1.0);
+            }
+
+            retention
         } else {
             0.0
         }

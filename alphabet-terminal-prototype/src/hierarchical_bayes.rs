@@ -6,6 +6,14 @@ use serde::{Deserialize, Serialize};
 use statrs::distribution::{Beta, Continuous, Gamma, Normal};
 use std::collections::HashMap;
 
+#[derive(Debug, Clone)]
+pub struct MCMCDiagnostics {
+    pub r_hat: f64,
+    pub effective_sample_size: f64,
+    pub acceptance_rate: f64,
+    pub autocorrelation: Vec<f64>,
+}
+
 /// Hyperparameters for the hierarchical model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Hyperparameters {
@@ -696,6 +704,106 @@ impl HierarchicalBayesianModel {
         }
 
         mean_sample
+    }
+
+    /// Calculate MCMC convergence diagnostics including R-hat and effective sample size
+    pub fn calculate_convergence_diagnostics(&self, samples: &[MCMCSample], burn_in: usize) -> MCMCDiagnostics {
+        // Split chains for R-hat calculation
+        let post_burnin = &samples[burn_in..];
+        let n = post_burnin.len();
+        let split_point = n / 2;
+        
+        // Calculate R-hat (potential scale reduction factor)
+        let chain1 = &post_burnin[..split_point];
+        let chain2 = &post_burnin[split_point..];
+        
+        // Use population mean ability as the diagnostic parameter
+        let params1: Vec<f64> = chain1.iter().map(|s| s.population_mean_ability).collect();
+        let params2: Vec<f64> = chain2.iter().map(|s| s.population_mean_ability).collect();
+        
+        let r_hat = self.calculate_r_hat(&params1, &params2);
+        
+        // Calculate effective sample size
+        let all_params: Vec<f64> = post_burnin.iter().map(|s| s.population_mean_ability).collect();
+        let autocorr = self.calculate_autocorrelation(&all_params, 50);
+        let ess = self.calculate_effective_sample_size(&autocorr, n);
+        
+        // Calculate acceptance rate (simplified - track parameter changes)
+        let mut changes = 0;
+        for i in 1..post_burnin.len() {
+            if (post_burnin[i].population_mean_ability - post_burnin[i-1].population_mean_ability).abs() > 1e-10 {
+                changes += 1;
+            }
+        }
+        let acceptance_rate = changes as f64 / (post_burnin.len() - 1) as f64;
+        
+        MCMCDiagnostics {
+            r_hat,
+            effective_sample_size: ess,
+            acceptance_rate,
+            autocorrelation: autocorr,
+        }
+    }
+    
+    /// Calculate R-hat (Gelman-Rubin statistic) for convergence
+    fn calculate_r_hat(&self, chain1: &[f64], chain2: &[f64]) -> f64 {
+        let n = chain1.len() as f64;
+        
+        // Within-chain variance
+        let var1 = self.variance(chain1);
+        let var2 = self.variance(chain2);
+        let w = (var1 + var2) / 2.0;
+        
+        // Between-chain variance
+        let mean1 = chain1.iter().sum::<f64>() / n;
+        let mean2 = chain2.iter().sum::<f64>() / n;
+        let overall_mean = (mean1 + mean2) / 2.0;
+        let b = n * ((mean1 - overall_mean).powi(2) + (mean2 - overall_mean).powi(2));
+        
+        // Potential scale reduction factor
+        let var_plus = ((n - 1.0) / n) * w + (1.0 / n) * b;
+        (var_plus / w).sqrt()
+    }
+    
+    /// Calculate autocorrelation function up to specified lag
+    fn calculate_autocorrelation(&self, values: &[f64], max_lag: usize) -> Vec<f64> {
+        let n = values.len();
+        let mean = values.iter().sum::<f64>() / n as f64;
+        let variance = self.variance(values);
+        
+        let mut autocorr = vec![1.0]; // Lag 0 is always 1
+        
+        for lag in 1..=max_lag.min(n / 4) {
+            let mut sum = 0.0;
+            for i in 0..(n - lag) {
+                sum += (values[i] - mean) * (values[i + lag] - mean);
+            }
+            autocorr.push(sum / ((n - lag) as f64 * variance));
+        }
+        
+        autocorr
+    }
+    
+    /// Calculate effective sample size from autocorrelation
+    fn calculate_effective_sample_size(&self, autocorr: &[f64], n: usize) -> f64 {
+        // Find first negative autocorrelation
+        let mut sum_autocorr = 0.0;
+        for i in 1..autocorr.len() {
+            if autocorr[i] < 0.0 {
+                break;
+            }
+            sum_autocorr += autocorr[i];
+        }
+        
+        // ESS = n / (1 + 2 * sum of positive autocorrelations)
+        n as f64 / (1.0 + 2.0 * sum_autocorr)
+    }
+    
+    /// Helper function to calculate variance
+    fn variance(&self, values: &[f64]) -> f64 {
+        let n = values.len() as f64;
+        let mean = values.iter().sum::<f64>() / n;
+        values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0)
     }
 }
 

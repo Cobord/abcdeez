@@ -13,6 +13,7 @@ mod easter_egg;
 mod ios_auth;
 pub mod models;
 mod offline;
+mod research;
 mod screens;
 mod visualization_components;
 mod visualizations;
@@ -42,7 +43,8 @@ use easter_egg::LittleCrab;
 use models::*;
 use offline::{ConnectivityMonitor, OfflineStorage, SyncStatus};
 use screens::{
-    dashboard_screen, domain_selection_screen, settings_screen, training_screen, welcome_screen,
+    dashboard_screen, domain_selection_screen, research_dashboard_screen, settings_screen, 
+    training_screen, visualizations_screen, welcome_screen,
 };
 
 // Application screens
@@ -53,6 +55,9 @@ pub enum Screen {
     Training,
     Dashboard,
     Settings,
+    ResearchDashboard,
+    Visualizations,
+    WidgetGallery,
 }
 
 // Main application state
@@ -153,6 +158,14 @@ pub struct AppData {
     pub little_crab: Option<LittleCrab>,
     pub crab_trigger_clicks: usize,
     pub last_click_time: Option<std::time::Instant>,
+    
+    // Research mode
+    pub research_controller: Option<research::ResearchController>,
+    pub show_experiment_setup: bool,
+    pub selected_experiment_type: Option<research::ExperimentType>,
+    pub experiment_control_group: bool,
+    pub research_data_collection_enabled: bool,
+    pub research_privacy_mode: bool,
 }
 
 impl Default for AppData {
@@ -245,6 +258,14 @@ impl Default for AppData {
             little_crab: Some(easter_egg::init_random_crab()),
             crab_trigger_clicks: 0,
             last_click_time: None,
+            
+            // Research mode
+            research_controller: None,
+            show_experiment_setup: false,
+            selected_experiment_type: None,
+            experiment_control_group: false,
+            research_data_collection_enabled: true,
+            research_privacy_mode: false,
         }
     }
 }
@@ -406,6 +427,9 @@ fn app_logic(data: &mut AppData) -> impl WidgetView<AppData> {
             (data.current_screen == Screen::Training).then(|| training_screen(data)),
             (data.current_screen == Screen::Dashboard).then(|| dashboard_screen(data)),
             (data.current_screen == Screen::Settings).then(|| settings_screen(data)),
+            (data.current_screen == Screen::ResearchDashboard).then(|| research_dashboard_screen(data)),
+            (data.current_screen == Screen::Visualizations).then(|| visualizations_screen(data)),
+            (data.current_screen == Screen::WidgetGallery).then(|| screens::widget_gallery_screen(data)),
         ))
         .direction(Axis::Vertical),
     ))
@@ -711,6 +735,8 @@ impl AppData {
                     self.success_message = Some("🦀 You found the secret crab! 🦀".to_string());
                 }
             }
+            // Secret: open the hidden widget gallery on discovery
+            self.current_screen = Screen::WidgetGallery;
             self.crab_trigger_clicks = 0;
         }
     }
@@ -1136,6 +1162,25 @@ impl AppData {
                 // Update metrics
                 self.current_metrics
                     .update(correct, response_time_ms as i32);
+                
+                // Record to research controller if active
+                if let Some(controller) = &mut self.research_controller {
+                    if controller.active_session.is_some() {
+                        let data_point = research::DataPoint {
+                            timestamp: Utc::now(),
+                            trial_number: self.session_responses.len() as u32 + 1,
+                            stimulus: ui_task.core_task.prompt.clone(),
+                            response: answer.clone(),
+                            correct,
+                            response_time_ms,
+                            confidence: None,
+                            eye_tracking: None,
+                            physiological: None,
+                            metadata: std::collections::HashMap::new(),
+                        };
+                        let _ = controller.record_data_point(data_point);
+                    }
+                }
 
                 // Update learner metrics from core model
                 if let Some(learner) = &self.current_learner {

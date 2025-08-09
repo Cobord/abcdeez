@@ -5,3 +5,5 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 7ee7c6d7ececea74f03944be4e4cb808d4dd84af0f7e348cfef0343a09ee32be # shrinks to num_nodes = 5, num_samples = 13
+cc a80637172ed68efc322d693d2ca46399bf88642823722fc5d54cff1fc4192e75 # shrinks to variance = 0.01
+cc 8afb8f8b1340c3c23faf58fbca59144945d2307d237804a600f7e6fa365720ec # shrinks to num_nodes = 5, num_samples = 10

@@ -3,7 +3,7 @@
 
 use graph_learning_core::prelude::*;
 use graph_learning_core::{
-    AdaptiveScheduler, BayesianLearnerModel, InterventionAction, InterventionSystem, ResponseData,
+    AdaptiveScheduler, BayesianLearnerModel, InterventionSystem, ResponseData,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

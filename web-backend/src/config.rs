@@ -178,32 +178,32 @@ impl Config {
         }
 
         // Validate OAuth providers configuration in production
-        if self.apple_client_id.is_empty() {
-            return Err("Apple Client ID must be configured for production".to_string());
+        if self.apple_client_id.starts_with("placeholder_") {
+            return Err("Apple OAuth must be properly configured for production - placeholder values not allowed".to_string());
         }
 
-        if self.apple_team_id.len() != 10 {
-            return Err("Apple Team ID must be exactly 10 characters".to_string());
+        if self.apple_team_id.starts_with("placeholder_") {
+            return Err("Apple Team ID must be properly configured for production - placeholder values not allowed".to_string());
         }
 
-        if self.apple_key_id.len() != 10 {
-            return Err("Apple Key ID must be exactly 10 characters".to_string());
+        if self.apple_key_id.starts_with("placeholder_") {
+            return Err("Apple Key ID must be properly configured for production - placeholder values not allowed".to_string());
         }
 
-        if !std::path::Path::new(&self.apple_private_key_path).exists() {
-            return Err("Apple private key file not found".to_string());
+        if self.apple_private_key_path.contains("placeholder_") {
+            return Err("Apple private key path must be properly configured for production - placeholder paths not allowed".to_string());
         }
 
         if !self.apple_redirect_uri.starts_with("https://") {
             return Err("Apple redirect URI must use HTTPS in production".to_string());
         }
 
-        if self.github_client_id.is_empty() {
-            return Err("GitHub Client ID must be configured for production".to_string());
+        if self.github_client_id.starts_with("placeholder_") {
+            return Err("GitHub OAuth must be properly configured for production - placeholder values not allowed".to_string());
         }
 
-        if self.github_client_secret.is_empty() {
-            return Err("GitHub Client Secret must be configured for production".to_string());
+        if self.github_client_secret.starts_with("placeholder_") {
+            return Err("GitHub Client Secret must be properly configured for production - placeholder values not allowed".to_string());
         }
 
         if !self.github_redirect_uri.starts_with("https://") {

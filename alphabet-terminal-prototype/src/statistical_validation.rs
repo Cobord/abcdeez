@@ -530,11 +530,11 @@ impl StatisticalValidator {
         let c = observed[1][0] as i32;
         let d = observed[1][1] as i32;
 
-        let n = a + b + c + d;
+        let _n = a + b + c + d;
         let row1_total = a + b;
         let row2_total = c + d;
         let col1_total = a + c;
-        let col2_total = b + d;
+        let _col2_total = b + d;
 
         // Calculate hypergeometric probability for observed table
         let p_observed = self.hypergeometric_prob(a, b, c, d);

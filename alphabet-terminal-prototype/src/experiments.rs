@@ -292,7 +292,7 @@ impl ExperimentFramework {
         }
 
         let n_conditions = experiment.conditions.len();
-        let n_participants = experiment.participants.len();
+        let _n_participants = experiment.participants.len();
 
         // Assign conditions (round-robin or randomized)
         if experiment.config.randomization.randomize_conditions {

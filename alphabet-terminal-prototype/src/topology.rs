@@ -116,34 +116,64 @@ impl Topology {
     }
 
     pub fn get_successor(&self, node_id: &str) -> Option<String> {
-        self.edges
-            .iter()
-            .find(|e| e.from == node_id)
-            .map(|e| e.to.clone())
+        match self.topology_type {
+            TopologyType::Cyclic => {
+                let idx = *self.node_map.get(node_id)?;
+                let next_idx = (idx + 1) % self.nodes.len();
+                Some(format!("node_{}", next_idx))
+            }
+            _ => self
+                .edges
+                .iter()
+                .find(|e| e.from == node_id)
+                .map(|e| e.to.clone()),
+        }
     }
 
     pub fn get_predecessor(&self, node_id: &str) -> Option<String> {
-        self.edges
-            .iter()
-            .find(|e| e.to == node_id)
-            .map(|e| e.from.clone())
+        match self.topology_type {
+            TopologyType::Cyclic => {
+                let idx = *self.node_map.get(node_id)?;
+                let n = self.nodes.len();
+                let prev_idx = (idx + n - 1) % n;
+                Some(format!("node_{}", prev_idx))
+            }
+            _ => self
+                .edges
+                .iter()
+                .find(|e| e.to == node_id)
+                .map(|e| e.from.clone()),
+        }
     }
 
     pub fn get_distance(&self, from: &str, to: &str) -> Option<usize> {
-        let from_idx = self.node_map.get(from)?;
-        let to_idx = self.node_map.get(to)?;
+        // Accept either node IDs (e.g., "node_0") or labels (e.g., "Mon")
+        let from_idx = if let Some(idx) = self.node_map.get(from) {
+            *idx
+        } else {
+            self.get_node_by_label(from)
+                .and_then(|n| self.node_map.get(&n.id).copied())?
+        };
+        let to_idx = if let Some(idx) = self.node_map.get(to) {
+            *idx
+        } else {
+            self.get_node_by_label(to)
+                .and_then(|n| self.node_map.get(&n.id).copied())?
+        };
 
         match self.topology_type {
-            TopologyType::Linear => Some((*to_idx as i32 - *from_idx as i32).abs() as usize),
+            TopologyType::Linear => Some((to_idx as i32 - from_idx as i32).abs() as usize),
             TopologyType::Cyclic => {
                 let n = self.nodes.len();
-                let forward = (*to_idx + n - from_idx) % n;
-                let backward = (*from_idx + n - to_idx) % n;
+                let forward = (to_idx + n - from_idx) % n;
+                let backward = (from_idx + n - to_idx) % n;
                 Some(forward.min(backward))
             }
             TopologyType::PartialOrder | TopologyType::GeneralGraph => {
-                let path =
-                    self.shortest_path(&self.nodes[*from_idx].label, &self.nodes[*to_idx].label)?;
+                let path = self.shortest_path(
+                    &self.nodes[from_idx].label,
+                    &self.nodes[to_idx].label,
+                )?;
                 Some(path.len().saturating_sub(1))
             }
         }

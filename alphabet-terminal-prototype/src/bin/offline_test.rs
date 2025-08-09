@@ -15,7 +15,7 @@ fn main() {
     println!("1. Creating topology and learner model...");
     let topology = Topology::alphabet();
     let learner_id = "field_device_001".to_string();
-    let mut learner_model = LearnerModel::new(learner_id, &topology);
+    let learner_model = LearnerModel::new(learner_id, &topology);
     println!("   ✅ Topology created with {} nodes", topology.nodes.len());
 
     // Test 2: Create task generator and generate tasks
@@ -108,7 +108,7 @@ fn main() {
     // Test 7: Test export functionality
     println!("\n7. Testing data export...");
     let updated_learner_model = adaptive_scheduler.get_learner_model().clone();
-    let export_data = graph_learning_core::export::LearnerDataExport::from_learner_model(
+    let _export_data = graph_learning_core::export::LearnerDataExport::from_learner_model(
         &updated_learner_model,
         vec![], // Empty session data for this test
         Some("field_test_001".to_string()),
