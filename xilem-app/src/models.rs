@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use graph_learning_core::{
+use abcdeez_core::{
     tasks::TaskResponse as CoreTaskResponse, LearnerMetrics as CoreLearnerMetrics,
     LearnerModel as CoreLearnerModel, Task as CoreTask, Topology, TopologyType,
 };

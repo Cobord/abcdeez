@@ -40,7 +40,7 @@ fn short_hash<T: serde::Serialize>(value: &T) -> String {
     }
     format!("{:016x}", hash)
 }
-use graph_learning_core::tasks::TaskResponse;
+use abcdeez_core::tasks::TaskResponse;
 
 /// Create a learning curve chart component
 pub fn learning_curve_chart(

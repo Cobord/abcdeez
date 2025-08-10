@@ -19,7 +19,7 @@ use crate::{
     services::{AdaptationService, AnalyticsService, LearnerService},
     state::AppState,
 };
-use graph_learning_core::{
+use abcdeez_core::{
     hints::{HintLevel, InterventionAction},
     Task,
 };
@@ -740,7 +740,7 @@ async fn get_session_info(
 async fn get_session_topology(
     state: &AppState,
     session_id: Uuid,
-) -> Result<graph_learning_core::Topology, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<abcdeez_core::Topology, Box<dyn std::error::Error + Send + Sync>> {
     let session_id_bytes = session_id.as_bytes();
 
     // Use a raw query with proper binding
@@ -750,8 +750,8 @@ async fn get_session_topology(
             .bind(&session_id_bytes[..])
             .fetch_one(&mut *conn)
             .await?;
-    let topology: graph_learning_core::Topology = serde_json::from_str(&topology_data)
-        .unwrap_or_else(|_| graph_learning_core::Topology::alphabet());
+    let topology: abcdeez_core::Topology = serde_json::from_str(&topology_data)
+        .unwrap_or_else(|_| abcdeez_core::Topology::alphabet());
 
     Ok(topology)
 }

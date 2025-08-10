@@ -2,8 +2,8 @@
 //! Offline functionality test for field collection device
 //! Tests that all core learning functionality works without any network/database dependencies
 
-use graph_learning_core::prelude::*;
-use graph_learning_core::{
+use abcdeez_core::prelude::*;
+use abcdeez_core::{
     AdaptiveScheduler, BayesianLearnerModel, InterventionAction, InterventionSystem, ResponseData,
     ResponseTimeDistribution,
 };
@@ -108,7 +108,7 @@ fn main() {
     // Test 7: Test export functionality
     println!("\n7. Testing data export...");
     let updated_learner_model = adaptive_scheduler.get_learner_model().clone();
-    let _export_data = graph_learning_core::export::LearnerDataExport::from_learner_model(
+    let _export_data = abcdeez_core::export::LearnerDataExport::from_learner_model(
         &updated_learner_model,
         vec![], // Empty session data for this test
         Some("field_test_001".to_string()),

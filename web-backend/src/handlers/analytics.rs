@@ -17,7 +17,7 @@ use crate::{
     state::AppState,
 };
 use axum::http::HeaderValue;
-use graph_learning_core::{
+use abcdeez_core::{
     statistics::{DetailedStatistics, ExGaussianModel, StrategyType},
     Topology,
 };

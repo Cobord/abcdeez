@@ -1,8 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use graph_learning_core::bayesian::BayesianLearnerModel;
-use graph_learning_core::learner::OperationType;
-use graph_learning_core::tasks::{Task, TaskType};
-use graph_learning_core::topology::Topology;
+use abcdeez_core::bayesian::BayesianLearnerModel;
+use abcdeez_core::learner::OperationType;
+use abcdeez_core::tasks::{Task, TaskType};
+use abcdeez_core::topology::Topology;
 
 fn benchmark_eig_calculation(c: &mut Criterion) {
     let model = BayesianLearnerModel::new(&Topology::alphabet());
@@ -51,7 +51,7 @@ fn benchmark_eig_different_sample_sizes(c: &mut Criterion) {
 
 fn benchmark_bayesian_update(c: &mut Criterion) {
     let mut model = BayesianLearnerModel::new(&Topology::alphabet());
-    let response = graph_learning_core::bayesian::ResponseData {
+    let response = abcdeez_core::bayesian::ResponseData {
         task: Task {
             task_type: TaskType::Successor {
                 item: "C".to_string(),

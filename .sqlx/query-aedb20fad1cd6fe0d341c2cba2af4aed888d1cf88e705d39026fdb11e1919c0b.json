@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO preregistration_deviations (\n            id, preregistration_id, timestamp, description,\n            justification, impact_assessment, created_by\n        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "aedb20fad1cd6fe0d341c2cba2af4aed888d1cf88e705d39026fdb11e1919c0b"
+}

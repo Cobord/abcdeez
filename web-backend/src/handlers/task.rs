@@ -18,7 +18,7 @@ use crate::{
     state::AppState,
 };
 
-use graph_learning_core::{
+use abcdeez_core::{
     bayesian::BayesianLearnerModel, learner::LearnerModel, Task, TaskGenerator, TaskType, Topology,
 };
 

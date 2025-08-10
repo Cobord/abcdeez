@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO analysis_validations (\n            id, preregistration_id, analysis_name, validation_result,\n            actual_test, actual_variables, deviation_reason, is_exploratory\n        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "2d414518380372669cc99cadea95593c3e65e86fb416dd1cc6c16e9643de79b7"
+}

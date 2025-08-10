@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE preregistrations SET status = ?, registration_hash = ?, registered_at = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "b83688478dc85f2ea9897664124a84d9d76c7d68f3b498cf766fe88d6ac83b61"
+}

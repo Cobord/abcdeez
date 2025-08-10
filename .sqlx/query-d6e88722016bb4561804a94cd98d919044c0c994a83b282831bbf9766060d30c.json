@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO preregistrations (\n            id, experiment_id, researcher_id, title, description,\n            registered_at, registration_hash, status,\n            study_metadata, hypotheses, analysis_plan,\n            data_collection_plan, exclusion_criteria, decision_rules,\n            version, created_at, updated_at\n        ) VALUES (\n            ?1, ?2, ?3, ?4, ?5,\n            ?6, ?7, ?8,\n            ?9, ?10, ?11,\n            ?12, ?13, ?14,\n            ?15, ?16, ?17\n        )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 17
+    },
+    "nullable": []
+  },
+  "hash": "d6e88722016bb4561804a94cd98d919044c0c994a83b282831bbf9766060d30c"
+}

@@ -16,13 +16,13 @@ pub fn widget_gallery_screen(data: &AppData) -> impl WidgetView<AppData> {
         .collect();
 
     let demo_task = crate::models::UITask {
-        core_task: graph_learning_core::tasks::Task {
-            task_type: graph_learning_core::tasks::TaskType::Successor { item: "A".into() },
+        core_task: abcdeez_core::tasks::Task {
+            task_type: abcdeez_core::tasks::TaskType::Successor { item: "A".into() },
             prompt: "What comes after A?".into(),
             correct_answer: "B".into(),
             options: vec!["A".into(), "B".into(), "C".into()],
             difficulty: 0.5,
-            operation: graph_learning_core::learner::OperationType::Successor,
+            operation: abcdeez_core::learner::OperationType::Successor,
         },
         display_prompt: "What comes after A?".into(),
         display_options: vec!["A".into(), "B".into(), "C".into()],

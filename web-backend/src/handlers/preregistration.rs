@@ -38,7 +38,7 @@ pub async fn create_preregistration(
     let decision_rules_json = serde_json::to_string(&payload.decision_rules)?;
 
     // Insert into database
-    sqlx::query!(
+    sqlx::query(
         r#"
         INSERT INTO preregistrations (
             id, experiment_id, researcher_id, title, description,
@@ -54,24 +54,24 @@ pub async fn create_preregistration(
             ?15, ?16, ?17
         )
         "#,
-        id,
-        payload.experiment_id,
-        "researcher_1", // TODO: Get from auth context
-        payload.title,
-        payload.description,
-        now,
-        "", // Hash will be set when finalized
-        "draft",
-        study_metadata_json,
-        hypotheses_json,
-        analysis_plan_json,
-        data_collection_json,
-        exclusion_criteria_json,
-        decision_rules_json,
-        1,
-        now,
-        now,
     )
+    .bind(&id)
+    .bind(&payload.experiment_id)
+    .bind("researcher_1") // TODO: Get from auth context
+    .bind(&payload.title)
+    .bind(&payload.description)
+    .bind(now)
+    .bind("") // Hash will be set when finalized
+    .bind("draft")
+    .bind(study_metadata_json)
+    .bind(hypotheses_json)
+    .bind(analysis_plan_json)
+    .bind(data_collection_json)
+    .bind(exclusion_criteria_json)
+    .bind(decision_rules_json)
+    .bind(1i64)
+    .bind(now)
+    .bind(now)
     .execute(&state.db_pool)
     .await?;
 
@@ -93,11 +93,10 @@ pub async fn get_preregistration(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<PreRegistrationResponse>, AppError> {
-    let prereg = sqlx::query_as!(
-        PreRegistrationDb,
+    let prereg = sqlx::query_as::<_, PreRegistrationDb>(
         "SELECT * FROM preregistrations WHERE id = ?",
-        id
     )
+    .bind(&id)
     .fetch_one(&state.db_pool)
     .await?;
 
@@ -106,10 +105,10 @@ pub async fn get_preregistration(
     let analysis_plan: AnalysisPlan = serde_json::from_str(&prereg.analysis_plan)?;
 
     // Get deviations count
-    let deviations_count = sqlx::query_scalar!(
+    let deviations_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM preregistration_deviations WHERE preregistration_id = ?",
-        id
     )
+    .bind(&id)
     .fetch_one(&state.db_pool)
     .await?;
 
@@ -159,58 +158,54 @@ pub async fn update_preregistration(
     Json(payload): Json<UpdatePreRegistration>,
 ) -> Result<Json<PreRegistrationResponse>, AppError> {
     // Check if pre-registration exists and is in draft status
-    let current = sqlx::query!("SELECT status FROM preregistrations WHERE id = ?", id)
-        .fetch_one(&state.db_pool)
-        .await?;
+    let current_status: String = sqlx::query_scalar(
+        "SELECT status FROM preregistrations WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_one(&state.db_pool)
+    .await?;
 
-    if current.status != "draft" {
+    if current_status != "draft" {
         return Err(AppError::BadRequest(
             "Cannot edit finalized pre-registration".to_string(),
         ));
     }
 
     // Build update query dynamically based on provided fields
-    let mut updates = vec![];
+    let mut updates: Vec<&'static str> = vec![];
 
     if let Some(title) = &payload.title {
-        sqlx::query!(
-            "UPDATE preregistrations SET title = ? WHERE id = ?",
-            title,
-            id
-        )
-        .execute(&state.db_pool)
-        .await?;
+        sqlx::query("UPDATE preregistrations SET title = ? WHERE id = ?")
+            .bind(title)
+            .bind(&id)
+            .execute(&state.db_pool)
+            .await?;
     }
 
     if let Some(description) = &payload.description {
-        sqlx::query!(
-            "UPDATE preregistrations SET description = ? WHERE id = ?",
-            description,
-            id
-        )
-        .execute(&state.db_pool)
-        .await?;
+        sqlx::query("UPDATE preregistrations SET description = ? WHERE id = ?")
+            .bind(description)
+            .bind(&id)
+            .execute(&state.db_pool)
+            .await?;
     }
 
     if let Some(hypotheses) = &payload.hypotheses {
         let json = serde_json::to_string(hypotheses)?;
-        sqlx::query!(
-            "UPDATE preregistrations SET hypotheses = ? WHERE id = ?",
-            json,
-            id
-        )
-        .execute(&state.db_pool)
-        .await?;
+        sqlx::query("UPDATE preregistrations SET hypotheses = ? WHERE id = ?")
+            .bind(json)
+            .bind(&id)
+            .execute(&state.db_pool)
+            .await?;
     }
 
     // Update timestamp
-    sqlx::query!(
-        "UPDATE preregistrations SET updated_at = ? WHERE id = ?",
-        Utc::now(),
-        id
-    )
-    .execute(&state.db_pool)
-    .await?;
+    let updated_now = Utc::now();
+    sqlx::query("UPDATE preregistrations SET updated_at = ? WHERE id = ?")
+        .bind(updated_now)
+        .bind(&id)
+        .execute(&state.db_pool)
+        .await?;
 
     get_preregistration(State(state), Path(id)).await
 }
@@ -221,11 +216,10 @@ pub async fn finalize_preregistration(
     Path(id): Path<String>,
 ) -> Result<Json<PreRegistrationResponse>, AppError> {
     // Fetch the current pre-registration
-    let prereg = sqlx::query_as!(
-        PreRegistrationDb,
+    let prereg = sqlx::query_as::<_, PreRegistrationDb>(
         "SELECT * FROM preregistrations WHERE id = ?",
-        id
     )
+    .bind(&id)
     .fetch_one(&state.db_pool)
     .await?;
 
@@ -277,13 +271,13 @@ pub async fn finalize_preregistration(
     let now = Utc::now();
 
     // Update status and hash
-    sqlx::query!(
+    sqlx::query(
         "UPDATE preregistrations SET status = ?, registration_hash = ?, registered_at = ? WHERE id = ?",
-        "registered",
-        hash,
-        now,
-        id
     )
+    .bind("registered")
+    .bind(&hash)
+    .bind(now)
+    .bind(&id)
     .execute(&state.db_pool)
     .await?;
 
@@ -298,21 +292,22 @@ pub async fn record_deviation(
 ) -> Result<StatusCode, AppError> {
     let deviation_id = format!("dev_{}", Uuid::new_v4());
 
-    sqlx::query!(
+    let ts_now = Utc::now();
+    sqlx::query(
         r#"
         INSERT INTO preregistration_deviations (
             id, preregistration_id, timestamp, description,
             justification, impact_assessment, created_by
         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
         "#,
-        deviation_id,
-        id,
-        Utc::now(),
-        payload.description,
-        payload.justification,
-        payload.impact_assessment,
-        "researcher_1", // TODO: Get from auth context
     )
+    .bind(&deviation_id)
+    .bind(&id)
+    .bind(ts_now)
+    .bind(&payload.description)
+    .bind(&payload.justification)
+    .bind(&payload.impact_assessment)
+    .bind("researcher_1") // TODO: Get from auth context
     .execute(&state.db_pool)
     .await?;
 
@@ -326,14 +321,12 @@ pub async fn validate_analysis(
     Json(payload): Json<ValidateAnalysis>,
 ) -> Result<Json<ValidationResponse>, AppError> {
     // Fetch the pre-registration
-    let prereg = sqlx::query!(
-        "SELECT analysis_plan FROM preregistrations WHERE id = ?",
-        id
-    )
-    .fetch_one(&state.db_pool)
-    .await?;
-
-    let analysis_plan: AnalysisPlan = serde_json::from_str(&prereg.analysis_plan)?;
+    let row = sqlx::query("SELECT analysis_plan FROM preregistrations WHERE id = ?")
+        .bind(&id)
+        .fetch_one(&state.db_pool)
+        .await?;
+    let analysis_plan_str: String = row.try_get("analysis_plan")?;
+    let analysis_plan: AnalysisPlan = serde_json::from_str(&analysis_plan_str)?;
 
     // Check if analysis is pre-registered
     let is_primary = analysis_plan
@@ -379,22 +372,22 @@ pub async fn validate_analysis(
     let validation_id = format!("val_{}", Uuid::new_v4());
     let variables_json = serde_json::to_string(&payload.actual_variables)?;
 
-    sqlx::query!(
+    sqlx::query(
         r#"
         INSERT INTO analysis_validations (
             id, preregistration_id, analysis_name, validation_result,
             actual_test, actual_variables, deviation_reason, is_exploratory
         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
         "#,
-        validation_id,
-        id,
-        payload.analysis_name,
-        validation_result,
-        payload.actual_test,
-        variables_json,
-        deviation_reason,
-        is_exploratory,
     )
+    .bind(&validation_id)
+    .bind(&id)
+    .bind(&payload.analysis_name)
+    .bind(&validation_result)
+    .bind(&payload.actual_test)
+    .bind(&variables_json)
+    .bind(&deviation_reason)
+    .bind(is_exploratory)
     .execute(&state.db_pool)
     .await?;
 

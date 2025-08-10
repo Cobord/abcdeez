@@ -3,7 +3,7 @@ use crate::{
 };
 use std::sync::Arc;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AppState {
     pub db_pool: DbPool,
     // For legacy code paths that referenced Redis explicitly.

@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use graph_learning_core::LearnerModel;
+use abcdeez_core::LearnerModel;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

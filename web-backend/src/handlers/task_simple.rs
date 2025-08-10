@@ -12,7 +12,7 @@ use crate::{
     state::AppState,
 };
 
-use graph_learning_core::{TaskGenerator, Topology};
+use abcdeez_core::{TaskGenerator, Topology};
 
 /// Simple task generation endpoint that works with current Axum version
 pub async fn generate_simple(

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT analysis_plan FROM preregistrations WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "analysis_plan",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0e7414caebca139b9be9488e6a5c59ca8630ae344e6c8ee17a4115f6dad489b5"
+}

@@ -1,6 +1,6 @@
 use crate::audio_recorder::{create_audio_file_path, AudioConfig, AudioRecorder};
 use chrono::{DateTime, Utc};
-use graph_learning_core::{ConsentTemplate, IRBApplication, IRBComplianceGenerator, StudySummary};
+use abcdeez_core::{ConsentTemplate, IRBApplication, IRBComplianceGenerator, StudySummary};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;

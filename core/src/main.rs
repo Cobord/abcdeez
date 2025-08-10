@@ -2,9 +2,9 @@ use anyhow::Result;
 use std::env;
 
 #[cfg(feature = "cli")]
-use graph_learning_core::tui;
+use abcdeez_core::tui;
 
-use graph_learning_core::demo;
+use abcdeez_core::demo;
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -23,7 +23,7 @@ fn main() -> Result<()> {
             #[cfg(feature = "cli")]
             "legacy" => {
                 // Use old UI for compatibility
-                use graph_learning_core::ui::TerminalApp;
+                use abcdeez_core::ui::TerminalApp;
                 let mut app = TerminalApp::new();
                 app.run().map_err(Into::into)
             }

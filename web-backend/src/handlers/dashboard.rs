@@ -24,7 +24,7 @@ pub async fn metrics_dashboard_html() -> impl IntoResponse {
 }
 
 /// API endpoint for dashboard data (JSON)
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(state))]
 pub async fn dashboard_data(
     State(state): State<Arc<AppState>>,
 ) -> AppResult<Json<serde_json::Value>> {
@@ -192,7 +192,7 @@ pub async fn realtime_metrics() -> AppResult<Json<serde_json::Value>> {
 }
 
 /// OpenTelemetry metrics export for external systems
-#[instrument(level = "info")]
+#[instrument(level = "info", skip(state))]
 pub async fn otel_metrics(
     State(state): State<Arc<AppState>>,
 ) -> AppResult<Json<serde_json::Value>> {
@@ -222,7 +222,7 @@ pub async fn otel_metrics(
 }
 
 /// System information endpoint - restricted to authenticated admins only
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(state))]
 pub async fn system_info(State(state): State<Arc<AppState>>) -> AppResult<Json<serde_json::Value>> {
     // This endpoint should only be accessible to authenticated admin users
     // The middleware should have already validated this, but we'll add a check here too
@@ -268,7 +268,7 @@ pub async fn database_report() -> AppResult<Json<serde_json::Value>> {
 }
 
 /// Health check with detailed component status
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(state))]
 pub async fn detailed_health(
     State(state): State<Arc<AppState>>,
 ) -> AppResult<Json<serde_json::Value>> {

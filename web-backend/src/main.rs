@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| {
-                    "web_backend=debug,tower_http=debug,axum=info,graph_learning_core=debug,sqlx=warn,hyper=warn".into()
+                    "web_backend=debug,tower_http=debug,axum=info,abcdeez_core=debug,sqlx=warn,hyper=warn".into()
                 }),
         )
         .with(

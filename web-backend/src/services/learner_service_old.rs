@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::models::learner::Learner;
-use graph_learning_core::{
+use abcdeez_core::{
     tasks::TaskResponse as CoreTaskResponse, 
     LearnerModel as CoreLearnerModel, 
     Topology,
@@ -227,7 +227,7 @@ impl LearnerService {
             "total_practice_time_seconds": learner.total_practice_time_seconds,
             "sessions": sessions.len(),
             "total_responses": responses.len(),
-            "model_metrics": graph_learning_core::LearnerMetrics::from_model(&learner.core_model),
+            "model_metrics": abcdeez_core::LearnerMetrics::from_model(&learner.core_model),
             "export_timestamp": Utc::now()
         });
 
@@ -318,7 +318,7 @@ impl LearnerService {
         let snapshot_id_bytes = snapshot_id.as_bytes();
 
         let parameters = serde_json::to_string(&learner.core_model)?;
-        let metrics = serde_json::to_string(&graph_learning_core::LearnerMetrics::from_model(
+        let metrics = serde_json::to_string(&abcdeez_core::LearnerMetrics::from_model(
             &learner.core_model,
         ))?;
 

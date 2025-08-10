@@ -1,6 +1,6 @@
 //! Demo application for the research dashboard with pre-registration interface
 
-use graph_learning_core::research_dashboard::run_research_dashboard;
+use abcdeez_core::research_dashboard::run_research_dashboard;
 use std::io;
 
 fn main() -> io::Result<()> {

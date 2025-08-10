@@ -14,7 +14,7 @@ use crate::{
     state::AppState,
 };
 
-use graph_learning_core::{
+use abcdeez_core::{
     statistical_validation::{StatisticalValidator, ValidationReport, CrossValidationResults},
     transfer_learning::{TransferLearningSystem, IsomorphicMapping},
     statistics::{ExGaussianModel, DetailedStatistics, SessionAnalyzer, StrategyType},
@@ -71,7 +71,7 @@ pub async fn validate_experiment(
     // Convert to core experiment format
     let mut experiment = Experiment::new(
         "Research Experiment".to_string(),
-        graph_learning_core::experiments::ExperimentType::BetweenSubjects,
+        abcdeez_core::experiments::ExperimentType::BetweenSubjects,
     );
     
     // Run statistical validation
@@ -152,7 +152,7 @@ pub struct ExGaussianRequest {
 
 #[derive(Debug, Serialize)]
 pub struct ExGaussianResponse {
-    parameters: graph_learning_core::statistics::ExGaussianParameters,
+    parameters: abcdeez_core::statistics::ExGaussianParameters,
     goodness_of_fit: f64,
     outliers: Vec<f64>,
     visualization_data: Vec<(f64, f64)>, // For plotting

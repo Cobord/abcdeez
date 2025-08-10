@@ -24,7 +24,7 @@ pub enum AppError {
     RateLimitExceeded,
 
     // Core library errors
-    CoreError(graph_learning_core::Error),
+    CoreError(abcdeez_core::Error),
     TaskGenerationError(String),
     NumericalError(String),
     StatisticalError(String),
@@ -234,8 +234,8 @@ impl From<jsonwebtoken::errors::Error> for AppError {
     }
 }
 
-impl From<graph_learning_core::Error> for AppError {
-    fn from(err: graph_learning_core::Error) -> Self {
+impl From<abcdeez_core::Error> for AppError {
+    fn from(err: abcdeez_core::Error) -> Self {
         AppError::CoreError(err)
     }
 }

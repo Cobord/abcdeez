@@ -1,8 +1,8 @@
 #!/usr/bin/env cargo
 //! Simple offline functionality test for field collection device
 
-use graph_learning_core::prelude::*;
-use graph_learning_core::{
+use abcdeez_core::prelude::*;
+use abcdeez_core::{
     AdaptiveScheduler, BayesianLearnerModel, InterventionSystem, ResponseData,
 };
 

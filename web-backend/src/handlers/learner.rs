@@ -15,7 +15,7 @@ use crate::{
     services::{audit::AuditService, LearnerService},
     state::AppState,
 };
-use graph_learning_core::Topology;
+use abcdeez_core::Topology;
 
 pub async fn create(
     State(state): State<Arc<AppState>>,

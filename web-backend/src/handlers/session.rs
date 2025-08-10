@@ -19,7 +19,7 @@ use crate::{
     services::{audit::AuditService, AdaptationService, LearnerService},
     state::AppState,
 };
-use graph_learning_core::{tasks::TaskResponse as CoreTaskResponse, Topology};
+use abcdeez_core::{tasks::TaskResponse as CoreTaskResponse, Topology};
 
 pub async fn create(
     State(state): State<Arc<AppState>>,
@@ -242,15 +242,15 @@ pub async fn submit_response(
         LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
 
     // Create a placeholder task for the response (correct_answer would be determined from task_data)
-    let task = graph_learning_core::Task {
-        task_type: graph_learning_core::TaskType::Successor {
+    let task = abcdeez_core::Task {
+        task_type: abcdeez_core::TaskType::Successor {
             item: "A".to_string(),
         },
         prompt: "What comes next?".to_string(),
         correct_answer: "B".to_string(), // This would normally be derived from task_data
         options: vec![],
         difficulty: 0.5,
-        operation: graph_learning_core::OperationType::Successor,
+        operation: abcdeez_core::OperationType::Successor,
     };
 
     // Create a core task response for model updating

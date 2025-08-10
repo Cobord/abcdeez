@@ -34,7 +34,7 @@ use xilem::{
     Color, TextAlignment, WidgetView, Xilem,
 };
 
-use graph_learning_core::{
+use abcdeez_core::{
     hints::{HintLevel, InterventionAction, InterventionSystem, StruggleLevel},
     prelude::*,
     tasks::TaskResponse as CoreTaskResponse,

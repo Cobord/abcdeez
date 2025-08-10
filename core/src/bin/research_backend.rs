@@ -14,7 +14,7 @@ use tokio::net::TcpListener;
 use uuid::Uuid;
 
 // Import our research modules
-use graph_learning_core::{
+use abcdeez_core::{
     Actor, ActorType, AuditConfiguration, AuditLevel, AuditTrailManager, Author, CitationManager,
     EventType, ExperimentalDesign, IRBComplianceGenerator, LearnerDataExport, MixedEffectsAnalyzer,
     MultiSessionExperiment, Operation, Outcome, PowerAnalyzer, ProtocolVersionManager, Publication,

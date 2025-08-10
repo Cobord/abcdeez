@@ -5,8 +5,8 @@ use xilem::{
 
 use crate::{components::*, visualization_components::*, AppData, Screen};
 
-use graph_learning_core::learner::OperationType;
-use graph_learning_core::tasks::{TaskResponse, TaskType};
+use abcdeez_core::learner::OperationType;
+use abcdeez_core::tasks::{TaskResponse, TaskType};
 
 pub fn visualizations_screen(data: &mut AppData) -> impl WidgetView<AppData> {
     let has_data = !data.session_responses.is_empty();
@@ -75,14 +75,14 @@ pub fn visualizations_screen(data: &mut AppData) -> impl WidgetView<AppData> {
     // Session comparisons if multiple sessions exist
     let session_comparison = if let Some(controller) = &data.research_controller {
         if controller.sessions.len() >= 2 {
-            let session_data: Vec<Vec<graph_learning_core::tasks::TaskResponse>> = controller
+            let session_data: Vec<Vec<abcdeez_core::tasks::TaskResponse>> = controller
                 .sessions
                 .iter()
                 .map(|s| {
                     s.data_points
                         .iter()
-                        .map(|dp| graph_learning_core::tasks::TaskResponse {
-                            task: graph_learning_core::tasks::Task {
+                        .map(|dp| abcdeez_core::tasks::TaskResponse {
+                            task: abcdeez_core::tasks::Task {
                                 task_type: TaskType::Successor {
                                     item: dp.stimulus.clone(),
                                 },

@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::models::learner::Learner;
-use graph_learning_core::{
+use abcdeez_core::{
     bayesian::ResponseData, export::SessionData, tasks::TaskResponse as CoreTaskResponse,
     BayesianLearnerModel, LearnerDataExport, LearnerMetrics, LearnerModel as CoreLearnerModel,
     Topology,
@@ -509,7 +509,7 @@ impl LearnerService {
     async fn calculate_session_summary(
         &self,
         responses: &[CoreTaskResponse],
-    ) -> Result<graph_learning_core::export::SessionSummary> {
+    ) -> Result<abcdeez_core::export::SessionSummary> {
         let total_tasks = responses.len();
         let correct_count = responses.iter().filter(|r| r.correct).count();
         let accuracy = if total_tasks > 0 {
@@ -537,7 +537,7 @@ impl LearnerService {
             0.0
         };
 
-        Ok(graph_learning_core::export::SessionSummary {
+        Ok(abcdeez_core::export::SessionSummary {
             total_tasks,
             correct_count,
             accuracy,
@@ -553,40 +553,40 @@ impl LearnerService {
         task_type: &str,
         task_data: &str,
         correct_answer: &str,
-    ) -> Result<graph_learning_core::Task> {
+    ) -> Result<abcdeez_core::Task> {
         // Parse the task data JSON to reconstruct the original task
         let task_json: serde_json::Value = serde_json::from_str(task_data)?;
 
         let task_type_enum = match task_type {
             "Successor" => {
                 let item = task_json["item"].as_str().unwrap_or("A").to_string();
-                graph_learning_core::TaskType::Successor { item }
+                abcdeez_core::TaskType::Successor { item }
             }
             "Predecessor" => {
                 let item = task_json["item"].as_str().unwrap_or("A").to_string();
-                graph_learning_core::TaskType::Predecessor { item }
+                abcdeez_core::TaskType::Predecessor { item }
             }
             "PairwiseOrder" => {
                 let a = task_json["a"].as_str().unwrap_or("A").to_string();
                 let b = task_json["b"].as_str().unwrap_or("B").to_string();
-                graph_learning_core::TaskType::PairwiseOrder { a, b }
+                abcdeez_core::TaskType::PairwiseOrder { a, b }
             }
             "KJump" => {
                 let start = task_json["start"].as_str().unwrap_or("A").to_string();
                 let k = task_json["k"].as_i64().unwrap_or(1) as i32;
-                graph_learning_core::TaskType::KJump { start, k }
+                abcdeez_core::TaskType::KJump { start, k }
             }
             "Segment" => {
                 let start = task_json["start"].as_str().unwrap_or("A").to_string();
                 let count = task_json["count"].as_u64().unwrap_or(3) as usize;
                 let reverse = task_json["reverse"].as_bool().unwrap_or(false);
-                graph_learning_core::TaskType::Segment {
+                abcdeez_core::TaskType::Segment {
                     start,
                     count,
                     reverse,
                 }
             }
-            _ => graph_learning_core::TaskType::Successor {
+            _ => abcdeez_core::TaskType::Successor {
                 item: "A".to_string(),
             },
         };
@@ -602,29 +602,29 @@ impl LearnerService {
             })
             .unwrap_or_else(Vec::new);
 
-        Ok(graph_learning_core::Task {
+        Ok(abcdeez_core::Task {
             task_type: task_type_enum.clone(),
             prompt,
             correct_answer: correct_answer.to_string(),
             options,
             difficulty,
             operation: match &task_type_enum {
-                graph_learning_core::TaskType::Successor { .. } => {
-                    graph_learning_core::OperationType::Successor
+                abcdeez_core::TaskType::Successor { .. } => {
+                    abcdeez_core::OperationType::Successor
                 }
-                graph_learning_core::TaskType::Predecessor { .. } => {
-                    graph_learning_core::OperationType::Predecessor
+                abcdeez_core::TaskType::Predecessor { .. } => {
+                    abcdeez_core::OperationType::Predecessor
                 }
-                graph_learning_core::TaskType::PairwiseOrder { .. } => {
-                    graph_learning_core::OperationType::PairwiseOrder
+                abcdeez_core::TaskType::PairwiseOrder { .. } => {
+                    abcdeez_core::OperationType::PairwiseOrder
                 }
-                graph_learning_core::TaskType::KJump { k, .. } => {
-                    graph_learning_core::OperationType::KJump(*k)
+                abcdeez_core::TaskType::KJump { k, .. } => {
+                    abcdeez_core::OperationType::KJump(*k)
                 }
-                graph_learning_core::TaskType::Segment { count, reverse, .. } => {
-                    graph_learning_core::OperationType::Segment(*count, *reverse)
+                abcdeez_core::TaskType::Segment { count, reverse, .. } => {
+                    abcdeez_core::OperationType::Segment(*count, *reverse)
                 }
-                _ => graph_learning_core::OperationType::Successor,
+                _ => abcdeez_core::OperationType::Successor,
             },
         })
     }
@@ -651,7 +651,7 @@ impl LearnerService {
                     running_correct += 1;
                 }
 
-                performance_trajectories.push(graph_learning_core::export::PerformancePoint {
+                performance_trajectories.push(abcdeez_core::export::PerformancePoint {
                     trial_number: running_total,
                     timestamp: response.timestamp,
                     accuracy: running_correct as f64 / running_total as f64,
@@ -666,7 +666,7 @@ impl LearnerService {
         let error_patterns = self.analyze_errors(&sessions).await?;
 
         // Create model snapshot
-        let model_snapshot = graph_learning_core::export::ModelSnapshot {
+        let model_snapshot = abcdeez_core::export::ModelSnapshot {
             timestamp: export_timestamp,
             node_embeddings: model
                 .node_embeddings
@@ -674,7 +674,7 @@ impl LearnerService {
                 .map(|(k, v)| {
                     (
                         k.clone(),
-                        graph_learning_core::export::NodeEmbeddingExport {
+                        abcdeez_core::export::NodeEmbeddingExport {
                             position: v.position,
                             uncertainty: v.uncertainty,
                         },
@@ -694,7 +694,7 @@ impl LearnerService {
             chunk_boundaries: model
                 .chunk_boundaries
                 .iter()
-                .map(|b| graph_learning_core::export::ChunkBoundaryExport {
+                .map(|b| abcdeez_core::export::ChunkBoundaryExport {
                     position: b.position,
                     strength: b.strength,
                 })
@@ -702,7 +702,7 @@ impl LearnerService {
             total_practice_time_seconds: model.total_practice_time.as_secs(),
         };
 
-        let metadata = graph_learning_core::export::ExportMetadata {
+        let metadata = abcdeez_core::export::ExportMetadata {
             export_version: "1.0.0".to_string(),
             software_version: env!("CARGO_PKG_VERSION").to_string(),
             platform: std::env::consts::OS.to_string(),
@@ -725,7 +725,7 @@ impl LearnerService {
     async fn analyze_errors(
         &self,
         sessions: &[SessionData],
-    ) -> Result<graph_learning_core::export::ErrorAnalysis> {
+    ) -> Result<abcdeez_core::export::ErrorAnalysis> {
         let mut total_errors = 0;
         let mut total_tasks = 0;
         let mut confusion_counts: std::collections::HashMap<(String, String), usize> =
@@ -806,7 +806,7 @@ impl LearnerService {
             })
             .collect();
 
-        Ok(graph_learning_core::export::ErrorAnalysis {
+        Ok(abcdeez_core::export::ErrorAnalysis {
             total_errors,
             error_rate,
             common_confusions,

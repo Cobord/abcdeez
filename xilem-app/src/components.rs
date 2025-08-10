@@ -404,7 +404,7 @@ pub fn response_time_histogram(response_times: &[u128]) -> impl WidgetView<AppDa
 }
 
 pub fn learning_curve_display(
-    session_responses: &[graph_learning_core::tasks::TaskResponse],
+    session_responses: &[abcdeez_core::tasks::TaskResponse],
 ) -> impl WidgetView<AppData> {
     // Calculate moving average accuracy over time or show placeholder
     let curve_points = if session_responses.is_empty() {
@@ -457,7 +457,7 @@ pub fn learning_curve_display(
 }
 
 pub fn error_analysis_display(
-    session_responses: &[graph_learning_core::tasks::TaskResponse],
+    session_responses: &[abcdeez_core::tasks::TaskResponse],
 ) -> impl WidgetView<AppData> {
     use std::collections::HashMap;
 
@@ -523,7 +523,7 @@ pub fn error_analysis_display(
 
 pub fn strategy_analysis_display(learner: &crate::models::Learner) -> impl WidgetView<AppData> {
     // Extract strategy indicators from the learner model
-    let core_metrics = graph_learning_core::LearnerMetrics::from_model(&learner.core_model);
+    let core_metrics = abcdeez_core::LearnerMetrics::from_model(&learner.core_model);
     let bidirectionality = core_metrics.bidirectionality_index;
     let distance_slope = core_metrics.symbolic_distance_slope;
 

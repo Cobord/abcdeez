@@ -3,5 +3,5 @@
 
 fn main() {
     // Run the app (demo / showcased entrypoint)
-    graph_learning_app::run();
+    abcdeez_app::run();
 }

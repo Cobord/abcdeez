@@ -18,7 +18,7 @@ postgres = ["sqlx/postgres"]
 
 [dependencies]
 # Core library
-graph-learning-core = { path = "../alphabet-terminal-prototype" }
+abcdeez-core = { path = "../core" }
 
 # Web framework
 axum = { version = "0.7", features = ["ws", "macros"] }

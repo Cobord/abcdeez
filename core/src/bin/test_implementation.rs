@@ -1,4 +1,4 @@
-use graph_learning_core::demo::*;
+use abcdeez_core::demo::*;
 
 fn main() {
     println!("Testing alphabet-terminal-prototype implementation...\n");

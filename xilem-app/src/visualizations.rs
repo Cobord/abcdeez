@@ -6,7 +6,7 @@ use plotters::prelude::*;
 use std::error::Error;
 
 use crate::models::PerformanceMetrics;
-use graph_learning_core::tasks::TaskResponse;
+use abcdeez_core::tasks::TaskResponse;
 
 // Colorblind-safe palette using ColorBrewer schemes
 // Tested with Coblis colorblind simulator
