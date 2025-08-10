@@ -217,7 +217,7 @@ pub struct AppData {
     pub protocol_loading: bool,
     pub protocol_creation_in_flight: bool,
     pub protocol_update_in_flight: bool,
-    
+
     // Protocol Editor Form State
     pub protocol_editor_name: String,
     pub protocol_editor_description: String,
@@ -387,7 +387,7 @@ impl Default for AppData {
             protocol_loading: false,
             protocol_creation_in_flight: false,
             protocol_update_in_flight: false,
-            
+
             // Protocol Editor Form State
             protocol_editor_name: "Learning Protocol".to_string(),
             protocol_editor_description: "A protocol for studying learning efficiency".to_string(),
@@ -784,8 +784,8 @@ impl AppData {
     /// Trigger manual sync
     pub fn trigger_sync(&mut self) {
         if let Some(storage) = &self.offline_storage {
-            let storage_clone = storage.clone();
-            let api_client = self.api_client.clone();
+            let _storage_clone = storage.clone();
+            let _api_client = self.api_client.clone();
 
             // Avoid spawning non-Send future; poll status synchronously later
             // This is a no-op placeholder to keep UI responsive without Send bound
@@ -1589,26 +1589,30 @@ impl AppData {
         if self.protocol_loading {
             return;
         }
-        
+
         self.protocol_loading = true;
         let api_client = self.api_client.clone();
         let runtime = self.runtime.clone();
-        
-        // For now, load mock data synchronously 
+
+        // For now, load mock data synchronously
         // In a real implementation, this would be async
         runtime.spawn(async move {
-            match api_client.get_protocol_versions(&experiment_id).await {
+            match api_client
+                .as_ref()
+                .get_protocol_versions(&experiment_id)
+                .await
+            {
                 Ok(versions) => {
                     // In real app, this would update the app state through a channel
                     // For now, we'll simulate with the mock data
                     println!("Loaded {} protocol versions", versions.len());
-                },
+                }
                 Err(e) => {
                     println!("Failed to load protocol versions: {}", e);
                 }
             }
         });
-        
+
         // Simulate loading completion for demo
         self.protocol_loading = false;
         if self.protocol_versions.is_empty() {
@@ -1620,7 +1624,7 @@ impl AppData {
     fn add_mock_protocol_versions(&mut self) {
         use chrono::Utc;
         use std::collections::HashMap;
-        
+
         let mock_version = ProtocolVersion {
             id: "version-1".to_string(),
             experiment_id: "experiment-1".to_string(),
@@ -1631,7 +1635,8 @@ impl AppData {
             created_at: Utc::now(),
             protocol_content: ProtocolContent {
                 name: "Learning Efficiency Protocol".to_string(),
-                description: "A protocol for studying learning efficiency in adaptive systems".to_string(),
+                description: "A protocol for studying learning efficiency in adaptive systems"
+                    .to_string(),
                 experiment_design: ExperimentDesignConfig {
                     design_type: "between-subjects".to_string(),
                     conditions: vec![
@@ -1665,13 +1670,23 @@ impl AppData {
                 data_collection_plan: DataCollectionPlan {
                     duration_weeks: 8,
                     sessions_per_participant: 5,
-                    data_types: vec!["response_time".to_string(), "accuracy".to_string(), "learning_metrics".to_string()],
-                    quality_criteria: vec!["response_time > 100ms".to_string(), "accuracy > 0.1".to_string()],
+                    data_types: vec![
+                        "response_time".to_string(),
+                        "accuracy".to_string(),
+                        "learning_metrics".to_string(),
+                    ],
+                    quality_criteria: vec![
+                        "response_time > 100ms".to_string(),
+                        "accuracy > 0.1".to_string(),
+                    ],
                 },
                 analysis_plan: AnalysisPlan {
                     primary_analyses: vec!["learning_curve_analysis".to_string()],
                     secondary_analyses: vec!["retention_analysis".to_string()],
-                    statistical_tests: vec!["mixed_effects_model".to_string(), "t_test".to_string()],
+                    statistical_tests: vec![
+                        "mixed_effects_model".to_string(),
+                        "t_test".to_string(),
+                    ],
                     multiple_comparison_correction: Some("bonferroni".to_string()),
                 },
                 compliance_requirements: ComplianceRequirements {
@@ -1684,15 +1699,20 @@ impl AppData {
             is_current: true,
             is_draft: false,
         };
-        
+
         self.protocol_versions.push(mock_version);
         self.current_protocol_version = Some("1.0.0".to_string());
     }
 
-    pub fn compare_protocol_versions(&mut self, from_version: String, to_version: String, experiment_id: String) {
+    pub fn compare_protocol_versions(
+        &mut self,
+        from_version: String,
+        to_version: String,
+        experiment_id: String,
+    ) {
         let api_client = self.api_client.clone();
         let runtime = self.runtime.clone();
-        
+
         // For demo purposes, create mock comparison
         let mock_diff = ProtocolVersionDiff {
             from_version: from_version.clone(),
@@ -1703,7 +1723,8 @@ impl AppData {
                     change_type: ChangeType::Modified,
                     old_value: Some(serde_json::json!(100)),
                     new_value: Some(serde_json::json!(120)),
-                    description: "Increased sample size based on updated power analysis".to_string(),
+                    description: "Increased sample size based on updated power analysis"
+                        .to_string(),
                     impact_level: ImpactLevel::Minor,
                 },
                 ProtocolChange {
@@ -1718,15 +1739,22 @@ impl AppData {
             summary: "Minor improvements to sample size and study duration".to_string(),
             compatibility: CompatibilityStatus::Compatible,
         };
-        
+
         self.protocol_version_diff = Some(mock_diff);
-        
+
         // In real implementation, make API call
         runtime.spawn(async move {
-            match api_client.compare_protocol_versions(&experiment_id, &from_version, &to_version).await {
+            match api_client
+                .as_ref()
+                .compare_protocol_versions(&experiment_id, &from_version, &to_version)
+                .await
+            {
                 Ok(diff) => {
-                    println!("Protocol comparison completed: {} changes", diff.changes.len());
-                },
+                    println!(
+                        "Protocol comparison completed: {} changes",
+                        diff.changes.len()
+                    );
+                }
                 Err(e) => {
                     println!("Failed to compare protocol versions: {}", e);
                 }
@@ -1738,22 +1766,26 @@ impl AppData {
         if self.protocol_creation_in_flight {
             return;
         }
-        
+
         self.protocol_creation_in_flight = true;
         let api_client = self.api_client.clone();
         let runtime = self.runtime.clone();
-        
+
         runtime.spawn(async move {
-            match api_client.create_protocol_version(&experiment_id, content).await {
+            match api_client
+                .as_ref()
+                .create_protocol_version(&experiment_id, content)
+                .await
+            {
                 Ok(version) => {
                     println!("Created protocol version: {}", version.version);
-                },
+                }
                 Err(e) => {
                     println!("Failed to create protocol version: {}", e);
                 }
             }
         });
-        
+
         // Simulate completion
         self.protocol_creation_in_flight = false;
         self.success_message = Some("Protocol version created successfully".to_string());
@@ -1763,41 +1795,60 @@ impl AppData {
     pub fn set_current_protocol_version(&mut self, version_id: String, experiment_id: String) {
         let api_client = self.api_client.clone();
         let runtime = self.runtime.clone();
-        
+
         // Update UI immediately
         self.current_protocol_version = Some(version_id.clone());
-        
+
         // Update server
         runtime.spawn(async move {
-            match api_client.set_current_protocol_version(&experiment_id, &version_id).await {
+            match api_client
+                .as_ref()
+                .set_current_protocol_version(&experiment_id, &version_id)
+                .await
+            {
                 Ok(()) => {
                     println!("Set current protocol version to: {}", version_id);
-                },
+                }
                 Err(e) => {
                     println!("Failed to set current protocol version: {}", e);
                 }
             }
         });
-        
+
         self.success_message = Some("Protocol version updated".to_string());
     }
 
     pub fn save_protocol_version(&mut self) {
         use std::collections::HashMap;
-        
+
         if self.protocol_creation_in_flight {
             return;
         }
-        
+
         // Parse form values with error handling
-        let target_n = self.protocol_editor_target_n.parse::<usize>().unwrap_or(100);
+        let target_n = self
+            .protocol_editor_target_n
+            .parse::<usize>()
+            .unwrap_or(100);
         let power = self.protocol_editor_power.parse::<f64>().unwrap_or(0.8);
-        let effect_size = self.protocol_editor_effect_size.parse::<f64>().unwrap_or(0.5);
+        let effect_size = self
+            .protocol_editor_effect_size
+            .parse::<f64>()
+            .unwrap_or(0.5);
         let alpha = self.protocol_editor_alpha.parse::<f64>().unwrap_or(0.05);
-        let duration_weeks = self.protocol_editor_duration_weeks.parse::<u32>().unwrap_or(8);
-        let sessions_per_participant = self.protocol_editor_sessions_per_participant.parse::<u32>().unwrap_or(5);
-        let data_retention_years = self.protocol_editor_data_retention_years.parse::<u32>().unwrap_or(7);
-        
+        let duration_weeks = self
+            .protocol_editor_duration_weeks
+            .parse::<u32>()
+            .unwrap_or(8);
+        let sessions_per_participant = self
+            .protocol_editor_sessions_per_participant
+            .parse::<u32>()
+            .unwrap_or(5);
+        let data_retention_years = self
+            .protocol_editor_data_retention_years
+            .parse::<u32>()
+            .unwrap_or(7);
+
         // Build ProtocolContent from form data
         let protocol_content = ProtocolContent {
             name: self.protocol_editor_name.clone(),
@@ -1851,10 +1902,7 @@ impl AppData {
             analysis_plan: AnalysisPlan {
                 primary_analyses: vec!["learning_curve_analysis".to_string()],
                 secondary_analyses: vec!["retention_analysis".to_string()],
-                statistical_tests: vec![
-                    "mixed_effects_model".to_string(),
-                    "t_test".to_string(),
-                ],
+                statistical_tests: vec!["mixed_effects_model".to_string(), "t_test".to_string()],
                 multiple_comparison_correction: Some("bonferroni".to_string()),
             },
             compliance_requirements: ComplianceRequirements {
@@ -1864,7 +1912,7 @@ impl AppData {
                 privacy_level: "high".to_string(),
             },
         };
-        
+
         // Create the protocol version
         self.create_protocol_version(protocol_content, "experiment-1".to_string());
     }
@@ -1874,7 +1922,7 @@ impl AppData {
         if let Err(_) = self.protocol_editor_target_n.parse::<usize>() {
             return Err("Target N must be a valid positive integer".to_string());
         }
-        
+
         // Validate power
         if let Ok(power) = self.protocol_editor_power.parse::<f64>() {
             if power <= 0.0 || power > 1.0 {
@@ -1883,12 +1931,12 @@ impl AppData {
         } else {
             return Err("Power must be a valid number between 0 and 1".to_string());
         }
-        
+
         // Validate effect size
         if let Err(_) = self.protocol_editor_effect_size.parse::<f64>() {
             return Err("Effect size must be a valid number".to_string());
         }
-        
+
         // Validate alpha
         if let Ok(alpha) = self.protocol_editor_alpha.parse::<f64>() {
             if alpha <= 0.0 || alpha >= 1.0 {
@@ -1897,16 +1945,16 @@ impl AppData {
         } else {
             return Err("Alpha must be a valid number between 0 and 1".to_string());
         }
-        
+
         // Validate name and description
         if self.protocol_editor_name.trim().is_empty() {
             return Err("Protocol name is required".to_string());
         }
-        
+
         if self.protocol_editor_description.trim().is_empty() {
             return Err("Protocol description is required".to_string());
         }
-        
+
         Ok(())
     }
 }

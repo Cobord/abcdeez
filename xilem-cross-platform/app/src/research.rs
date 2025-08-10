@@ -43,7 +43,7 @@ pub struct SensorConfig {
     pub status: SensorStatus,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SensorType {
     EEG,
     GSR,
@@ -125,7 +125,7 @@ pub struct ResearchSession {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ExperimentType {
     LearningCurve,
     RetentionTest,
@@ -194,7 +194,7 @@ pub struct ResearchController {
     // Audio recording for think-aloud protocols
     pub audio_recording_enabled: bool,
     pub current_audio_session: Option<AudioSession>,
-    pub recording_state: AudioRecordingState,
+    pub recording_state: RecordingState,
     pub audio_recorder: Option<AudioRecorder>,
     pub audio_config: AudioConfig,
     // Sensor integration
@@ -240,7 +240,7 @@ impl ResearchController {
             privacy_mode: false,
             audio_recording_enabled: false,
             current_audio_session: None,
-            recording_state: AudioRecordingState::Idle,
+            recording_state: RecordingState::default(),
             audio_recorder: None,
             audio_config: AudioConfig::default(),
             sensor_recording_enabled: false,
@@ -429,6 +429,290 @@ impl ResearchController {
             _ => Err("Unsupported export format".to_string()),
         }
     }
+
+    pub fn toggle_audio_recording(&mut self) -> Result<String, String> {
+        if self.recording_state.is_recording {
+            self.stop_audio_recording()
+                .map(|session| format!("Recording stopped: {}", session.session_id))
+        } else {
+            self.start_audio_recording()
+        }
+    }
+
+    pub fn start_audio_recording(&mut self) -> Result<String, String> {
+        if !self.audio_recording_enabled {
+            return Err("Audio recording is not enabled".to_string());
+        }
+
+        if self.recording_state.is_recording {
+            return Err("Audio recording is already in progress".to_string());
+        }
+
+        // Initialize audio recorder if needed
+        if self.audio_recorder.is_none() {
+            match AudioRecorder::new() {
+                Ok(mut recorder) => {
+                    if let Err(e) = recorder.initialize(self.audio_config.clone()) {
+                        return Err(format!("Failed to initialize audio recorder: {}", e));
+                    }
+                    self.audio_recorder = Some(recorder);
+                }
+                Err(e) => {
+                    return Err(format!("Failed to create audio recorder: {}", e));
+                }
+            }
+        }
+
+        let session_id = Uuid::new_v4().to_string();
+        let file_path = create_audio_file_path(&self.participant_id, &session_id);
+
+        // Start recording
+        if let Some(ref mut recorder) = self.audio_recorder {
+            if let Err(e) = recorder.start_recording(file_path.clone()) {
+                return Err(format!("Failed to start recording: {}", e));
+            }
+        }
+
+        let audio_session = AudioSession {
+            session_id: session_id.clone(),
+            participant_id: self.participant_id.clone(),
+            start_time: Utc::now(),
+            end_time: None,
+            file_path: Some(file_path.to_string_lossy().to_string()),
+            transcription: None,
+            quality_score: None,
+        };
+
+        self.current_audio_session = Some(audio_session);
+        self.recording_state.is_recording = true;
+        self.recording_state.start_time = Some(Utc::now());
+
+        Ok(session_id)
+    }
+
+    pub fn stop_audio_recording(&mut self) -> Result<AudioSession, String> {
+        if !self.recording_state.is_recording {
+            return Err("No recording in progress".to_string());
+        }
+
+        // Stop the actual recording
+        if let Some(ref mut recorder) = self.audio_recorder {
+            if let Err(e) = recorder.stop_recording() {
+                return Err(format!("Failed to stop recording: {}", e));
+            }
+        }
+
+        if let Some(mut session) = self.current_audio_session.take() {
+            session.end_time = Some(Utc::now());
+
+            let file_path = session.file_path.clone().unwrap_or_else(|| {
+                create_audio_file_path(&self.participant_id, &session.session_id)
+                    .to_string_lossy()
+                    .to_string()
+            });
+
+            self.recording_state.is_recording = false;
+            self.recording_state.duration = Some(
+                session
+                    .end_time
+                    .unwrap()
+                    .signed_duration_since(session.start_time)
+                    .to_std()
+                    .unwrap_or_default(),
+            );
+
+            // Calculate a basic quality score based on duration
+            let duration = session
+                .end_time
+                .unwrap()
+                .signed_duration_since(session.start_time)
+                .num_seconds() as f64;
+
+            session.quality_score = Some(if duration > 5.0 { 0.9 } else { 0.7 });
+
+            Ok(session)
+        } else {
+            Err("No active audio recording session".to_string())
+        }
+    }
+
+    pub fn toggle_sensor(&mut self, sensor_type: &SensorType) -> Result<bool, String> {
+        if let Some(sensor) = self
+            .connected_sensors
+            .iter_mut()
+            .find(|s| s.sensor_type == *sensor_type)
+        {
+            sensor.enabled = !sensor.enabled;
+            sensor.status = if sensor.enabled {
+                SensorStatus::Connected
+            } else {
+                SensorStatus::Disconnected
+            };
+            Ok(sensor.enabled)
+        } else {
+            Err(format!("Sensor {:?} not found", sensor_type))
+        }
+    }
+
+    pub fn get_irb_applications(&self) -> &Vec<IRBApplicationStatus> {
+        &self.pending_irb_applications
+    }
+
+    pub fn get_generated_documents(&self) -> &Vec<IRBDocument> {
+        &self.generated_documents
+    }
+
+    pub fn generate_consent_form(
+        &mut self,
+        study_title: String,
+        risks: Vec<String>,
+        benefits: Vec<String>,
+        procedures: Vec<String>,
+    ) -> Result<String, String> {
+        if self.irb_generator.is_none() {
+            self.irb_generator = Some(IRBComplianceGenerator::default());
+        }
+
+        let document_id = Uuid::new_v4().to_string();
+
+        let content = format!(
+            "INFORMED CONSENT FORM\n\nStudy Title: {}\n\nYou are being invited to participate in a research study.\n\nPURPOSE:\nThis study aims to understand learning processes and cognitive performance.\n\nPROCEDURES:\n{}\n\nRISKS:\n{}\n\nBENEFITS:\n{}\n\nCONFIDENTIALITY:\nYour identity and data will be kept confidential. All data will be anonymized and stored securely.\n\nVOLUNTARY PARTICIPATION:\nYour participation is voluntary. You may withdraw at any time without penalty.\n\nCONTACT INFORMATION:\nIf you have questions, please contact the research team.\n\nI have read and understood the information provided. I agree to participate in this study.\n\nParticipant Signature: _________________ Date: _________\n\nResearcher Signature: _________________ Date: _________",
+            study_title,
+            procedures.join("\n• "),
+            if risks.is_empty() { "This study involves minimal risk".to_string() } else { risks.join("\n• ") },
+            benefits.join("\n• ")
+        );
+
+        let document = IRBDocument {
+            document_id: document_id.clone(),
+            document_type: IRBDocumentType::ConsentForm,
+            title: format!("Consent Form: {}", study_title),
+            content,
+            generated_date: Utc::now(),
+            file_path: None,
+            status: DocumentStatus::Generated,
+        };
+
+        self.generated_documents.push(document);
+        Ok(document_id)
+    }
+
+    pub fn generate_data_management_plan(&mut self, study_title: String) -> Result<String, String> {
+        let document_id = Uuid::new_v4().to_string();
+
+        let content = format!(
+            "DATA MANAGEMENT PLAN\n\nStudy: {}\n\nDATA COLLECTION:\n• Audio recordings (if enabled) stored locally with encryption\n• Response time data collected during tasks\n• Physiological sensor data (if enabled)\n• All data anonymized with participant IDs\n\nDATA STORAGE:\n• Local encrypted storage during collection\n• Secure cloud backup with institutional approval\n• Data retention for 7 years as per research standards\n\nDATA SECURITY:\n• AES-256 encryption for all stored data\n• Secure transmission protocols (HTTPS/TLS)\n• Access controls with authentication\n• Regular security audits\n\nDATA SHARING:\n• Anonymized data may be shared for research purposes\n• Participants can request data deletion\n• Compliance with GDPR and local privacy laws\n\nDATA DESTRUCTION:\n• Automatic deletion after retention period\n• Secure deletion protocols for sensitive data\n• Audit trail of all data access and modifications",
+            study_title
+        );
+
+        let document = IRBDocument {
+            document_id: document_id.clone(),
+            document_type: IRBDocumentType::DataManagementPlan,
+            title: format!("Data Management Plan: {}", study_title),
+            content,
+            generated_date: Utc::now(),
+            file_path: None,
+            status: DocumentStatus::Generated,
+        };
+
+        self.generated_documents.push(document);
+        Ok(document_id)
+    }
+
+    pub fn create_irb_application(
+        &mut self,
+        study_title: String,
+        principal_investigator: String,
+        institution: String,
+        study_purpose: String,
+        participant_population: String,
+        data_collection_methods: Vec<String>,
+    ) -> Result<String, String> {
+        if self.irb_generator.is_none() {
+            self.irb_generator = Some(IRBComplianceGenerator::default());
+        }
+
+        let application_id = Uuid::new_v4().to_string();
+
+        // Create the IRB application status
+        let application_status = IRBApplicationStatus {
+            application_id: application_id.clone(),
+            study_title: study_title.clone(),
+            status: IRBStatus::Draft,
+            submitted_date: None,
+            approval_date: None,
+            expiration_date: None,
+            reviewer_notes: Vec::new(),
+        };
+
+        self.pending_irb_applications.push(application_status);
+
+        // Generate the application document
+        let study_summary = StudySummary {
+            background_rationale: format!("Study: {} - {}", study_title, study_purpose),
+            research_objectives: vec![
+                "Measure learning curve progression".to_string(),
+                "Analyze retention rates".to_string(),
+                "Evaluate adaptive scheduling effectiveness".to_string(),
+            ],
+            study_design: "Randomized controlled trial with between-subjects design".to_string(),
+            methodology: format!(
+                "Data collection: {:?} with population: {}",
+                data_collection_methods, participant_population
+            ),
+            statistical_analysis_plan: "Mixed-effects modeling with multiple comparison correction"
+                .to_string(),
+            expected_duration: "12 months".to_string(),
+            study_locations: vec!["Online platform".to_string()],
+        };
+
+        // This would call the actual IRB generation method from the core library
+        // For now, we'll create a basic document
+        let document = IRBDocument {
+            document_id: Uuid::new_v4().to_string(),
+            document_type: IRBDocumentType::Application,
+            title: format!("IRB Application: {}", study_title),
+            content: format!(
+                "IRB APPLICATION\n\nBackground: {}\nObjectives: {:?}\nStudy Design: {}\nMethodology: {}",
+                study_summary.background_rationale, study_summary.research_objectives,
+                study_summary.study_design, study_summary.methodology
+            ),
+            generated_date: Utc::now(),
+            file_path: None,
+            status: DocumentStatus::Draft,
+        };
+
+        self.generated_documents.push(document);
+
+        Ok(application_id)
+    }
+
+    pub fn export_irb_document(&mut self, document_id: &str) -> Result<String, String> {
+        if let Some(document) = self
+            .generated_documents
+            .iter_mut()
+            .find(|doc| doc.document_id == document_id)
+        {
+            let filename = format!(
+                "{}_{}.txt",
+                document.title.replace(" ", "_").replace(":", ""),
+                document.document_id[..8].to_string()
+            );
+
+            // Create IRB documents directory
+            std::fs::create_dir_all("irb_documents").map_err(|e| e.to_string())?;
+            let file_path = format!("irb_documents/{}", filename);
+
+            std::fs::write(&file_path, &document.content).map_err(|e| e.to_string())?;
+
+            document.file_path = Some(file_path.clone());
+            document.status = DocumentStatus::Approved;
+
+            Ok(file_path)
+        } else {
+            Err("Document not found".to_string())
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -440,13 +724,42 @@ pub enum ExportFormat {
     Python,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct RecordingState {
+    pub is_recording: bool,
+    pub start_time: Option<chrono::DateTime<chrono::Utc>>,
+    pub duration: Option<std::time::Duration>,
+}
+
 pub struct ResearchAnalyzer {
     sessions: Vec<ResearchSession>,
+    generated_documents: Vec<IRBDocument>,
+    pending_irb_applications: Vec<IRBApplicationStatus>,
+    recording_state: RecordingState,
+    connected_sensors: Vec<SensorConfig>,
+    audio_recorder: Option<AudioRecorder>,
+    audio_config: AudioConfig,
+    irb_generator: Option<IRBComplianceGenerator>,
+    participant_id: String,
+    audio_recording_enabled: bool,
+    current_audio_session: Option<AudioSession>,
 }
 
 impl ResearchAnalyzer {
     pub fn new(sessions: Vec<ResearchSession>) -> Self {
-        Self { sessions }
+        Self {
+            sessions,
+            generated_documents: Vec::new(),
+            pending_irb_applications: Vec::new(),
+            recording_state: RecordingState::default(),
+            connected_sensors: Vec::new(),
+            audio_recorder: None,
+            audio_config: AudioConfig::default(),
+            irb_generator: None,
+            participant_id: "default_participant".to_string(),
+            audio_recording_enabled: false,
+            current_audio_session: None,
+        }
     }
 
     pub fn analyze_learning_curves(&self) -> HashMap<String, Vec<f64>> {
@@ -557,7 +870,7 @@ impl ResearchAnalyzer {
             return Err("Audio recording is not enabled".to_string());
         }
 
-        if matches!(self.recording_state, AudioRecordingState::Recording { .. }) {
+        if self.recording_state.is_recording {
             return Err("Audio recording is already in progress".to_string());
         }
 
@@ -597,16 +910,14 @@ impl ResearchAnalyzer {
         };
 
         self.current_audio_session = Some(audio_session);
-        self.recording_state = AudioRecordingState::Recording {
-            start_time: Utc::now(),
-            duration: Duration::from_secs(0),
-        };
+        self.recording_state.is_recording = true;
+        self.recording_state.start_time = Some(Utc::now());
 
         Ok(session_id)
     }
 
     pub fn stop_audio_recording(&mut self) -> Result<AudioSession, String> {
-        if !matches!(self.recording_state, AudioRecordingState::Recording { .. }) {
+        if !self.recording_state.is_recording {
             return Err("No recording in progress".to_string());
         }
 
@@ -626,9 +937,15 @@ impl ResearchAnalyzer {
                     .to_string()
             });
 
-            self.recording_state = AudioRecordingState::Completed {
-                file_path: file_path.clone(),
-            };
+            self.recording_state.is_recording = false;
+            self.recording_state.duration = Some(
+                session
+                    .end_time
+                    .unwrap()
+                    .signed_duration_since(session.start_time)
+                    .to_std()
+                    .unwrap_or_default(),
+            );
 
             // Calculate a basic quality score based on duration
             let duration = session
@@ -646,12 +963,11 @@ impl ResearchAnalyzer {
     }
 
     pub fn toggle_audio_recording(&mut self) -> Result<String, String> {
-        match &self.recording_state {
-            AudioRecordingState::Idle => self.start_audio_recording(),
-            AudioRecordingState::Recording { .. } => self
-                .stop_audio_recording()
-                .map(|session| format!("Recording stopped: {}", session.session_id)),
-            _ => Err("Cannot toggle recording in current state".to_string()),
+        if self.recording_state.is_recording {
+            self.stop_audio_recording()
+                .map(|session| format!("Recording stopped: {}", session.session_id))
+        } else {
+            self.start_audio_recording()
         }
     }
 
@@ -675,13 +991,19 @@ impl ResearchAnalyzer {
     }
 
     pub fn get_recording_duration(&self) -> Duration {
-        match &self.recording_state {
-            AudioRecordingState::Recording { start_time, .. } => Utc::now()
-                .signed_duration_since(*start_time)
-                .to_std()
-                .unwrap_or_default(),
-            AudioRecordingState::Paused { total_duration } => *total_duration,
-            _ => Duration::from_secs(0),
+        if self.recording_state.is_recording {
+            if let Some(start_time) = &self.recording_state.start_time {
+                Utc::now()
+                    .signed_duration_since(start_time)
+                    .to_std()
+                    .unwrap_or_default()
+            } else {
+                Duration::from_secs(0)
+            }
+        } else if let Some(duration) = &self.recording_state.duration {
+            *duration
+        } else {
+            Duration::from_secs(0)
         }
     }
 
@@ -755,15 +1077,22 @@ impl ResearchAnalyzer {
         // Generate the application document
         if let Some(ref mut generator) = self.irb_generator {
             let study_summary = StudySummary {
-                title: study_title.clone(),
-                principal_investigator,
-                institution,
-                purpose: study_purpose,
-                participant_population,
-                data_collection_methods,
-                estimated_participants: 100, // Default, can be configured
-                study_duration_months: 12,   // Default, can be configured
-                risk_level: "Minimal".to_string(),
+                background_rationale: format!("Study: {} - {}", study_title, study_purpose),
+                research_objectives: vec![
+                    "Measure learning curve progression".to_string(),
+                    "Analyze retention rates".to_string(),
+                    "Evaluate adaptive scheduling effectiveness".to_string(),
+                ],
+                study_design: "Randomized controlled trial with between-subjects design"
+                    .to_string(),
+                methodology: format!(
+                    "Data collection: {:?} with population: {}",
+                    data_collection_methods, participant_population
+                ),
+                statistical_analysis_plan:
+                    "Mixed-effects modeling with multiple comparison correction".to_string(),
+                expected_duration: "12 months".to_string(),
+                study_locations: vec!["Online platform".to_string()],
             };
 
             // This would call the actual IRB generation method from the core library
@@ -773,9 +1102,9 @@ impl ResearchAnalyzer {
                 document_type: IRBDocumentType::Application,
                 title: format!("IRB Application: {}", study_title),
                 content: format!(
-                    "IRB APPLICATION\n\nStudy Title: {}\nPrincipal Investigator: {}\nInstitution: {}\nPurpose: {}",
-                    study_summary.title, study_summary.principal_investigator,
-                    study_summary.institution, study_summary.purpose
+                    "IRB APPLICATION\n\nBackground: {}\nObjectives: {:?}\nStudy Design: {}\nMethodology: {}",
+                    study_summary.background_rationale, study_summary.research_objectives,
+                    study_summary.study_design, study_summary.methodology
                 ),
                 generated_date: Utc::now(),
                 file_path: None,

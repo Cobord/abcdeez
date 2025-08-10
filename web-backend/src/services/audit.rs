@@ -116,54 +116,79 @@ pub struct AuditRetentionManager {
 impl AuditRetentionManager {
     pub fn new() -> Self {
         let mut policies = HashMap::new();
-        
+
         // Security events - longer retention
-        policies.insert("security".to_string(), AuditRetentionPolicy {
-            name: "security".to_string(),
-            resource_types: vec!["system".to_string()],
-            action_types: vec!["security_event".to_string(), "auth_failure".to_string()],
-            retention_days: 2555, // 7 years
-            legal_hold: false,
-            minimum_retention_days: 1095, // 3 years minimum
-            priority: 100,
-            description: "Security events require extended retention for compliance".to_string(),
-        });
-        
+        policies.insert(
+            "security".to_string(),
+            AuditRetentionPolicy {
+                name: "security".to_string(),
+                resource_types: vec!["system".to_string()],
+                action_types: vec!["security_event".to_string(), "auth_failure".to_string()],
+                retention_days: 2555, // 7 years
+                legal_hold: false,
+                minimum_retention_days: 1095, // 3 years minimum
+                priority: 100,
+                description: "Security events require extended retention for compliance"
+                    .to_string(),
+            },
+        );
+
         // Authentication events
-        policies.insert("auth".to_string(), AuditRetentionPolicy {
-            name: "auth".to_string(),
-            resource_types: vec!["auth".to_string()],
-            action_types: vec!["login".to_string(), "logout".to_string(), "token_refresh".to_string()],
-            retention_days: 1095, // 3 years
-            legal_hold: false,
-            minimum_retention_days: 365, // 1 year minimum
-            priority: 80,
-            description: "Authentication events for security analysis".to_string(),
-        });
-        
+        policies.insert(
+            "auth".to_string(),
+            AuditRetentionPolicy {
+                name: "auth".to_string(),
+                resource_types: vec!["auth".to_string()],
+                action_types: vec![
+                    "login".to_string(),
+                    "logout".to_string(),
+                    "token_refresh".to_string(),
+                ],
+                retention_days: 1095, // 3 years
+                legal_hold: false,
+                minimum_retention_days: 365, // 1 year minimum
+                priority: 80,
+                description: "Authentication events for security analysis".to_string(),
+            },
+        );
+
         // Data access events
-        policies.insert("data_access".to_string(), AuditRetentionPolicy {
-            name: "data_access".to_string(),
-            resource_types: vec!["learner".to_string(), "session".to_string()],
-            action_types: vec!["read".to_string(), "export".to_string(), "data_access".to_string()],
-            retention_days: 1825, // 5 years
-            legal_hold: false,
-            minimum_retention_days: 730, // 2 years minimum
-            priority: 60,
-            description: "Data access events for privacy compliance".to_string(),
-        });
-        
+        policies.insert(
+            "data_access".to_string(),
+            AuditRetentionPolicy {
+                name: "data_access".to_string(),
+                resource_types: vec!["learner".to_string(), "session".to_string()],
+                action_types: vec![
+                    "read".to_string(),
+                    "export".to_string(),
+                    "data_access".to_string(),
+                ],
+                retention_days: 1825, // 5 years
+                legal_hold: false,
+                minimum_retention_days: 730, // 2 years minimum
+                priority: 60,
+                description: "Data access events for privacy compliance".to_string(),
+            },
+        );
+
         // Administrative actions
-        policies.insert("admin".to_string(), AuditRetentionPolicy {
-            name: "admin".to_string(),
-            resource_types: vec!["admin".to_string()],
-            action_types: vec!["create".to_string(), "update".to_string(), "delete".to_string()],
-            retention_days: 2555, // 7 years
-            legal_hold: false,
-            minimum_retention_days: 1095, // 3 years minimum
-            priority: 90,
-            description: "Administrative actions require extended retention".to_string(),
-        });
+        policies.insert(
+            "admin".to_string(),
+            AuditRetentionPolicy {
+                name: "admin".to_string(),
+                resource_types: vec!["admin".to_string()],
+                action_types: vec![
+                    "create".to_string(),
+                    "update".to_string(),
+                    "delete".to_string(),
+                ],
+                retention_days: 2555, // 7 years
+                legal_hold: false,
+                minimum_retention_days: 1095, // 3 years minimum
+                priority: 90,
+                description: "Administrative actions require extended retention".to_string(),
+            },
+        );
 
         Self {
             policies,
@@ -172,15 +197,19 @@ impl AuditRetentionManager {
     }
 
     /// Get the applicable retention policy for an audit record
-    pub fn get_applicable_policy(&self, resource_type: &str, action: &str) -> &AuditRetentionPolicy {
+    pub fn get_applicable_policy(
+        &self,
+        resource_type: &str,
+        action: &str,
+    ) -> &AuditRetentionPolicy {
         let mut best_match: Option<&AuditRetentionPolicy> = None;
         let mut best_priority = 0;
 
         for policy in self.policies.values() {
-            let resource_match = policy.resource_types.is_empty() || 
-                                policy.resource_types.contains(&resource_type.to_string());
-            let action_match = policy.action_types.is_empty() || 
-                              policy.action_types.contains(&action.to_string());
+            let resource_match = policy.resource_types.is_empty()
+                || policy.resource_types.contains(&resource_type.to_string());
+            let action_match =
+                policy.action_types.is_empty() || policy.action_types.contains(&action.to_string());
 
             if resource_match && action_match && policy.priority >= best_priority {
                 best_match = Some(policy);
@@ -415,7 +444,7 @@ impl AuditService {
         let rows = sqlx::query(
             "SELECT id, timestamp, action, resource_type, resource_id 
              FROM audit_log 
-             ORDER BY timestamp ASC"
+             ORDER BY timestamp ASC",
         )
         .fetch_all(&mut *conn)
         .await?;
@@ -430,10 +459,9 @@ impl AuditService {
             let action: String = row.get("action");
             let resource_type: String = row.get("resource_type");
             let id_bytes: Vec<u8> = row.get("id");
-            
+
             // Update oldest record date
-            if stats.oldest_record_date.is_none() || 
-               timestamp < stats.oldest_record_date.unwrap() {
+            if stats.oldest_record_date.is_none() || timestamp < stats.oldest_record_date.unwrap() {
                 stats.oldest_record_date = Some(timestamp);
             }
 
@@ -465,7 +493,7 @@ impl AuditService {
                     .bind(id_bytes)
                     .execute(&mut *conn)
                     .await?;
-                
+
                 if result.rows_affected() > 0 {
                     stats.records_deleted += 1;
                 }
@@ -529,55 +557,49 @@ impl AuditService {
         let three_years_ago = now - Duration::days(1095);
         let seven_years_ago = now - Duration::days(2555);
 
-        let records_last_year: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM audit_log WHERE timestamp > ?"
-        )
-        .bind(one_year_ago)
-        .fetch_one(&mut *conn)
-        .await?;
+        let records_last_year: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM audit_log WHERE timestamp > ?")
+                .bind(one_year_ago)
+                .fetch_one(&mut *conn)
+                .await?;
 
-        let records_1_3_years: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM audit_log WHERE timestamp BETWEEN ? AND ?"
-        )
-        .bind(three_years_ago)
-        .bind(one_year_ago)
-        .fetch_one(&mut *conn)
-        .await?;
+        let records_1_3_years: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM audit_log WHERE timestamp BETWEEN ? AND ?")
+                .bind(three_years_ago)
+                .bind(one_year_ago)
+                .fetch_one(&mut *conn)
+                .await?;
 
-        let records_3_7_years: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM audit_log WHERE timestamp BETWEEN ? AND ?"
-        )
-        .bind(seven_years_ago)
-        .bind(three_years_ago)
-        .fetch_one(&mut *conn)
-        .await?;
+        let records_3_7_years: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM audit_log WHERE timestamp BETWEEN ? AND ?")
+                .bind(seven_years_ago)
+                .bind(three_years_ago)
+                .fetch_one(&mut *conn)
+                .await?;
 
-        let records_over_7_years: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM audit_log WHERE timestamp < ?"
-        )
-        .bind(seven_years_ago)
-        .fetch_one(&mut *conn)
-        .await?;
+        let records_over_7_years: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM audit_log WHERE timestamp < ?")
+                .bind(seven_years_ago)
+                .fetch_one(&mut *conn)
+                .await?;
 
         // Get oldest and newest record timestamps
-        let oldest_record: Option<DateTime<Utc>> = sqlx::query_scalar(
-            "SELECT MIN(timestamp) FROM audit_log"
-        )
-        .fetch_one(&mut *conn)
-        .await?;
+        let oldest_record: Option<DateTime<Utc>> =
+            sqlx::query_scalar("SELECT MIN(timestamp) FROM audit_log")
+                .fetch_one(&mut *conn)
+                .await?;
 
-        let newest_record: Option<DateTime<Utc>> = sqlx::query_scalar(
-            "SELECT MAX(timestamp) FROM audit_log"
-        )
-        .fetch_one(&mut *conn)
-        .await?;
+        let newest_record: Option<DateTime<Utc>> =
+            sqlx::query_scalar("SELECT MAX(timestamp) FROM audit_log")
+                .fetch_one(&mut *conn)
+                .await?;
 
         // Get record counts by resource type and action
         let type_breakdown = sqlx::query(
             "SELECT resource_type, action, COUNT(*) as count 
              FROM audit_log 
              GROUP BY resource_type, action 
-             ORDER BY count DESC"
+             ORDER BY count DESC",
         )
         .fetch_all(&mut *conn)
         .await?;
@@ -587,9 +609,9 @@ impl AuditService {
             let resource_type: String = row.get("resource_type");
             let action: String = row.get("action");
             let count: i64 = row.get("count");
-            
+
             let policy = retention_manager.get_applicable_policy(&resource_type, &action);
-            
+
             type_stats.push(serde_json::json!({
                 "resource_type": resource_type,
                 "action": action,
@@ -633,7 +655,7 @@ impl AuditService {
         to_date: Option<DateTime<Utc>>,
     ) -> Result<serde_json::Value> {
         let mut conn = db.acquire().await?;
-        
+
         let from_date = from_date.unwrap_or(Utc::now() - Duration::days(365));
         let to_date = to_date.unwrap_or(Utc::now());
 
@@ -642,7 +664,7 @@ impl AuditService {
             "SELECT action, resource_type, resource_id, timestamp, ip_address, user_agent
              FROM audit_log 
              WHERE timestamp BETWEEN ? AND ?
-             ORDER BY timestamp DESC"
+             ORDER BY timestamp DESC",
         )
         .bind(from_date)
         .bind(to_date)
@@ -660,7 +682,9 @@ impl AuditService {
             let ip_address: Option<String> = row.get("ip_address");
 
             // Count actions
-            *total_actions.entry(format!("{}:{}", resource_type, action)).or_insert(0) += 1;
+            *total_actions
+                .entry(format!("{}:{}", resource_type, action))
+                .or_insert(0) += 1;
 
             // Count IPs
             if let Some(ip) = ip_address {
@@ -670,7 +694,7 @@ impl AuditService {
             // Apply retention policy
             let policy = retention_manager.get_applicable_policy(&resource_type, &action);
             let age_days = (to_date - timestamp).num_days();
-            
+
             if age_days > policy.retention_days as i64 {
                 report_sections.push(serde_json::json!({
                     "timestamp": timestamp,

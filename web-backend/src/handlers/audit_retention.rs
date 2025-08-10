@@ -31,7 +31,7 @@ pub async fn get_retention_statistics(
     _claims: Extension<Claims>,
 ) -> AppResult<Json<serde_json::Value>> {
     let retention_manager = AuditRetentionManager::new();
-    
+
     let stats = AuditService::get_retention_statistics(&state.db_pool, &retention_manager)
         .await
         .map_err(|e| AppError::InternalServerError)?;
@@ -70,7 +70,7 @@ pub async fn generate_compliance_report(
     Query(params): Query<ComplianceReportQuery>,
 ) -> AppResult<Json<serde_json::Value>> {
     let retention_manager = AuditRetentionManager::new();
-    
+
     let report = AuditService::generate_compliance_report(
         &state.db_pool,
         &retention_manager,
@@ -89,7 +89,11 @@ pub async fn get_retention_policies(
     _claims: Extension<Claims>,
 ) -> AppResult<Json<Vec<AuditRetentionPolicy>>> {
     let retention_manager = AuditRetentionManager::new();
-    let policies = retention_manager.list_policies().into_iter().cloned().collect();
+    let policies = retention_manager
+        .list_policies()
+        .into_iter()
+        .cloned()
+        .collect();
 
     Ok(Json(policies))
 }
@@ -200,14 +204,14 @@ pub async fn get_audit_trail_with_retention(
             let resource_type = record["resource_type"].as_str().unwrap_or("");
             let action = record["action"].as_str().unwrap_or("");
             let policy = retention_manager.get_applicable_policy(resource_type, action);
-            
+
             record["retention_policy"] = serde_json::json!({
                 "policy_name": policy.name,
                 "retention_days": policy.retention_days,
                 "legal_hold": policy.legal_hold,
                 "priority": policy.priority
             });
-            
+
             record
         })
         .collect();

@@ -423,9 +423,9 @@ pub enum ChangeType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ImpactLevel {
-    Major,      // Breaking changes
-    Minor,      // New features, non-breaking
-    Patch,      // Bug fixes, clarifications
+    Major, // Breaking changes
+    Minor, // New features, non-breaking
+    Patch, // Bug fixes, clarifications
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -658,9 +658,9 @@ impl BatchJobService {
 
         // Parse configuration from payload (default to not dry run for scheduled jobs)
         let dry_run = payload.contains("\"dry_run\":true");
-        
+
         let retention_manager = AuditRetentionManager::new();
-        
+
         match AuditService::apply_retention_policies(&self.db, &retention_manager, dry_run).await {
             Ok(stats) => {
                 tracing::info!(
@@ -702,7 +702,7 @@ impl BatchJobService {
             }
             Err(e) => {
                 tracing::error!("Audit retention cleanup job failed: {}", e);
-                
+
                 // Log the failure as a system audit event
                 AuditService::log_event(
                     &self.db,
@@ -719,7 +719,7 @@ impl BatchJobService {
                     Some("BatchJobService".to_string()),
                 )
                 .await?;
-                
+
                 return Err(e);
             }
         }
@@ -735,9 +735,11 @@ impl BatchJobService {
             "scheduled_at": chrono::Utc::now(),
             "dry_run": dry_run,
             "job_type": "audit_retention_cleanup"
-        }).to_string();
+        })
+        .to_string();
 
-        self.schedule_job(job_id, JobType::AuditRetentionCleanup, &payload).await?;
+        self.schedule_job(job_id, JobType::AuditRetentionCleanup, &payload)
+            .await?;
         Ok(job_id)
     }
 

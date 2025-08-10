@@ -672,7 +672,7 @@ pub fn create_metrics_radar_chart(
         ))?;
 
         // Draw data points with values
-        for (i, (name, value, _)) in dimensions.iter().enumerate() {
+        for (i, (_name, value, _)) in dimensions.iter().enumerate() {
             let angle = 2.0 * std::f64::consts::PI * i as f64 / dimensions.len() as f64
                 - std::f64::consts::PI / 2.0;
             let r = radius * value.max(0.0).min(1.0);

@@ -3,7 +3,7 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{components::*, models::*, AppData, Screen};
+use crate::{api_client::ApiClientTrait, components::*, models::*, AppData, Screen};
 
 // Enhanced Settings Screen with Demo Preferences
 pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
@@ -265,7 +265,7 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     flex((
                         labeled_input(
                             "API Base URL",
-                            &data.api_url_input,
+                            data.api_url_input.clone(),
                             std::sync::Arc::new(|data: &mut AppData, value: String| {
                                 data.api_url_input = value;
                             }),
@@ -275,7 +275,7 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                             .alignment(TextAlignment::Start),
                         labeled_input(
                             "Timeout (seconds)",
-                            &data.api_timeout_input,
+                            data.api_timeout_input.clone(),
                             std::sync::Arc::new(|data: &mut AppData, value: String| {
                                 data.api_timeout_input = value;
                             }),
@@ -321,7 +321,7 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
 
                                 // Spawn async task to test connection
                                 runtime.spawn(async move {
-                                    match api_client.health_check().await {
+                                    match api_client.as_ref().health_check().await {
                                         Ok(()) => {
                                             // Connection successful
                                         }
@@ -345,7 +345,15 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                     ))
                     .direction(Axis::Vertical)
                 } else {
-                    flex(()).direction(Axis::Vertical) // Empty flex when collapsed
+                    flex((
+                        label("API settings collapsed").alignment(TextAlignment::Middle),
+                        label(""),
+                        label(""),
+                        label(""),
+                        label(""),
+                        label(""),
+                    ))
+                    .direction(Axis::Vertical)
                 },
             ))
             .direction(Axis::Vertical),

@@ -33,14 +33,37 @@ pub trait ApiClientTrait: Send + Sync {
 
     // Protocol Versioning API methods
     async fn get_protocol_versions(&self, experiment_id: &str) -> Result<Vec<ProtocolVersion>>;
-    async fn get_protocol_version(&self, experiment_id: &str, version: &str) -> Result<ProtocolVersion>;
-    async fn create_protocol_version(&self, experiment_id: &str, content: ProtocolContent) -> Result<ProtocolVersion>;
-    async fn update_protocol_version(&self, experiment_id: &str, version_id: &str, content: ProtocolContent) -> Result<ProtocolVersion>;
-    async fn compare_protocol_versions(&self, experiment_id: &str, from_version: &str, to_version: &str) -> Result<ProtocolVersionDiff>;
-    async fn set_current_protocol_version(&self, experiment_id: &str, version_id: &str) -> Result<()>;
+    async fn get_protocol_version(
+        &self,
+        experiment_id: &str,
+        version: &str,
+    ) -> Result<ProtocolVersion>;
+    async fn create_protocol_version(
+        &self,
+        experiment_id: &str,
+        content: ProtocolContent,
+    ) -> Result<ProtocolVersion>;
+    async fn update_protocol_version(
+        &self,
+        experiment_id: &str,
+        version_id: &str,
+        content: ProtocolContent,
+    ) -> Result<ProtocolVersion>;
+    async fn compare_protocol_versions(
+        &self,
+        experiment_id: &str,
+        from_version: &str,
+        to_version: &str,
+    ) -> Result<ProtocolVersionDiff>;
+    async fn set_current_protocol_version(
+        &self,
+        experiment_id: &str,
+        version_id: &str,
+    ) -> Result<()>;
 }
 
 /// Real API client that connects to the backend server
+#[derive(Debug)]
 pub struct RealApiClient {
     client: Client,
     base_url: String,
@@ -271,38 +294,91 @@ impl ApiClientTrait for RealApiClient {
 
     // Protocol Versioning API implementations
     async fn get_protocol_versions(&self, experiment_id: &str) -> Result<Vec<ProtocolVersion>> {
-        self.get_with_retry(&format!("/api/experiments/{}/protocol-versions", experiment_id)).await
+        self.get_with_retry(&format!(
+            "/api/experiments/{}/protocol-versions",
+            experiment_id
+        ))
+        .await
     }
 
-    async fn get_protocol_version(&self, experiment_id: &str, version: &str) -> Result<ProtocolVersion> {
-        self.get_with_retry(&format!("/api/experiments/{}/protocol-versions/{}", experiment_id, version)).await
+    async fn get_protocol_version(
+        &self,
+        experiment_id: &str,
+        version: &str,
+    ) -> Result<ProtocolVersion> {
+        self.get_with_retry(&format!(
+            "/api/experiments/{}/protocol-versions/{}",
+            experiment_id, version
+        ))
+        .await
     }
 
-    async fn create_protocol_version(&self, experiment_id: &str, content: ProtocolContent) -> Result<ProtocolVersion> {
+    async fn create_protocol_version(
+        &self,
+        experiment_id: &str,
+        content: ProtocolContent,
+    ) -> Result<ProtocolVersion> {
         let request = serde_json::json!({
             "content": content,
             "message": "Created via UI"
         });
-        self.post_with_retry(&format!("/api/experiments/{}/protocol-versions", experiment_id), &request).await
+        self.post_with_retry(
+            &format!("/api/experiments/{}/protocol-versions", experiment_id),
+            &request,
+        )
+        .await
     }
 
-    async fn update_protocol_version(&self, experiment_id: &str, version_id: &str, content: ProtocolContent) -> Result<ProtocolVersion> {
+    async fn update_protocol_version(
+        &self,
+        experiment_id: &str,
+        version_id: &str,
+        content: ProtocolContent,
+    ) -> Result<ProtocolVersion> {
         let request = serde_json::json!({
             "content": content,
             "message": "Updated via UI"
         });
-        self.post_with_retry(&format!("/api/experiments/{}/protocol-versions/{}", experiment_id, version_id), &request).await
+        self.post_with_retry(
+            &format!(
+                "/api/experiments/{}/protocol-versions/{}",
+                experiment_id, version_id
+            ),
+            &request,
+        )
+        .await
     }
 
-    async fn compare_protocol_versions(&self, experiment_id: &str, from_version: &str, to_version: &str) -> Result<ProtocolVersionDiff> {
-        self.get_with_retry(&format!("/api/experiments/{}/protocol-versions/{}/compare/{}", experiment_id, from_version, to_version)).await
+    async fn compare_protocol_versions(
+        &self,
+        experiment_id: &str,
+        from_version: &str,
+        to_version: &str,
+    ) -> Result<ProtocolVersionDiff> {
+        self.get_with_retry(&format!(
+            "/api/experiments/{}/protocol-versions/{}/compare/{}",
+            experiment_id, from_version, to_version
+        ))
+        .await
     }
 
-    async fn set_current_protocol_version(&self, experiment_id: &str, version_id: &str) -> Result<()> {
+    async fn set_current_protocol_version(
+        &self,
+        experiment_id: &str,
+        version_id: &str,
+    ) -> Result<()> {
         let request = serde_json::json!({
             "version_id": version_id
         });
-        let _: serde_json::Value = self.post_with_retry(&format!("/api/experiments/{}/protocol-versions/set-current", experiment_id), &request).await?;
+        let _: serde_json::Value = self
+            .post_with_retry(
+                &format!(
+                    "/api/experiments/{}/protocol-versions/set-current",
+                    experiment_id
+                ),
+                &request,
+            )
+            .await?;
         Ok(())
     }
 }
@@ -380,11 +456,13 @@ impl ApiClientTrait for MockApiClient {
         Ok(Session {
             id: Uuid::new_v4().to_string(),
             learner_id: request.learner_id,
+            topology_type: "default".to_string(),
             topology: None, // Will be populated by UI
+            start_time: chrono::Utc::now(),
+            end_time: None,
+            status: "active".to_string(),
+            summary: None,
             responses: Vec::new(),
-            status: SessionStatus::Active,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
         })
     }
 
@@ -393,11 +471,13 @@ impl ApiClientTrait for MockApiClient {
         Ok(Session {
             id: session_id.to_string(),
             learner_id: self.user_id.clone(),
+            topology_type: "default".to_string(),
             topology: None,
+            start_time: chrono::Utc::now(),
+            end_time: None,
+            status: "active".to_string(),
+            summary: None,
             responses: Vec::new(),
-            status: SessionStatus::Active,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
         })
     }
 
@@ -455,84 +535,101 @@ impl ApiClientTrait for MockApiClient {
 
     // Protocol Versioning mock implementations
     async fn get_protocol_versions(&self, experiment_id: &str) -> Result<Vec<ProtocolVersion>> {
-        info!("Mock getting protocol versions for experiment: {}", experiment_id);
+        info!(
+            "Mock getting protocol versions for experiment: {}",
+            experiment_id
+        );
         use chrono::Utc;
-        Ok(vec![
-            ProtocolVersion {
-                id: "version-1".to_string(),
-                experiment_id: experiment_id.to_string(),
-                version: "1.0.0".to_string(),
-                commit_hash: "abc123def456".to_string(),
-                author: "Mock Researcher".to_string(),
-                message: "Initial protocol version".to_string(),
-                created_at: Utc::now(),
-                protocol_content: ProtocolContent {
-                    name: "Mock Protocol".to_string(),
-                    description: "A mock protocol for testing".to_string(),
-                    experiment_design: ExperimentDesignConfig {
-                        design_type: "between-subjects".to_string(),
-                        conditions: vec![
-                            ExperimentCondition {
-                                name: "Control".to_string(),
-                                description: "Control condition".to_string(),
-                                parameters: std::collections::HashMap::new(),
-                                is_control: true,
-                            },
-                            ExperimentCondition {
-                                name: "Treatment".to_string(),
-                                description: "Treatment condition".to_string(),
-                                parameters: std::collections::HashMap::new(),
-                                is_control: false,
-                            },
-                        ],
-                        randomization: RandomizationConfig {
-                            method: "simple".to_string(),
-                            seed: Some(12345),
-                            stratification: vec![],
-                            block_size: Some(4),
+        Ok(vec![ProtocolVersion {
+            id: "version-1".to_string(),
+            experiment_id: experiment_id.to_string(),
+            version: "1.0.0".to_string(),
+            commit_hash: "abc123def456".to_string(),
+            author: "Mock Researcher".to_string(),
+            message: "Initial protocol version".to_string(),
+            created_at: Utc::now(),
+            protocol_content: ProtocolContent {
+                name: "Mock Protocol".to_string(),
+                description: "A mock protocol for testing".to_string(),
+                experiment_design: ExperimentDesignConfig {
+                    design_type: "between-subjects".to_string(),
+                    conditions: vec![
+                        ExperimentCondition {
+                            name: "Control".to_string(),
+                            description: "Control condition".to_string(),
+                            parameters: std::collections::HashMap::new(),
+                            is_control: true,
                         },
-                        sample_size: SampleSizeConfig {
-                            target_n: 100,
-                            power: 0.8,
-                            effect_size: 0.5,
-                            alpha: 0.05,
-                            justification: "Power analysis based on pilot study".to_string(),
+                        ExperimentCondition {
+                            name: "Treatment".to_string(),
+                            description: "Treatment condition".to_string(),
+                            parameters: std::collections::HashMap::new(),
+                            is_control: false,
                         },
+                    ],
+                    randomization: RandomizationConfig {
+                        method: "simple".to_string(),
+                        seed: Some(12345),
+                        stratification: vec![],
+                        block_size: Some(4),
                     },
-                    data_collection_plan: DataCollectionPlan {
-                        duration_weeks: 12,
-                        sessions_per_participant: 3,
-                        data_types: vec!["response_time".to_string(), "accuracy".to_string()],
-                        quality_criteria: vec!["response_time > 100ms".to_string()],
-                    },
-                    analysis_plan: AnalysisPlan {
-                        primary_analyses: vec!["t-test".to_string()],
-                        secondary_analyses: vec!["correlation".to_string()],
-                        statistical_tests: vec!["independent_t_test".to_string()],
-                        multiple_comparison_correction: Some("bonferroni".to_string()),
-                    },
-                    compliance_requirements: ComplianceRequirements {
-                        irb_required: true,
-                        consent_required: true,
-                        data_retention_years: 5,
-                        privacy_level: "high".to_string(),
+                    sample_size: SampleSizeConfig {
+                        target_n: 100,
+                        power: 0.8,
+                        effect_size: 0.5,
+                        alpha: 0.05,
+                        justification: "Power analysis based on pilot study".to_string(),
                     },
                 },
-                is_current: true,
-                is_draft: false,
+                data_collection_plan: DataCollectionPlan {
+                    duration_weeks: 12,
+                    sessions_per_participant: 3,
+                    data_types: vec!["response_time".to_string(), "accuracy".to_string()],
+                    quality_criteria: vec!["response_time > 100ms".to_string()],
+                },
+                analysis_plan: AnalysisPlan {
+                    primary_analyses: vec!["t-test".to_string()],
+                    secondary_analyses: vec!["correlation".to_string()],
+                    statistical_tests: vec!["independent_t_test".to_string()],
+                    multiple_comparison_correction: Some("bonferroni".to_string()),
+                },
+                compliance_requirements: ComplianceRequirements {
+                    irb_required: true,
+                    consent_required: true,
+                    data_retention_years: 5,
+                    privacy_level: "high".to_string(),
+                },
             },
-        ])
+            is_current: true,
+            is_draft: false,
+        }])
     }
 
-    async fn get_protocol_version(&self, experiment_id: &str, version: &str) -> Result<ProtocolVersion> {
-        info!("Mock getting protocol version {} for experiment: {}", version, experiment_id);
+    async fn get_protocol_version(
+        &self,
+        experiment_id: &str,
+        version: &str,
+    ) -> Result<ProtocolVersion> {
+        info!(
+            "Mock getting protocol version {} for experiment: {}",
+            version, experiment_id
+        );
         let versions = self.get_protocol_versions(experiment_id).await?;
-        versions.into_iter().find(|v| v.version == version)
+        versions
+            .into_iter()
+            .find(|v| v.version == version)
             .ok_or_else(|| anyhow::anyhow!("Version not found: {}", version))
     }
 
-    async fn create_protocol_version(&self, experiment_id: &str, content: ProtocolContent) -> Result<ProtocolVersion> {
-        info!("Mock creating protocol version for experiment: {}", experiment_id);
+    async fn create_protocol_version(
+        &self,
+        experiment_id: &str,
+        content: ProtocolContent,
+    ) -> Result<ProtocolVersion> {
+        info!(
+            "Mock creating protocol version for experiment: {}",
+            experiment_id
+        );
         use chrono::Utc;
         Ok(ProtocolVersion {
             id: format!("version-{}", uuid::Uuid::new_v4()),
@@ -548,8 +645,16 @@ impl ApiClientTrait for MockApiClient {
         })
     }
 
-    async fn update_protocol_version(&self, experiment_id: &str, version_id: &str, content: ProtocolContent) -> Result<ProtocolVersion> {
-        info!("Mock updating protocol version {} for experiment: {}", version_id, experiment_id);
+    async fn update_protocol_version(
+        &self,
+        experiment_id: &str,
+        version_id: &str,
+        content: ProtocolContent,
+    ) -> Result<ProtocolVersion> {
+        info!(
+            "Mock updating protocol version {} for experiment: {}",
+            version_id, experiment_id
+        );
         use chrono::Utc;
         Ok(ProtocolVersion {
             id: version_id.to_string(),
@@ -565,28 +670,41 @@ impl ApiClientTrait for MockApiClient {
         })
     }
 
-    async fn compare_protocol_versions(&self, experiment_id: &str, from_version: &str, to_version: &str) -> Result<ProtocolVersionDiff> {
-        info!("Mock comparing protocol versions {} -> {} for experiment: {}", from_version, to_version, experiment_id);
+    async fn compare_protocol_versions(
+        &self,
+        experiment_id: &str,
+        from_version: &str,
+        to_version: &str,
+    ) -> Result<ProtocolVersionDiff> {
+        info!(
+            "Mock comparing protocol versions {} -> {} for experiment: {}",
+            from_version, to_version, experiment_id
+        );
         Ok(ProtocolVersionDiff {
             from_version: from_version.to_string(),
             to_version: to_version.to_string(),
-            changes: vec![
-                ProtocolChange {
-                    field: "sample_size.target_n".to_string(),
-                    change_type: ChangeType::Modified,
-                    old_value: Some(serde_json::json!(80)),
-                    new_value: Some(serde_json::json!(100)),
-                    description: "Increased target sample size".to_string(),
-                    impact_level: ImpactLevel::Minor,
-                },
-            ],
+            changes: vec![ProtocolChange {
+                field: "sample_size.target_n".to_string(),
+                change_type: ChangeType::Modified,
+                old_value: Some(serde_json::json!(80)),
+                new_value: Some(serde_json::json!(100)),
+                description: "Increased target sample size".to_string(),
+                impact_level: ImpactLevel::Minor,
+            }],
             summary: "Minor changes to sample size configuration".to_string(),
             compatibility: CompatibilityStatus::Compatible,
         })
     }
 
-    async fn set_current_protocol_version(&self, experiment_id: &str, version_id: &str) -> Result<()> {
-        info!("Mock setting current protocol version {} for experiment: {}", version_id, experiment_id);
+    async fn set_current_protocol_version(
+        &self,
+        experiment_id: &str,
+        version_id: &str,
+    ) -> Result<()> {
+        info!(
+            "Mock setting current protocol version {} for experiment: {}",
+            version_id, experiment_id
+        );
         Ok(())
     }
 }
@@ -954,21 +1072,33 @@ impl ApiClientTrait for AdaptiveApiClient {
         }
     }
 
-    async fn get_protocol_version(&self, experiment_id: &str, version: &str) -> Result<ProtocolVersion> {
+    async fn get_protocol_version(
+        &self,
+        experiment_id: &str,
+        version: &str,
+    ) -> Result<ProtocolVersion> {
         if *self.is_real_available.read().await {
-            match self.real_client.get_protocol_version(experiment_id, version).await {
+            match self
+                .real_client
+                .get_protocol_version(experiment_id, version)
+                .await
+            {
                 Ok(protocol_version) => Ok(protocol_version),
                 Err(e) => {
                     if self.fallback_to_mock {
                         warn!("Real get_protocol_version failed, using mock: {}", e);
-                        self.mock_client.get_protocol_version(experiment_id, version).await
+                        self.mock_client
+                            .get_protocol_version(experiment_id, version)
+                            .await
                     } else {
                         Err(e)
                     }
                 }
             }
         } else if self.fallback_to_mock {
-            self.mock_client.get_protocol_version(experiment_id, version).await
+            self.mock_client
+                .get_protocol_version(experiment_id, version)
+                .await
         } else {
             Err(anyhow::anyhow!(
                 "Real API unavailable and fallback disabled"
@@ -976,21 +1106,33 @@ impl ApiClientTrait for AdaptiveApiClient {
         }
     }
 
-    async fn create_protocol_version(&self, experiment_id: &str, content: ProtocolContent) -> Result<ProtocolVersion> {
+    async fn create_protocol_version(
+        &self,
+        experiment_id: &str,
+        content: ProtocolContent,
+    ) -> Result<ProtocolVersion> {
         if *self.is_real_available.read().await {
-            match self.real_client.create_protocol_version(experiment_id, content.clone()).await {
+            match self
+                .real_client
+                .create_protocol_version(experiment_id, content.clone())
+                .await
+            {
                 Ok(version) => Ok(version),
                 Err(e) => {
                     if self.fallback_to_mock {
                         warn!("Real create_protocol_version failed, using mock: {}", e);
-                        self.mock_client.create_protocol_version(experiment_id, content).await
+                        self.mock_client
+                            .create_protocol_version(experiment_id, content)
+                            .await
                     } else {
                         Err(e)
                     }
                 }
             }
         } else if self.fallback_to_mock {
-            self.mock_client.create_protocol_version(experiment_id, content).await
+            self.mock_client
+                .create_protocol_version(experiment_id, content)
+                .await
         } else {
             Err(anyhow::anyhow!(
                 "Real API unavailable and fallback disabled"
@@ -998,21 +1140,34 @@ impl ApiClientTrait for AdaptiveApiClient {
         }
     }
 
-    async fn update_protocol_version(&self, experiment_id: &str, version_id: &str, content: ProtocolContent) -> Result<ProtocolVersion> {
+    async fn update_protocol_version(
+        &self,
+        experiment_id: &str,
+        version_id: &str,
+        content: ProtocolContent,
+    ) -> Result<ProtocolVersion> {
         if *self.is_real_available.read().await {
-            match self.real_client.update_protocol_version(experiment_id, version_id, content.clone()).await {
+            match self
+                .real_client
+                .update_protocol_version(experiment_id, version_id, content.clone())
+                .await
+            {
                 Ok(version) => Ok(version),
                 Err(e) => {
                     if self.fallback_to_mock {
                         warn!("Real update_protocol_version failed, using mock: {}", e);
-                        self.mock_client.update_protocol_version(experiment_id, version_id, content).await
+                        self.mock_client
+                            .update_protocol_version(experiment_id, version_id, content)
+                            .await
                     } else {
                         Err(e)
                     }
                 }
             }
         } else if self.fallback_to_mock {
-            self.mock_client.update_protocol_version(experiment_id, version_id, content).await
+            self.mock_client
+                .update_protocol_version(experiment_id, version_id, content)
+                .await
         } else {
             Err(anyhow::anyhow!(
                 "Real API unavailable and fallback disabled"
@@ -1020,21 +1175,34 @@ impl ApiClientTrait for AdaptiveApiClient {
         }
     }
 
-    async fn compare_protocol_versions(&self, experiment_id: &str, from_version: &str, to_version: &str) -> Result<ProtocolVersionDiff> {
+    async fn compare_protocol_versions(
+        &self,
+        experiment_id: &str,
+        from_version: &str,
+        to_version: &str,
+    ) -> Result<ProtocolVersionDiff> {
         if *self.is_real_available.read().await {
-            match self.real_client.compare_protocol_versions(experiment_id, from_version, to_version).await {
+            match self
+                .real_client
+                .compare_protocol_versions(experiment_id, from_version, to_version)
+                .await
+            {
                 Ok(diff) => Ok(diff),
                 Err(e) => {
                     if self.fallback_to_mock {
                         warn!("Real compare_protocol_versions failed, using mock: {}", e);
-                        self.mock_client.compare_protocol_versions(experiment_id, from_version, to_version).await
+                        self.mock_client
+                            .compare_protocol_versions(experiment_id, from_version, to_version)
+                            .await
                     } else {
                         Err(e)
                     }
                 }
             }
         } else if self.fallback_to_mock {
-            self.mock_client.compare_protocol_versions(experiment_id, from_version, to_version).await
+            self.mock_client
+                .compare_protocol_versions(experiment_id, from_version, to_version)
+                .await
         } else {
             Err(anyhow::anyhow!(
                 "Real API unavailable and fallback disabled"
@@ -1042,21 +1210,36 @@ impl ApiClientTrait for AdaptiveApiClient {
         }
     }
 
-    async fn set_current_protocol_version(&self, experiment_id: &str, version_id: &str) -> Result<()> {
+    async fn set_current_protocol_version(
+        &self,
+        experiment_id: &str,
+        version_id: &str,
+    ) -> Result<()> {
         if *self.is_real_available.read().await {
-            match self.real_client.set_current_protocol_version(experiment_id, version_id).await {
+            match self
+                .real_client
+                .set_current_protocol_version(experiment_id, version_id)
+                .await
+            {
                 Ok(()) => Ok(()),
                 Err(e) => {
                     if self.fallback_to_mock {
-                        warn!("Real set_current_protocol_version failed, using mock: {}", e);
-                        self.mock_client.set_current_protocol_version(experiment_id, version_id).await
+                        warn!(
+                            "Real set_current_protocol_version failed, using mock: {}",
+                            e
+                        );
+                        self.mock_client
+                            .set_current_protocol_version(experiment_id, version_id)
+                            .await
                     } else {
                         Err(e)
                     }
                 }
             }
         } else if self.fallback_to_mock {
-            self.mock_client.set_current_protocol_version(experiment_id, version_id).await
+            self.mock_client
+                .set_current_protocol_version(experiment_id, version_id)
+                .await
         } else {
             Err(anyhow::anyhow!(
                 "Real API unavailable and fallback disabled"

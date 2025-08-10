@@ -19,9 +19,9 @@ pub struct BusinessMetricsCollector {
 
     // Learning effectiveness metrics (stored as scaled integers)
     pub average_session_duration: Arc<AtomicU64>, // in minutes * 1000
-    pub task_completion_rate: Arc<AtomicU64>, // percentage * 1000
-    pub accuracy_rate: Arc<AtomicU64>, // percentage * 1000
-    pub learning_velocity: Arc<AtomicU64>, // tasks per hour * 1000
+    pub task_completion_rate: Arc<AtomicU64>,     // percentage * 1000
+    pub accuracy_rate: Arc<AtomicU64>,            // percentage * 1000
+    pub learning_velocity: Arc<AtomicU64>,        // tasks per hour * 1000
 
     // Content engagement metrics
     pub tasks_attempted: Arc<AtomicU64>,
@@ -32,8 +32,8 @@ pub struct BusinessMetricsCollector {
     // Conversion and growth metrics
     pub new_user_signups: Arc<AtomicU64>,
     pub trial_to_paid_conversion: Arc<AtomicU64>, // percentage * 1000
-    pub user_churn_rate: Arc<AtomicU64>, // percentage * 1000
-    pub customer_lifetime_value: Arc<AtomicU64>, // dollars * 100
+    pub user_churn_rate: Arc<AtomicU64>,          // percentage * 1000
+    pub customer_lifetime_value: Arc<AtomicU64>,  // dollars * 100
 
     // Platform health metrics
     pub error_impact_score: Arc<AtomicU64>, // business impact * 1000

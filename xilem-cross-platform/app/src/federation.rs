@@ -444,7 +444,7 @@ pub enum AnalysisCapability {
     SurvivalAnalysis,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ComplianceStandard {
     GDPR,       // EU General Data Protection Regulation
     HIPAA,      // US Health Insurance Portability
@@ -532,20 +532,29 @@ impl FederationNetwork {
     }
 
     pub fn join_protocol(&mut self, protocol_id: &str) -> Result<(), String> {
+        // First, validate the protocol (using immutable borrow)
+        {
+            let protocol = self
+                .shared_protocols
+                .get(protocol_id)
+                .ok_or("Protocol not found")?;
+
+            if protocol
+                .participating_nodes
+                .contains(&self.local_node.node_id)
+            {
+                return Err("Already participating in this protocol".to_string());
+            }
+
+            // Check capabilities against requirements
+            self.validate_protocol_compatibility(&protocol)?;
+        }
+
+        // Now get mutable access to update the protocol
         let protocol = self
             .shared_protocols
             .get_mut(protocol_id)
             .ok_or("Protocol not found")?;
-
-        if protocol
-            .participating_nodes
-            .contains(&self.local_node.node_id)
-        {
-            return Err("Already participating in this protocol".to_string());
-        }
-
-        // Check capabilities against requirements
-        self.validate_protocol_compatibility(&protocol)?;
 
         protocol
             .participating_nodes
