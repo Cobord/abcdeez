@@ -147,7 +147,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                         );
                                     }
                                 },
-                            ));
+                            ).boxed());
                         }
                     } else {
                         version_buttons.push(button(
@@ -156,7 +156,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                 data.show_protocol_editor = true;
                                 data.show_experiment_setup = false;
                             },
-                        ));
+                        ).boxed());
                     }
                     version_buttons
                 })
@@ -794,7 +794,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                             }
                         }
                     }
-                })
+                }).boxed()
             })
             .collect();
 
@@ -825,7 +825,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                             if let Some(controller) = &mut data.research_controller {
                                 controller.sensor_recording_enabled = true;
                             }
-                        }));
+                        }).boxed());
                     }
                     all_sensor_buttons
                 }).direction(Axis::Horizontal),
@@ -1497,7 +1497,8 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                         ))
                         .direction(Axis::Horizontal),
                     ))
-                    .direction(Axis::Vertical),
+                    .direction(Axis::Vertical)
+                    .boxed(),
                 )
             } else {
                 Some(
@@ -1507,12 +1508,14 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                         label("Features: Protocol sharing, data federation, compliance management")
                             .alignment(TextAlignment::Start),
                     ))
-                    .direction(Axis::Vertical),
+                    .direction(Axis::Vertical)
+                    .boxed(),
                 )
             },
         ))
         .direction(Axis::Vertical),
-    );
+    )
+    .into_any_flex();
 
     // Protocol Versioning Controls
     let protocol_versioning_controls = if has_controller {
@@ -1570,7 +1573,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
             "📋 Protocol Version History",
             flex((
                 if data.protocol_loading {
-                    Some(label("Loading protocol versions...").alignment(TextAlignment::Middle))
+                    Some(label("Loading protocol versions...").alignment(TextAlignment::Middle).boxed())
                 } else if data.protocol_versions.is_empty() {
                     Some(
                         flex((
@@ -1580,7 +1583,8 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                                 data.show_protocol_version_history = false;
                             }),
                         ))
-                        .direction(Axis::Vertical),
+                        .direction(Axis::Vertical)
+                        .boxed(),
                     )
                 } else {
                     let version_list = data
@@ -1638,7 +1642,8 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                         .collect::<Vec<_>>();
                     Some(
                         flex((flex(version_list).direction(Axis::Vertical), label("")))
-                            .direction(Axis::Vertical),
+                            .direction(Axis::Vertical)
+                            .boxed(),
                     )
                 },
                 button("❌ Close", |data: &mut AppData| {
@@ -1717,7 +1722,8 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                             )
                             .direction(Axis::Vertical),
                         ))
-                        .direction(Axis::Vertical),
+                        .direction(Axis::Vertical)
+                        .boxed(),
                     )
                 } else {
                     Some(
@@ -1727,7 +1733,8 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                             label(""),
                             label(""),
                         ))
-                        .direction(Axis::Vertical),
+                        .direction(Axis::Vertical)
+                        .boxed(),
                     )
                 },
                 button("❌ Close", |data: &mut AppData| {
@@ -1951,30 +1958,59 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
         None
     };
 
-    flex((
+    let mut root_children = Vec::new();
+    root_children.push(
         label("🔬 Research Dashboard")
             .brush(Color::from_rgb8(128, 0, 255))
-            .alignment(TextAlignment::Middle),
-        experiment_status,
-        experiment_setup,
-        federation_setup_modal,
-        protocol_browser_modal,
-        study_coordination_modal,
-        irb_form_modal,
-        irb_documents_modal,
-        protocol_history_modal,
-        protocol_comparison_modal,
-        protocol_editor_modal,
-        audio_controls,
-        sensor_controls,
-        federation_controls,
-        protocol_versioning_controls,
-        irb_controls,
-        collected_data,
-        analysis_section,
-        export_controls,
-        privacy_controls,
-        navigation,
-    ))
-    .direction(Axis::Vertical)
+            .alignment(TextAlignment::Middle)
+            .into_any_flex(),
+    );
+    root_children.push(experiment_status);
+    if let Some(v) = experiment_setup {
+        root_children.push(v.into_any_flex());
+    }
+    if let Some(v) = federation_setup_modal {
+        root_children.push(v.into_any_flex());
+    }
+    if let Some(v) = protocol_browser_modal {
+        root_children.push(v.into_any_flex());
+    }
+    if let Some(v) = study_coordination_modal {
+        root_children.push(v.into_any_flex());
+    }
+    if let Some(v) = irb_form_modal {
+        root_children.push(v.into_any_flex());
+    }
+    if let Some(v) = irb_documents_modal {
+        root_children.push(v.into_any_flex());
+    }
+    if let Some(v) = protocol_history_modal {
+        root_children.push(v.into_any_flex());
+    }
+    if let Some(v) = protocol_comparison_modal {
+        root_children.push(v.into_any_flex());
+    }
+    if let Some(v) = protocol_editor_modal {
+        root_children.push(v.into_any_flex());
+    }
+    if let Some(v) = audio_controls {
+        root_children.push(v.into_any_flex());
+    }
+    if let Some(v) = sensor_controls {
+        root_children.push(v.into_any_flex());
+    }
+    root_children.push(federation_controls);
+    if let Some(v) = protocol_versioning_controls {
+        root_children.push(v.into_any_flex());
+    }
+    if let Some(v) = irb_controls {
+        root_children.push(v.into_any_flex());
+    }
+    root_children.push(collected_data);
+    root_children.push(analysis_section);
+    root_children.push(export_controls.into_any_flex());
+    root_children.push(privacy_controls.into_any_flex());
+    root_children.push(navigation.into_any_flex());
+
+    flex(root_children).direction(Axis::Vertical)
 }

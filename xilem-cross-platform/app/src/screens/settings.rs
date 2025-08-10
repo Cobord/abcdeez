@@ -262,7 +262,7 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 ))
                 .direction(Axis::Horizontal),
                 if data.show_api_settings {
-                    flex((
+                    let expanded_block = flex((
                         labeled_input(
                             "API Base URL",
                             data.api_url_input.clone(),
@@ -324,6 +324,7 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                                     match api_client.as_ref().health_check().await {
                                         Ok(()) => {
                                             // Connection successful
+                                            // In a real app we would update state via a channel; for now just log
                                         }
                                         Err(_) => {
                                             // Connection failed
@@ -343,9 +344,11 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                             })
                             .alignment(TextAlignment::Start),
                     ))
-                    .direction(Axis::Vertical)
+                    .direction(Axis::Vertical);
+                    expanded_block.boxed()
                 } else {
-                    flex((
+                    // Create a boxed collapsed block to match the expanded arm type
+                    let collapsed_block = flex((
                         label("API settings collapsed").alignment(TextAlignment::Middle),
                         label(""),
                         label(""),
@@ -353,7 +356,8 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                         label(""),
                         label(""),
                     ))
-                    .direction(Axis::Vertical)
+                    .direction(Axis::Vertical);
+                    collapsed_block.boxed()
                 },
             ))
             .direction(Axis::Vertical),
