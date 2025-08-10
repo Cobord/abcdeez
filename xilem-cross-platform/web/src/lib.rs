@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 use web_sys::{Document, Element, HtmlButtonElement, HtmlDivElement, HtmlElement, HtmlInputElement, window};
-use graph_learning_core::{
+use abcdeez_core::{
     adaptive::AdaptiveScheduler,
     learner::LearnerModel,
     tasks::{AlphabetTask, TaskGenerator},

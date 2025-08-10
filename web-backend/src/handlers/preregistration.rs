@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{error::AppError, models::preregistration::*, state::AppState};
+use sqlx::Row;
 
 /// Query parameters for listing pre-registrations
 #[derive(Debug, Deserialize)]
@@ -71,7 +72,7 @@ pub async fn create_preregistration(
         now,
         now,
     )
-    .execute(&state.db)
+    .execute(&state.db_pool)
     .await?;
 
     Ok(Json(PreRegistrationResponse {
@@ -97,7 +98,7 @@ pub async fn get_preregistration(
         "SELECT * FROM preregistrations WHERE id = ?",
         id
     )
-    .fetch_one(&state.db)
+    .fetch_one(&state.db_pool)
     .await?;
 
     // Parse JSON fields
@@ -109,7 +110,7 @@ pub async fn get_preregistration(
         "SELECT COUNT(*) FROM preregistration_deviations WHERE preregistration_id = ?",
         id
     )
-    .fetch_one(&state.db)
+    .fetch_one(&state.db_pool)
     .await?;
 
     // Generate transparency report if registered
@@ -159,7 +160,7 @@ pub async fn update_preregistration(
 ) -> Result<Json<PreRegistrationResponse>, AppError> {
     // Check if pre-registration exists and is in draft status
     let current = sqlx::query!("SELECT status FROM preregistrations WHERE id = ?", id)
-        .fetch_one(&state.db)
+        .fetch_one(&state.db_pool)
         .await?;
 
     if current.status != "draft" {
@@ -177,7 +178,7 @@ pub async fn update_preregistration(
             title,
             id
         )
-        .execute(&state.db)
+        .execute(&state.db_pool)
         .await?;
     }
 
@@ -187,7 +188,7 @@ pub async fn update_preregistration(
             description,
             id
         )
-        .execute(&state.db)
+        .execute(&state.db_pool)
         .await?;
     }
 
@@ -198,7 +199,7 @@ pub async fn update_preregistration(
             json,
             id
         )
-        .execute(&state.db)
+        .execute(&state.db_pool)
         .await?;
     }
 
@@ -208,7 +209,7 @@ pub async fn update_preregistration(
         Utc::now(),
         id
     )
-    .execute(&state.db)
+    .execute(&state.db_pool)
     .await?;
 
     get_preregistration(State(state), Path(id)).await
@@ -225,7 +226,7 @@ pub async fn finalize_preregistration(
         "SELECT * FROM preregistrations WHERE id = ?",
         id
     )
-    .fetch_one(&state.db)
+    .fetch_one(&state.db_pool)
     .await?;
 
     if prereg.status != "draft" {
@@ -283,7 +284,7 @@ pub async fn finalize_preregistration(
         now,
         id
     )
-    .execute(&state.db)
+    .execute(&state.db_pool)
     .await?;
 
     get_preregistration(State(state), Path(id)).await
@@ -312,7 +313,7 @@ pub async fn record_deviation(
         payload.impact_assessment,
         "researcher_1", // TODO: Get from auth context
     )
-    .execute(&state.db)
+    .execute(&state.db_pool)
     .await?;
 
     Ok(StatusCode::CREATED)
@@ -329,7 +330,7 @@ pub async fn validate_analysis(
         "SELECT analysis_plan FROM preregistrations WHERE id = ?",
         id
     )
-    .fetch_one(&state.db)
+    .fetch_one(&state.db_pool)
     .await?;
 
     let analysis_plan: AnalysisPlan = serde_json::from_str(&prereg.analysis_plan)?;
@@ -394,7 +395,7 @@ pub async fn validate_analysis(
         deviation_reason,
         is_exploratory,
     )
-    .execute(&state.db)
+    .execute(&state.db_pool)
     .await?;
 
     Ok(Json(ValidationResponse {
@@ -436,7 +437,7 @@ pub async fn list_preregistrations(
     }
 
     let preregistrations = sqlx::query_as::<_, PreRegistrationDb>(&query)
-        .fetch_all(&state.db)
+        .fetch_all(&state.db_pool)
         .await?;
 
     let responses: Vec<PreRegistrationResponse> = preregistrations

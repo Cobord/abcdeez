@@ -1,8 +1,12 @@
 [workspace]
 members = [
-    "alphabet-terminal-prototype",
+    "core",
     "web-backend",
-    "xilem-cross-platform/app",
+	"xilem-app",
+
+    "xilem-cross-platform/desktop",
+    "xilem-cross-platform/mobile",
+    "xilem-cross-platform/web",
 ]
 resolver = "2"
 
@@ -26,6 +30,9 @@ rand = "0.8"
 rand_distr = "0.4"
 statrs = "0.17"
 
+# GUI
+winit = { version = "0.30.12", features = ["android-native-activity"] }
+
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
@@ -36,12 +43,3 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Error handling
 anyhow = "1.0"
 thiserror = "1.0"
-
-# The profile that 'cargo dist' will build with
-[profile.dist]
-inherits = "release"
-lto = "thin"
-strip = true
-opt-level = "z"
-codegen-units = 1
-

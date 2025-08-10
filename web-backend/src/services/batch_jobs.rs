@@ -730,7 +730,6 @@ impl BatchJobService {
 
     /// Schedule daily audit retention cleanup job (typically run at night)
     pub async fn schedule_audit_cleanup(&self, dry_run: bool) -> Result<Uuid> {
-        let job_id = Uuid::new_v4();
         let payload = serde_json::json!({
             "scheduled_at": chrono::Utc::now(),
             "dry_run": dry_run,
@@ -738,9 +737,12 @@ impl BatchJobService {
         })
         .to_string();
 
-        self.schedule_job(job_id, JobType::AuditRetentionCleanup, &payload)
-            .await?;
-        Ok(job_id)
+        self
+            .schedule_job(
+                JobType::AuditRetentionCleanup,
+                serde_json::json!({ "payload": payload }),
+            )
+            .await
     }
 
     /// Start background audit cleanup scheduler (run daily at 2 AM)
@@ -751,6 +753,7 @@ impl BatchJobService {
             interval.tick().await;
 
             // Check if it's around 2 AM local time for cleanup
+            use chrono::Timelike;
             let now = chrono::Utc::now();
             if now.hour() == 2 {
                 match self.schedule_audit_cleanup(false).await {

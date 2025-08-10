@@ -1,5 +1,5 @@
 [package]
-name = "graph_learning_web"
+name = "abcdeez-web"
 version = "0.1.0"
 publish = false
 edition = "2021"
@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Core library
-graph-learning-core = { path = "../../alphabet-terminal-prototype", package = "graph-learning-core" }
+abcdeez-core = { path = "../../core" }
 
 # Web platform
 wasm-bindgen = "0.2"

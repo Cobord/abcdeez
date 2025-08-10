@@ -675,7 +675,7 @@ impl AuditService {
         let mut total_actions = std::collections::HashMap::new();
         let mut ip_summary = std::collections::HashMap::new();
 
-        for row in records {
+        for row in &records {
             let action: String = row.get("action");
             let resource_type: String = row.get("resource_type");
             let timestamp: DateTime<Utc> = row.get("timestamp");
@@ -719,11 +719,14 @@ impl AuditService {
                 "records_eligible_for_deletion": report_sections.len(),
                 "action_breakdown": total_actions,
                 "unique_ip_addresses": ip_summary.len(),
-                "top_ip_addresses": {
-                    let mut ip_vec: Vec<_> = ip_summary.into_iter().collect();
-                    ip_vec.sort_by(|a, b| b.1.cmp(&a.1));
-                    ip_vec.into_iter().take(10).collect::<std::collections::HashMap<_, _>>()
-                }
+                    "top_ip_addresses": (|| {
+                        let mut ip_vec: Vec<_> = ip_summary.clone().into_iter().collect();
+                        ip_vec.sort_by(|a, b| b.1.cmp(&a.1));
+                        ip_vec
+                            .into_iter()
+                            .take(10)
+                            .collect::<std::collections::HashMap<_, _>>()
+                    })()
             },
             "records_eligible_for_deletion": report_sections,
             "retention_policies_applied": retention_manager

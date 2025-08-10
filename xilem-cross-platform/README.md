@@ -12,7 +12,7 @@ Example setup for using xilem on android, iOS, and desktop
 ```sh
 rustup target add aarch64-apple-ios
 
-open xilem_example_mobile.xcodeproj
+open xilem_abcdeez_mobile.xcodeproj
 # Configure signing
 
 # Build
@@ -24,7 +24,7 @@ open xilem_example_mobile.xcodeproj
 rustup target add aarch64-linux-android armv7-linux-androideabi
 cargo install cargo-apk
 
-cargo apk run -p xilem_example_mobile
+cargo apk run -p xilem_abcdeez_mobile
 ```
 
 ### Desktop
@@ -43,7 +43,7 @@ cargo run --manifest-path=./desktop/Cargo.toml
   calls the `android_main` function from the `mobile` crate.
 - iOS also uses the `mobile` crate but compiles is a library(using `cdylib`)
   which is then called by an Objective-C file in `ios-src`. There's an XCode
-  project in `xilem_example_mobile.xcodeproj` that includes the required files
+  project in `xilem_abcdeez_mobile.xcodeproj` that includes the required files
   and which calls `build_rust_deps.sh` during build to compile the rust code.
 - There's a separate crate for the desktop build since cargo-apk fails if the
   mobile project contains a binary target. It's a normal cargo project

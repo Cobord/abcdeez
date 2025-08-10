@@ -1,5 +1,5 @@
 [package]
-name = "xilem_example_desktop"
+name = "xilem_abcdeez_desktop"
 edition.workspace = true
 version = "0.1.0"
 description = "Desktop application for graph learning"
@@ -17,5 +17,5 @@ license = false
 eula = false
 
 [dependencies]
-graph_learning_app = { path = "../app" }
+abcdeez-app = { path = "../../xilem-app" }
 winit.workspace = true

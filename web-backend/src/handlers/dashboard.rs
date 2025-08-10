@@ -199,7 +199,7 @@ pub async fn otel_metrics(
     let exporter = OtelMetricsExporter::new(
         "learning-system".to_string(),
         env!("CARGO_PKG_VERSION").to_string(),
-        state.config.environment.to_string(),
+        format!("{:?}", state.config.environment),
     );
 
     let app_metrics = exporter.export_application_metrics().await;

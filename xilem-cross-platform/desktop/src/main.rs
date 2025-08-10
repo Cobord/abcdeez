@@ -1,4 +1,4 @@
-use graph_learning_app::run;
+use abcdeez_app::run;
 
 pub fn main() {
     run();

@@ -748,10 +748,12 @@ pub async fn response_time_analysis(
     }
 
     if response_times.is_empty() {
-        return Ok(Json(serde_json::json!({
+        let body = serde_json::json!({
             "error": "No response time data found",
             "analyzed_learners": learner_ids.len()
-        })));
+        });
+        let response = axum::response::Response::new(axum::body::Body::from(body.to_string()));
+        return Ok(response);
     }
 
     // Calculate detailed statistics

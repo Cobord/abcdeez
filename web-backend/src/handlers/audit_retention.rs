@@ -223,7 +223,7 @@ pub async fn get_audit_trail_with_retention(
     })))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AuditTrailQuery {
     pub resource_type: Option<String>,
     pub resource_id: Option<String>,

@@ -1,1 +1,0 @@
-# Effective Learning Strategies

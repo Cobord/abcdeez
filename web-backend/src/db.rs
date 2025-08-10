@@ -4,6 +4,7 @@ use sqlx::sqlite::SqlitePool;
 use sqlx::{postgres::PgPool, Pool, Postgres};
 
 use anyhow::Result;
+use sqlx::Row;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -432,10 +433,13 @@ impl MigrationManager {
         #[cfg(feature = "sqlite")]
         {
             // For SQLite, we can use VACUUM INTO or copy the file
-            let db_path = std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "sqlite:test.db".to_string())
-                .strip_prefix("sqlite:")
-                .unwrap_or("test.db");
+            let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite:test.db".to_string());
+            let db_path_owned = if let Some(stripped) = db_url.strip_prefix("sqlite:") {
+                stripped.to_string()
+            } else {
+                db_url
+            };
+            let db_path = db_path_owned.as_str();
 
             std::fs::create_dir_all("backups")?;
             std::fs::copy(db_path, &backup_path)?;

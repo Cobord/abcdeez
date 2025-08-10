@@ -1,3 +1,0 @@
-- the app lives in ./app/src
-- ignore all directories besides the app directory
-- rust, xilem

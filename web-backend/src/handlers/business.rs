@@ -33,14 +33,16 @@ pub async fn get_learning_effectiveness(
 ) -> AppResult<Json<LearningEffectivenessMetrics>> {
     // Calculate learning effectiveness metrics
     let metrics = LearningEffectivenessMetrics {
-        skill_progression_velocity: global_business_metrics()
-            .learning_velocity
-            .load(std::sync::atomic::Ordering::Relaxed)
-            .into(),
-        knowledge_retention_rate: global_business_metrics()
-            .task_completion_rate
-            .load(std::sync::atomic::Ordering::Relaxed)
-            .into(),
+        skill_progression_velocity: f64::from_bits(
+            global_business_metrics()
+                .learning_velocity
+                .load(std::sync::atomic::Ordering::Relaxed),
+        ),
+        knowledge_retention_rate: f64::from_bits(
+            global_business_metrics()
+                .task_completion_rate
+                .load(std::sync::atomic::Ordering::Relaxed),
+        ),
         adaptive_difficulty_effectiveness: 0.85, // Would be calculated from actual data
         personalization_impact: 0.72,            // Would be A/B tested
         intervention_success_rate: 0.68,         // Success rate of learning interventions
