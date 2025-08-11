@@ -17,6 +17,7 @@ abcdeez-core = { path = "../../core" }
 
 # Web platform
 wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = [
     "Document",
     "Element",
@@ -28,7 +29,19 @@ web-sys = { version = "0.3", features = [
     "Storage",
     "Event",
     "MouseEvent",
-    "console"
+    "console",
+    "Navigator",
+    "ServiceWorker",
+    "ServiceWorkerContainer",
+    "ServiceWorkerRegistration",
+    "PushManager",
+    "PushSubscription",
+    "Notification",
+    "NotificationPermission",
+    "MessageEvent",
+    "BroadcastChannel",
+    "NetworkInformation",
+    "ConnectionType"
 ] }
 console_error_panic_hook = "0.1"
 wee_alloc = { version = "0.4", optional = true }
@@ -40,3 +53,4 @@ serde_json = "1.0"
 # Utils
 js-sys = "0.3"
 getrandom = { version = "0.2", features = ["js"] }
+uuid = { version = "1.0", features = ["v4", "js", "serde"] }

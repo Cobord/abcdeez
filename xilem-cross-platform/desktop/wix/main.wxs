@@ -60,8 +60,8 @@
 
     <Product
         Id='*'
-        Name='abcdeez-core'
-        UpgradeCode='30408D81-5220-499B-A8E2-5B7753E792D2'
+        Name='xilem_abcdeez_desktop'
+        UpgradeCode='A2B3C4D5-E6F7-8901-2345-678901234567'
         Manufacturer='ember arlynx'
         Language='1033'
         Codepage='1252'
@@ -69,7 +69,7 @@
 
         <Package Id='*'
             Keywords='Installer'
-            Description='Adaptive graph-coded learning system for cognitive modeling'
+            Description='Desktop application for graph learning'
             Manufacturer='ember arlynx'
             InstallerVersion='450'
             Languages='1033'
@@ -83,11 +83,11 @@
             DowngradeErrorMessage='A newer version of [ProductName] is already installed. Setup will now exit.'/>
 
         <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
-        <Property Id='DiskPrompt' Value='abcdeez-core Installation'/>
+        <Property Id='DiskPrompt' Value='xilem_abcdeez_desktop Installation'/>
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
-                <Directory Id='APPLICATIONFOLDER' Name='abcdeez-core'>
+                <Directory Id='APPLICATIONFOLDER' Name='xilem_abcdeez_desktop'>
                     
                     <!--
                       Enabling the license sidecar file in the installer is a four step process:
@@ -110,7 +110,7 @@
                     -->
 
                     <Directory Id='Bin' Name='bin'>
-                        <Component Id='Path' Guid='8D38F036-1B82-4AC0-AB56-6E023080CBAF' KeyPath='yes'>
+                        <Component Id='Path' Guid='B3C4D5E6-F789-0123-4567-890123456789' KeyPath='yes'>
                             <Environment
                                 Id='PATH'
                                 Name='PATH'
@@ -123,9 +123,9 @@
                         <Component Id='binary0' Guid='*'>
                             <File
                                 Id='exe0'
-                                Name='abcdeez-cli.exe'
+                                Name='xilem_abcdeez_desktop.exe'
                                 DiskId='1'
-                                Source='$(var.CargoTargetBinDir)\abcdeez-cli.exe'
+                                Source='$(var.CargoTargetBinDir)\xilem_abcdeez_desktop.exe'
                                 KeyPath='yes'/>
                         </Component>
                     </Directory>
@@ -173,8 +173,18 @@
         <!--<Icon Id='ProductICO' SourceFile='wix\Product.ico'/>-->
         <!--<Property Id='ARPPRODUCTICON' Value='ProductICO' />-->
 
-        <Property Id='ARPHELPLINK' Value='https://abcdeez.fg-goose.online'/>
         
+        <!--
+          Adding a URL to Add/Remove Programs control panel listing for the
+          application is a two step process:
+
+          1. Uncomment the following `Property` tag with the "ARPHELPLINK" Id
+             attribute value.
+          2. Change the value for `Value` attribute of the following
+             `Property` tag to a valid URL.
+        -->
+        <!--<Property Id='ARPHELPLINK' Value='ChangeMe'/>-->
+
         <UI>
             <UIRef Id='WixUI_FeatureTree'/>
             

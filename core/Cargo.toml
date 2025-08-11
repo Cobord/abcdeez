@@ -9,6 +9,12 @@ repository = "https://github.com/emberian/abcdeez"
 homepage = "https://abcdeez.fg-goose.online"
 readme = "../README.md"
 
+[package.metadata.wix]
+upgrade-guid = "30408D81-5220-499B-A8E2-5B7753E792D2"
+path-guid = "8D38F036-1B82-4AC0-AB56-6E023080CBAF"
+license = false
+eula = false
+
 [lib]
 name = "abcdeez_core"
 path = "src/lib.rs"

@@ -1,5 +1,7 @@
+mod offline;
+
 use wasm_bindgen::prelude::*;
-use web_sys::{Document, Element, HtmlElement, window};
+use web_sys::{Document, Element, HtmlElement, window, Navigator, ServiceWorkerContainer};
 use abcdeez_core::{
     learning::adaptive::AdaptiveScheduler,
     learning::learner::LearnerModel,
@@ -7,6 +9,7 @@ use abcdeez_core::{
     core::topology::Topology,
 };
 use serde::{Deserialize, Serialize};
+use offline::{OfflineStorage, SyncQueue, SyncOperation, CacheManager};
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global allocator.
 #[cfg(feature = "wee_alloc")]
@@ -32,6 +35,16 @@ struct AppState {
     correct_trials: usize,
     current_task: Option<String>,
     current_target: Option<char>,
+    is_guest_mode: bool,
+    is_offline: bool,
+    user_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SyncData {
+    timestamp: f64,
+    data_type: String,
+    payload: serde_json::Value,
 }
 
 impl Default for AppState {
@@ -43,6 +56,9 @@ impl Default for AppState {
             correct_trials: 0,
             current_task: None,
             current_target: None,
+            is_guest_mode: true,
+            is_offline: false,
+            user_id: None,
         }
     }
 }
@@ -55,6 +71,11 @@ pub struct GraphLearningApp {
     task_generator: Option<TaskGenerator>,
     current_task: Option<Task>,
     document: Document,
+    navigator: Navigator,
+    service_worker: Option<ServiceWorkerContainer>,
+    offline_storage: OfflineStorage,
+    sync_queue: SyncQueue,
+    cache_manager: CacheManager,
 }
 
 #[wasm_bindgen]
@@ -65,6 +86,11 @@ impl GraphLearningApp {
         
         let window = window().unwrap();
         let document = window.document().unwrap();
+        let navigator = window.navigator();
+        let service_worker = Some(navigator.service_worker());
+        let offline_storage = OfflineStorage::new()?;
+        let cache_manager = CacheManager::new()?;
+        let sync_queue = cache_manager.load_sync_queue().unwrap_or_else(|_| SyncQueue::new());
         
         let mut app = GraphLearningApp {
             state: AppState::default(),
@@ -73,10 +99,21 @@ impl GraphLearningApp {
             task_generator: None,
             current_task: None,
             document,
+            navigator,
+            service_worker,
+            offline_storage,
+            sync_queue,
+            cache_manager,
         };
         
         // Load state from localStorage if available
         app.load_state();
+        
+        // Register service worker
+        app.register_service_worker();
+        
+        // Setup online/offline detection
+        app.setup_offline_detection();
         
         Ok(app)
     }
@@ -84,7 +121,72 @@ impl GraphLearningApp {
     pub fn init(&mut self) -> Result<(), JsValue> {
         console_log!("Initializing Graph Learning App");
         self.render()?;
+        self.check_online_status();
         Ok(())
+    }
+    
+    fn register_service_worker(&self) {
+        if let Some(sw_container) = &self.service_worker {
+            let sw_container = sw_container.clone();
+            let promise = sw_container.register("/service-worker.js");
+            
+            let future = wasm_bindgen_futures::JsFuture::from(promise);
+            wasm_bindgen_futures::spawn_local(async move {
+                match future.await {
+                    Ok(_registration) => {
+                        console_log!("Service Worker registered successfully");
+                    },
+                    Err(e) => {
+                        console_log!("Service Worker registration failed: {:?}", e);
+                    }
+                }
+            });
+        }
+    }
+    
+    fn setup_offline_detection(&mut self) {
+        let window = window().unwrap();
+        
+        // Check initial online status
+        self.state.is_offline = !window.navigator().on_line();
+        
+        // Note: Event listeners for online/offline would need to be set up
+        // through JavaScript interop as Rust/WASM doesn't have direct access
+    }
+    
+    fn check_online_status(&mut self) {
+        let window = window().unwrap();
+        let was_offline = self.state.is_offline;
+        self.state.is_offline = !window.navigator().on_line();
+        
+        // If we came back online, try to sync
+        if was_offline && !self.state.is_offline {
+            self.sync_pending_data();
+        }
+    }
+    
+    fn sync_pending_data(&mut self) {
+        if self.sync_queue.is_empty() {
+            return;
+        }
+        
+        if !self.state.is_guest_mode && self.state.user_id.is_some() {
+            // In a real implementation, this would send data to the server
+            console_log!("Syncing {} pending items", self.sync_queue.len());
+            
+            // Take all items from the queue
+            let items = self.sync_queue.take_all();
+            
+            // Here you would normally send items to the server
+            // For now, we'll just log them
+            for item in items {
+                console_log!("Would sync: {:?}", item.operation);
+            }
+            
+            // Save the now-empty queue
+            let _ = self.cache_manager.save_sync_queue(&self.sync_queue);
+            self.save_state();
+        }
     }
     
     pub fn render(&mut self) -> Result<(), JsValue> {
@@ -107,28 +209,58 @@ impl GraphLearningApp {
     }
     
     fn render_welcome_screen(&self, container: &Element) -> Result<(), JsValue> {
-        let html = r#"
+        let mode_text = if self.state.is_guest_mode { 
+            "Guest Mode - Data stored locally" 
+        } else { 
+            "Logged In - Data synced to cloud" 
+        };
+        
+        let offline_indicator = if self.state.is_offline {
+            r#"<div class="offline-indicator">🔴 Offline Mode</div>"#
+        } else {
+            r#"<div class="online-indicator">🟢 Online</div>"#
+        };
+        
+        let html = format!(r#"
             <div class="container">
+                {}
                 <div class="card">
                     <h1>🎓 Welcome to Graph Learning</h1>
                     <p>An adaptive learning system for cognitive skill acquisition</p>
+                    <p class="mode-indicator">{}</p>
                     <div class="button-group">
-                        <button id="start-btn" class="button">Start Learning</button>
+                        <button id="start-guest-btn" class="button">Start as Guest</button>
+                        <button id="login-btn" class="button secondary">Login / Sign Up</button>
                         <button id="dashboard-btn" class="button secondary">View Dashboard</button>
                     </div>
+                    {}
                 </div>
             </div>
-        "#;
+        "#, offline_indicator, mode_text,
+            if self.sync_queue.len() > 0 {
+                format!("<p class='sync-status'>📤 {} items pending sync</p>", self.sync_queue.len())
+            } else {
+                String::new()
+            });
         
-        container.set_inner_html(html);
+        container.set_inner_html(&html);
         
         // Add event listeners
-        if let Some(start_btn) = self.document.get_element_by_id("start-btn") {
+        if let Some(start_btn) = self.document.get_element_by_id("start-guest-btn") {
             let start_btn = start_btn.dyn_into::<HtmlElement>()?;
             let closure = Closure::wrap(Box::new(move || {
-                console_log!("Start button clicked");
+                console_log!("Starting in guest mode");
             }) as Box<dyn Fn()>);
             start_btn.set_onclick(Some(closure.as_ref().unchecked_ref()));
+            closure.forget();
+        }
+        
+        if let Some(login_btn) = self.document.get_element_by_id("login-btn") {
+            let login_btn = login_btn.dyn_into::<HtmlElement>()?;
+            let closure = Closure::wrap(Box::new(move || {
+                console_log!("Login button clicked");
+            }) as Box<dyn Fn()>);
+            login_btn.set_onclick(Some(closure.as_ref().unchecked_ref()));
             closure.forget();
         }
         
@@ -162,7 +294,7 @@ impl GraphLearningApp {
             </div>
         "#;
         
-        container.set_inner_html(html);
+        container.set_inner_html(&html);
         Ok(())
     }
     
@@ -297,6 +429,28 @@ impl GraphLearningApp {
                 scheduler.update_after_response(task, correct, 1.5);
             }
             
+            // Queue for sync if not in guest mode
+            if !self.state.is_guest_mode {
+                self.sync_queue.add(
+                    SyncOperation::Create,
+                    serde_json::json!({
+                        "type": "response",
+                        "task": task.prompt.clone(),
+                        "response": response_str,
+                        "correct": correct,
+                        "timestamp": js_sys::Date::now()
+                    })
+                );
+                
+                // Save sync queue to storage
+                let _ = self.cache_manager.save_sync_queue(&self.sync_queue);
+                
+                // Try to sync immediately if online
+                if !self.state.is_offline {
+                    self.sync_pending_data();
+                }
+            }
+            
             self.generate_next_task();
             self.save_state();
             self.render()?;
@@ -305,24 +459,46 @@ impl GraphLearningApp {
         Ok(())
     }
     
+    pub fn start_guest_mode(&mut self) -> Result<(), JsValue> {
+        self.state.is_guest_mode = true;
+        self.state.user_id = None;
+        self.state.current_screen = "domains".to_string();
+        self.save_state();
+        self.render()?;
+        Ok(())
+    }
+    
+    pub fn login(&mut self, user_id: String) -> Result<(), JsValue> {
+        self.state.is_guest_mode = false;
+        self.state.user_id = Some(user_id);
+        
+        // Sync any pending data
+        if !self.state.is_offline {
+            self.sync_pending_data();
+        }
+        
+        self.save_state();
+        self.render()?;
+        Ok(())
+    }
+    
     fn save_state(&self) {
-        if let Ok(storage) = window().unwrap().local_storage() {
-            if let Some(storage) = storage {
-                if let Ok(json) = serde_json::to_string(&self.state) {
-                    let _ = storage.set_item("graph_learning_state", &json);
-                }
-            }
+        if let Err(e) = self.offline_storage.save_json("graph_learning_state", &self.state) {
+            console_log!("Failed to save state: {:?}", e);
         }
     }
     
     fn load_state(&mut self) {
-        if let Ok(storage) = window().unwrap().local_storage() {
-            if let Some(storage) = storage {
-                if let Ok(Some(json)) = storage.get_item("graph_learning_state") {
-                    if let Ok(state) = serde_json::from_str(&json) {
-                        self.state = state;
-                    }
-                }
+        match self.offline_storage.load_json::<AppState>("graph_learning_state") {
+            Ok(Some(state)) => {
+                self.state = state;
+                console_log!("Loaded state from storage");
+            },
+            Ok(None) => {
+                console_log!("No saved state found");
+            },
+            Err(e) => {
+                console_log!("Failed to load state: {:?}", e);
             }
         }
     }
