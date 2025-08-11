@@ -15,22 +15,34 @@ eula = false
 default = ["sqlite"]
 sqlite = ["sqlx/sqlite"]
 postgres = ["sqlx/postgres"]
+runtime-multi-db = ["sqlite", "postgres"]  # Enable both for runtime selection
 
 [dependencies]
 # Core library
 abcdeez-core = { path = "../core" }
+semver = "1"
 
 # Web framework
 axum = { version = "0.7", features = ["ws", "macros"] }
 axum-extra = { version = "0.9", features = ["cookie", "typed-header"] }
 tower = { version = "0.5", features = ["util", "timeout"] }
-tower-http = { version = "0.6", features = ["cors", "compression-gzip", "trace"] }
+tower-http = { version = "0.6", features = [
+    "cors",
+    "compression-gzip",
+    "trace",
+] }
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "uuid", "chrono", "json"] }
+sqlx = { version = "0.8", features = [
+    "runtime-tokio-rustls",
+    "uuid",
+    "chrono",
+    "json",
+] }
 
 # Async runtime
 tokio = { workspace = true, features = ["full"] }
+async-trait = "0.1"
 
 # Serialization
 serde = { workspace = true }
@@ -89,5 +101,5 @@ sha2 = "0.10"
 rustls = "0.23"
 rustls-pemfile = "2.1"
 tokio-rustls = "0.26"
-rcgen = "0.13"  # For self-signed certificate generation
-instant-acme = "0.7"  # Let's Encrypt ACME client
+rcgen = "0.13"         # For self-signed certificate generation
+instant-acme = "0.7"   # Let's Encrypt ACME client

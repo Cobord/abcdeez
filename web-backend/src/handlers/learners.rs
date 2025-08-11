@@ -4,7 +4,6 @@ use axum::{
     Json,
     response::IntoResponse,
 };
-use sqlx::SqlitePool;
 use uuid::Uuid;
 use tracing::{debug, info, warn, error, instrument, span, Level};
 

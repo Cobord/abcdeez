@@ -8,6 +8,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
+    db::DbRow,
     error::{AppError, AppResult},
     middleware::Claims,
     models::learner::{CreateLearnerRequest, Learner, LearnerStats, UpdateLearnerRequest},
@@ -452,7 +453,7 @@ pub async fn sessions(
 }
 
 // Helper function to calculate preferred difficulty based on learner performance
-fn calculate_preferred_difficulty(response_stats: &sqlx::sqlite::SqliteRow) -> f64 {
+fn calculate_preferred_difficulty(response_stats: &DbRow) -> f64 {
     let accuracy = response_stats
         .get::<Option<f64>, _>("accuracy")
         .unwrap_or(0.5);

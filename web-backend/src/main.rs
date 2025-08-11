@@ -21,7 +21,7 @@ use axum::{
     http::{header, Method},
     middleware as axum_middleware,
     response::Html,
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use tower_http::compression::CompressionLayer;
@@ -32,8 +32,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::config::Config;
 use crate::handlers::{
-    admin, analytics, audit_retention, auth, business, dashboard, experiment, gamification,
-    learner, migration, music, session, sync, task_simple,
+    admin, analytics, audit_retention, auth, business, dashboard, experiment, federation,
+    gamification, learner, migration, music, protocol, session, sync, task_simple,
 };
 use crate::middleware::{
     audit_middleware, auth_middleware, content_validation, correlation_id_middleware, ip_blocking,
@@ -68,7 +68,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with_thread_names(true)
                 .with_file(true)
                 .with_line_number(true)
-                .json() // Use structured JSON logging for better observability
         )
         .init();
 
@@ -182,6 +181,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/experiments/:id/join", post(experiment::join))
         .route("/experiments/:id/results", get(experiment::results))
         .route("/experiments/:id/export", post(experiment::export))
+        // Protocol versioning routes (protected)
+        .route("/protocols", get(protocol::list_protocols))
+        .route("/protocols", post(protocol::create_protocol))
+        .route("/protocols/:id", get(protocol::get_protocol))
+        .route("/protocols/:id/versions", post(protocol::create_version))
+        .route("/protocols/:id/versions", get(protocol::list_versions))
+        .route("/protocols/:id/versions/:version_id", get(protocol::get_version))
+        .route("/protocols/:id/versions/:version_id/publish", post(protocol::publish_version))
+        .route("/protocols/:id/versions/:version_id/validate", get(protocol::validate_protocol))
+        .route("/protocols/:id/compare", post(protocol::compare_versions))
+        .route("/protocols/:id/history", post(protocol::version_history))
+        .route("/protocols/:id/branches", post(protocol::create_branch))
+        .route("/protocols/:id/metrics", get(protocol::get_metrics))
+        // Federation network routes (protected)
+        .route("/federation/nodes", get(federation::list_nodes))
+        .route("/federation/nodes", post(federation::register_node))
+        .route("/federation/nodes/:id", get(federation::get_node))
+        .route("/federation/heartbeat", post(federation::heartbeat))
+        .route("/federation/share", post(federation::share_data))
+        .route("/federation/sync/protocol", post(federation::sync_protocol))
+        .route("/federation/compliance/verify", post(federation::verify_compliance))
+        .route("/federation/stats", get(federation::network_stats))
+        .route("/federation/agreements", get(federation::list_agreements))
+        .route("/federation/agreements", post(federation::create_agreement))
         // Music domain routes
         .route("/music/scales", get(music::scales))
         .route("/music/progressions", get(music::progressions))

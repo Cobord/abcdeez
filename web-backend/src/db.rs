@@ -8,6 +8,22 @@ use sqlx::Row;
 use std::time::Duration;
 use uuid::Uuid;
 
+// ==========================================
+// Database Type Aliases for Better Abstraction
+// ==========================================
+
+/// Database-specific UUID storage type
+#[cfg(feature = "sqlite")]
+pub type DbUuid = Vec<u8>;
+#[cfg(feature = "postgres")]
+pub type DbUuid = Uuid;
+
+/// Database-specific JSON storage type
+#[cfg(feature = "sqlite")]
+pub type DbJson = String;
+#[cfg(feature = "postgres")]
+pub type DbJson = serde_json::Value;
+
 #[cfg(feature = "sqlite")]
 pub type DbPool = SqlitePool;
 #[cfg(feature = "postgres")]
@@ -17,6 +33,18 @@ pub type DbPool = PgPool;
 pub type DbRow = sqlx::sqlite::SqliteRow;
 #[cfg(feature = "postgres")]
 pub type DbRow = sqlx::postgres::PgRow;
+
+/// Database-specific connection type
+#[cfg(feature = "sqlite")]
+pub type DbConnection = sqlx::sqlite::SqliteConnection;
+#[cfg(feature = "postgres")]
+pub type DbConnection = sqlx::postgres::PgConnection;
+
+/// Database-specific transaction type
+#[cfg(feature = "sqlite")]
+pub type DbTransaction<'a> = sqlx::Transaction<'a, sqlx::Sqlite>;
+#[cfg(feature = "postgres")]
+pub type DbTransaction<'a> = sqlx::Transaction<'a, sqlx::Postgres>;
 
 // Database abstraction for common operations
 pub struct Database {
@@ -147,7 +175,40 @@ pub async fn init_pool(database_url: &str) -> Result<DbPool, sqlx::Error> {
     Ok(pool)
 }
 
-// Helper functions for converting between types
+// ==========================================
+// UUID Handling - Database Abstraction Layer
+// ==========================================
+
+/// Convert UUID to database-specific storage format
+/// SQLite: stores as BLOB (bytes)
+/// PostgreSQL: stores as native UUID
+#[cfg(feature = "sqlite")]
+pub fn uuid_to_db(uuid: Uuid) -> Vec<u8> {
+    uuid.as_bytes().to_vec()
+}
+
+#[cfg(feature = "postgres")]
+pub fn uuid_to_db(uuid: Uuid) -> Uuid {
+    uuid
+}
+
+/// Convert from database storage format to UUID
+/// SQLite: converts from BLOB (bytes)
+/// PostgreSQL: already a UUID
+#[cfg(feature = "sqlite")]
+pub fn uuid_from_db(bytes: Vec<u8>) -> Result<Uuid> {
+    let array: [u8; 16] = bytes
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Invalid UUID bytes"))?;
+    Ok(Uuid::from_bytes(array))
+}
+
+#[cfg(feature = "postgres")]
+pub fn uuid_from_db(uuid: Uuid) -> Result<Uuid> {
+    Ok(uuid)
+}
+
+// Legacy functions for compatibility
 pub fn uuid_to_bytes(uuid: Uuid) -> Vec<u8> {
     uuid.as_bytes().to_vec()
 }
@@ -162,6 +223,36 @@ pub fn bytes_to_uuid(bytes: Vec<u8>) -> Result<Uuid> {
 // Database-agnostic query builders
 pub fn bind_uuid_param(uuid: Uuid) -> Vec<u8> {
     uuid.as_bytes().to_vec()
+}
+
+// ==========================================
+// JSON Handling - Database Abstraction Layer
+// ==========================================
+
+/// Convert JSON value to database storage format
+/// SQLite: stores as TEXT
+/// PostgreSQL: stores as JSONB
+#[cfg(feature = "sqlite")]
+pub fn json_to_db<T: serde::Serialize>(value: &T) -> Result<String> {
+    serde_json::to_string(value).map_err(|e| anyhow::anyhow!("JSON serialization error: {}", e))
+}
+
+#[cfg(feature = "postgres")]
+pub fn json_to_db<T: serde::Serialize>(value: &T) -> Result<serde_json::Value> {
+    serde_json::to_value(value).map_err(|e| anyhow::anyhow!("JSON serialization error: {}", e))
+}
+
+/// Parse JSON from database storage format
+/// SQLite: parses from TEXT
+/// PostgreSQL: already a serde_json::Value
+#[cfg(feature = "sqlite")]
+pub fn json_from_db<T: serde::de::DeserializeOwned>(json_str: String) -> Result<T> {
+    serde_json::from_str(&json_str).map_err(|e| anyhow::anyhow!("JSON parse error: {}", e))
+}
+
+#[cfg(feature = "postgres")]
+pub fn json_from_db<T: serde::de::DeserializeOwned>(json_val: serde_json::Value) -> Result<T> {
+    serde_json::from_value(json_val).map_err(|e| anyhow::anyhow!("JSON parse error: {}", e))
 }
 
 // Parameter placeholder - SQLite uses ?, PostgreSQL uses $1, $2, etc.

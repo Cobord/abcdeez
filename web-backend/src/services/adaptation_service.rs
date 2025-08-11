@@ -6,8 +6,8 @@ use crate::error::AppError;
 use crate::services::LearnerService;
 use crate::utils::math;
 use abcdeez_core::{
-    hints::{HintLevel, InterventionAction, InterventionSystem, StruggleLevel},
-    AdaptiveScheduler, Task, Topology,
+    HintLevel, InterventionAction, InterventionSystem, StruggleLevel, AdaptiveScheduler, Task,
+    Topology,
 };
 
 #[derive(Clone)]

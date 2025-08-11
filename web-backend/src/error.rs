@@ -5,7 +5,6 @@ use axum::{
 };
 use serde_json::json;
 use std::fmt;
-use uuid::Uuid;
 
 #[derive(Debug)]
 pub enum AppError {
@@ -22,6 +21,7 @@ pub enum AppError {
     ValidationError(String),
     AuthenticationError(String),
     RateLimitExceeded,
+    InvalidUuid(uuid::Error),
 
     // Core library errors
     CoreError(abcdeez_core::Error),
@@ -78,6 +78,9 @@ impl fmt::Display for AppError {
                     "Insufficient data: required {}, got {}",
                     required, actual
                 )
+            }
+            AppError::InvalidUuid(err) => {
+                write!(f, "Invalid UUID: {}", err)
             }
         }
     }
@@ -205,6 +208,9 @@ impl IntoResponse for AppError {
                     required, actual
                 ),
             ),
+            AppError::InvalidUuid(err) => {
+                (StatusCode::BAD_REQUEST, format!("Invalid UUID: {}", err))
+            }
         };
 
         let body = Json(json!({
@@ -243,6 +249,18 @@ impl From<abcdeez_core::Error> for AppError {
 impl From<serde_json::Error> for AppError {
     fn from(err: serde_json::Error) -> Self {
         AppError::ValidationError(format!("JSON parsing error: {}", err))
+    }
+}
+
+impl From<uuid::Error> for AppError {
+    fn from(err: uuid::Error) -> Self {
+        AppError::InvalidUuid(err)
+    }
+}
+
+impl From<anyhow::Error> for AppError {
+    fn from(err: anyhow::Error) -> Self {
+        AppError::InternalServerError
     }
 }
 

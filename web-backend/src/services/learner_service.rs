@@ -10,7 +10,9 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::models::learner::Learner;
 use abcdeez_core::{
-    bayesian::ResponseData, export::SessionData, tasks::TaskResponse as CoreTaskResponse,
+    ResponseData,
+    data::export::{self, SessionData},
+    tasks::TaskResponse as CoreTaskResponse,
     BayesianLearnerModel, LearnerDataExport, LearnerMetrics, LearnerModel as CoreLearnerModel,
     Topology,
 };
@@ -509,7 +511,7 @@ impl LearnerService {
     async fn calculate_session_summary(
         &self,
         responses: &[CoreTaskResponse],
-    ) -> Result<abcdeez_core::export::SessionSummary> {
+    ) -> Result<export::SessionSummary> {
         let total_tasks = responses.len();
         let correct_count = responses.iter().filter(|r| r.correct).count();
         let accuracy = if total_tasks > 0 {
@@ -537,7 +539,7 @@ impl LearnerService {
             0.0
         };
 
-        Ok(abcdeez_core::export::SessionSummary {
+        Ok(export::SessionSummary {
             total_tasks,
             correct_count,
             accuracy,
@@ -651,7 +653,7 @@ impl LearnerService {
                     running_correct += 1;
                 }
 
-                performance_trajectories.push(abcdeez_core::export::PerformancePoint {
+                performance_trajectories.push(export::PerformancePoint {
                     trial_number: running_total,
                     timestamp: response.timestamp,
                     accuracy: running_correct as f64 / running_total as f64,
@@ -666,7 +668,7 @@ impl LearnerService {
         let error_patterns = self.analyze_errors(&sessions).await?;
 
         // Create model snapshot
-        let model_snapshot = abcdeez_core::export::ModelSnapshot {
+        let model_snapshot = export::ModelSnapshot {
             timestamp: export_timestamp,
             node_embeddings: model
                 .node_embeddings
@@ -674,7 +676,7 @@ impl LearnerService {
                 .map(|(k, v)| {
                     (
                         k.clone(),
-                        abcdeez_core::export::NodeEmbeddingExport {
+                        export::NodeEmbeddingExport {
                             position: v.position,
                             uncertainty: v.uncertainty,
                         },
@@ -694,7 +696,7 @@ impl LearnerService {
             chunk_boundaries: model
                 .chunk_boundaries
                 .iter()
-                .map(|b| abcdeez_core::export::ChunkBoundaryExport {
+                .map(|b| export::ChunkBoundaryExport {
                     position: b.position,
                     strength: b.strength,
                 })
@@ -702,7 +704,7 @@ impl LearnerService {
             total_practice_time_seconds: model.total_practice_time.as_secs(),
         };
 
-        let metadata = abcdeez_core::export::ExportMetadata {
+        let metadata = export::ExportMetadata {
             export_version: "1.0.0".to_string(),
             software_version: env!("CARGO_PKG_VERSION").to_string(),
             platform: std::env::consts::OS.to_string(),
@@ -725,7 +727,7 @@ impl LearnerService {
     async fn analyze_errors(
         &self,
         sessions: &[SessionData],
-    ) -> Result<abcdeez_core::export::ErrorAnalysis> {
+    ) -> Result<export::ErrorAnalysis> {
         let mut total_errors = 0;
         let mut total_tasks = 0;
         let mut confusion_counts: std::collections::HashMap<(String, String), usize> =
@@ -806,7 +808,7 @@ impl LearnerService {
             })
             .collect();
 
-        Ok(abcdeez_core::export::ErrorAnalysis {
+        Ok(export::ErrorAnalysis {
             total_errors,
             error_rate,
             common_confusions,

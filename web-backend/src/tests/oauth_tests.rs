@@ -103,6 +103,12 @@ fn create_test_config() -> Config {
         tls_port: 443,
         admin_email: Some("admin@example.com".to_string()),
         server_name: "localhost".to_string(),
+        privacy_epsilon: 1.0,
+        privacy_delta: 1e-9,
+        privacy_window_hours: 24,
+        tls_enabled: false,
+        tls_cert_path: None,
+        tls_key_path: None,
     }
 }
 

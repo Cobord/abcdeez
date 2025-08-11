@@ -7,7 +7,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{error::AppResult, middleware::Claims, models::gamification::*, state::AppState};
+use crate::{db::{DbPool, DbTransaction}, error::AppResult, middleware::Claims, models::gamification::*, state::AppState};
 
 // ============= Profile Endpoints =============
 
@@ -482,7 +482,7 @@ pub async fn update_leaderboard_score(
 // ============= Helper Functions =============
 
 async fn unlock_achievement_internal(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    tx: &mut DbTransaction<'_>,
     user_id: Uuid,
     achievement_id: &str,
 ) -> AppResult<()> {
@@ -501,7 +501,7 @@ async fn unlock_achievement_internal(
 }
 
 async fn create_default_achievements_for_user(
-    pool: &sqlx::SqlitePool,
+    pool: &DbPool,
     user_id: Uuid,
 ) -> AppResult<()> {
     let mut conn = pool.acquire().await?;

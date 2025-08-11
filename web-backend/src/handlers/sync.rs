@@ -8,6 +8,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::{
+    db::{DbConnection, DbTransaction},
     error::{AppError, AppResult},
     middleware::Claims,
     models::sync::*,
@@ -413,7 +414,7 @@ fn generate_sync_token(user_id: Uuid, device_id: &str) -> String {
 }
 
 async fn verify_device(
-    conn: &mut sqlx::SqliteConnection,
+    conn: &mut DbConnection,
     user_id: Uuid,
     device_id: &str,
 ) -> AppResult<()> {
@@ -439,7 +440,7 @@ enum SyncError {
 }
 
 async fn process_sync_change(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    tx: &mut DbTransaction<'_>,
     user_id: Uuid,
     device_id: &str,
     change: &SyncChange,
@@ -523,7 +524,7 @@ async fn process_sync_change(
 }
 
 async fn get_entity_version(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    tx: &mut DbTransaction<'_>,
     entity_type: &str,
     entity_id: &str,
 ) -> Option<i32> {
@@ -542,7 +543,7 @@ async fn get_entity_version(
 }
 
 async fn apply_entity_change(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    tx: &mut DbTransaction<'_>,
     user_id: Uuid,
     entity_type: &str,
     entity_id: &str,
@@ -567,7 +568,7 @@ async fn apply_entity_change(
 }
 
 async fn delete_entity(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    tx: &mut DbTransaction<'_>,
     user_id: Uuid,
     entity_type: &str,
     entity_id: &str,
@@ -587,7 +588,7 @@ async fn delete_entity(
 }
 
 async fn get_changes_since_version(
-    conn: &mut sqlx::SqliteConnection,
+    conn: &mut DbConnection,
     user_id: Uuid,
     from_version: i32,
 ) -> AppResult<Vec<SyncChange>> {
@@ -625,7 +626,7 @@ async fn get_changes_since_version(
 }
 
 async fn get_deleted_entities_since(
-    conn: &mut sqlx::SqliteConnection,
+    conn: &mut DbConnection,
     user_id: Uuid,
     from_version: i32,
 ) -> AppResult<Vec<DeletedEntity>> {
@@ -654,7 +655,7 @@ async fn get_deleted_entities_since(
 }
 
 async fn apply_resolved_data(
-    conn: &mut sqlx::SqliteConnection,
+    conn: &mut DbConnection,
     user_id: Uuid,
     entity_type: &str,
     entity_id: &str,

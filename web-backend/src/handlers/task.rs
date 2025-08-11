@@ -19,7 +19,7 @@ use crate::{
 };
 
 use abcdeez_core::{
-    bayesian::BayesianLearnerModel, learner::LearnerModel, Task, TaskGenerator, TaskType, Topology,
+    BayesianLearnerModel, LearnerModel, Task, TaskGenerator, TaskType, Topology,
 };
 
 /// Generate next task using adaptive scheduling
