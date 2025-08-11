@@ -1,7 +1,7 @@
-use crate::bayesian::*;
-use crate::learner::OperationType;
+use crate::learning::bayesian::*;
+use crate::learning::learner::OperationType;
 use crate::tasks::{Task, TaskType};
-use crate::topology::{Topology, TopologyType};
+use crate::core::topology::{Topology, TopologyType};
 
 #[test]
 fn test_bayesian_model_initialization() {
@@ -67,7 +67,7 @@ fn test_bayesian_model_initialization() {
     }
 
     // Verify chunk boundaries for linear topology
-    if matches!(topo.topology_type, crate::topology::TopologyType::Linear) {
+    if matches!(topo.topology_type, crate::core::topology::TopologyType::Linear) {
         assert_eq!(
             model.chunk_boundaries.len(),
             3,
@@ -477,7 +477,7 @@ fn test_entropy_calculation() {
 
 #[test]
 fn test_model_comparison_metrics() {
-    use crate::bayesian::ModelComparisonMetrics;
+    use crate::learning::bayesian::ModelComparisonMetrics;
 
     // Model 1: Better fit, more complex
     let model1 = ModelComparisonMetrics::new(-50.0, 10, 100);
@@ -514,7 +514,7 @@ fn test_model_comparison_metrics() {
 
 #[test]
 fn test_dic_calculation() {
-    use crate::bayesian::DIC;
+    use crate::learning::bayesian::DIC;
 
     let dic = DIC::new(100.0, 90.0);
 
@@ -529,7 +529,7 @@ fn test_dic_calculation() {
 
 #[test]
 fn test_waic_calculation() {
-    use crate::bayesian::WAIC;
+    use crate::learning::bayesian::WAIC;
 
     let waic = WAIC::new(-50.0, 5.0);
 
@@ -546,7 +546,7 @@ fn test_waic_calculation() {
 
 #[test]
 fn test_aic_weights() {
-    use crate::bayesian::ModelComparisonMetrics;
+    use crate::learning::bayesian::ModelComparisonMetrics;
 
     // Two competing models
     let model1 = ModelComparisonMetrics::new(-50.0, 5, 100);
@@ -627,7 +627,7 @@ fn test_posterior_predictive_check() {
 
 #[test]
 fn test_posterior_predictive_statistics() {
-    use crate::bayesian::TestStatistics;
+    use crate::learning::bayesian::TestStatistics;
 
     // Create known test statistics
     let stats = TestStatistics {

@@ -1,10 +1,10 @@
 // Property-based tests using proptest
 // These tests verify invariants and mathematical properties
 
-use crate::bayesian::*;
-use crate::learner::LearnerModel;
+use crate::learning::bayesian::*;
+use crate::learning::learner::LearnerModel;
 use crate::statistics::*;
-use crate::topology::Topology;
+use crate::core::topology::Topology;
 use proptest::prelude::*;
 
 // Distribution Properties
@@ -223,7 +223,7 @@ proptest! {
         // Apply updates
         for i in 0..num_updates {
             let correct = (i as f64 / num_updates as f64) < correct_ratio;
-            learner.update_operation_proficiency(&crate::learner::OperationType::Successor, correct);
+            learner.update_operation_proficiency(&crate::learning::learner::OperationType::Successor, correct);
         }
 
         // Get final proficiency
@@ -311,7 +311,7 @@ proptest! {
             correct_answer: "C".to_string(),
             options: vec![],
             difficulty: 0.5,
-            operation: crate::learner::OperationType::Successor,
+            operation: crate::learning::learner::OperationType::Successor,
         };
 
         // Calculate EIG

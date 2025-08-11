@@ -1,8 +1,8 @@
-use crate::adaptive::AdaptiveScheduler;
-use crate::bayesian::BayesianLearnerModel;
-use crate::learner::LearnerModel;
+use crate::learning::adaptive::AdaptiveScheduler;
+use crate::learning::bayesian::BayesianLearnerModel;
+use crate::learning::learner::LearnerModel;
 use crate::tasks::{Task, TaskGenerator, TaskResponse, TaskType};
-use crate::topology::Topology;
+use crate::core::topology::Topology;
 
 #[test]
 fn test_complete_learning_workflow() {
@@ -109,7 +109,7 @@ fn test_bayesian_integration() {
 
     // Update with best task
     if let Some((best_task, _eig)) = ranked.first() {
-        let response = crate::bayesian::ResponseData {
+        let response = crate::learning::bayesian::ResponseData {
             task: best_task.clone(),
             correct: true,
             response_time: 1000.0,
@@ -182,7 +182,7 @@ fn test_task_session_workflow() {
 
 #[test]
 fn test_extended_task_generation() {
-    use crate::extended_tasks::ExtendedTaskGenerator;
+    use crate::tasks::extended::ExtendedTaskGenerator;
 
     let topology = Topology::alphabet();
     let mut generator = ExtendedTaskGenerator::new(topology);
@@ -198,7 +198,7 @@ fn test_extended_task_generation() {
 
 #[test]
 fn test_hierarchical_model_workflow() {
-    use crate::hierarchical_bayes::{HierarchicalBayesianModel, ResponseData};
+    use crate::learning::hierarchical_bayes::{HierarchicalBayesianModel, ResponseData};
 
     let topology = Topology::alphabet();
     let mut model = HierarchicalBayesianModel::new(&topology);
@@ -234,7 +234,7 @@ fn test_hierarchical_model_workflow() {
 
 #[test]
 fn test_export_workflow() {
-    use crate::export::SessionExporter;
+    use crate::data::export::SessionExporter;
 
     let exporter = SessionExporter::new();
 

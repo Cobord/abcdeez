@@ -1,10 +1,10 @@
 // Statistical correctness tests
 // Tests for Monte Carlo convergence, correlation significance, and bootstrap methods
 
-use crate::bayesian::BayesianLearnerModel;
-use crate::learner::OperationType;
+use crate::learning::bayesian::BayesianLearnerModel;
+use crate::learning::learner::OperationType;
 use crate::tasks::{Task, TaskType};
-use crate::topology::Topology;
+use crate::core::topology::Topology;
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand::SeedableRng;

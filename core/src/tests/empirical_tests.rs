@@ -1,9 +1,9 @@
 // Empirical validation tests
 // These tests verify that the system exhibits known psychological phenomena
 
-use crate::learner::*;
+use crate::learning::learner::*;
 use crate::tasks::{Task, TaskType};
-use crate::topology::Topology;
+use crate::core::topology::Topology;
 
 #[test]
 fn test_serial_position_effect() {

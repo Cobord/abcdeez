@@ -1,6 +1,6 @@
-use crate::bayesian::*;
+use crate::learning::bayesian::*;
 use crate::statistics::*;
-use crate::topology::Topology;
+use crate::core::topology::Topology;
 
 #[test]
 fn test_ex_gaussian_pdf_formula_correctness() {
@@ -148,7 +148,7 @@ fn test_adaptive_monte_carlo_convergence() {
         correct_answer: "N".to_string(),
         options: vec![],
         difficulty: 0.5,
-        operation: crate::learner::OperationType::Successor,
+        operation: crate::learning::learner::OperationType::Successor,
     };
 
     // Run adaptive Monte Carlo multiple times
@@ -237,7 +237,7 @@ fn test_numerical_stability_thresholds() {
 
 #[test]
 fn test_fisher_exact_test_implementation() {
-    use crate::statistical_validation::StatisticalValidator;
+    use crate::statistics::validation::StatisticalValidator;
 
     let validator = StatisticalValidator::new(0.05);
 
@@ -274,7 +274,7 @@ fn test_fisher_exact_test_implementation() {
 
 #[test]
 fn test_memory_decay_formula() {
-    use crate::learner::LearnerModel;
+    use crate::learning::learner::LearnerModel;
     use chrono::{Duration, Utc};
 
     let topo = Topology::alphabet();

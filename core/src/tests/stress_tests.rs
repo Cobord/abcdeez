@@ -1,11 +1,11 @@
 // Stress tests for edge cases and numerical stability
 // These tests ensure the system handles extreme conditions gracefully
 
-use crate::bayesian::*;
-use crate::learner::*;
+use crate::learning::bayesian::*;
+use crate::learning::learner::*;
 use crate::statistics::*;
 use crate::tasks::{Task, TaskType};
-use crate::topology::Topology;
+use crate::core::topology::Topology;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Instant;
