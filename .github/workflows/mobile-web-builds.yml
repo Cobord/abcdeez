@@ -80,35 +80,17 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
       
-      - name: Install cargo-apk
-        run: cargo install cargo-apk
-      
-      - name: Build Android APK (ARM64)
+      - name: Build Android APKs using build script
         run: |
           cd xilem-cross-platform/mobile
-          cargo apk build --release --target aarch64-linux-android
-      
-      - name: Build Android APK (ARMv7)
-        run: |
-          cd xilem-cross-platform/mobile
-          cargo apk build --release --target armv7-linux-androideabi
-      
-      - name: Package APKs
-        run: |
-          mkdir -p dist/android
-          for apk in target/release/apk/*.apk; do
-            if [ -f "$apk" ]; then
-              cp "$apk" dist/android/
-            fi
-          done
-          cd dist/android
-          tar czf ../../abcdeez-android-apks.tar.gz *.apk
+          chmod +x build-android.sh
+          ./build-android.sh
       
       - name: Upload Android APKs artifact
         uses: actions/upload-artifact@v4
         with:
           name: artifacts-android-apk
-          path: abcdeez-android-apks.tar.gz
+          path: target/release/apk/*.apk
       
       - name: Upload to GitHub Release
         env:
@@ -119,7 +101,7 @@ jobs:
             if gh release view ${{ github.ref_name }} 2>/dev/null; then
               echo "Release found, uploading artifacts..."
               # Upload all APKs individually
-              for apk in dist/android/*.apk; do
+              for apk in target/release/apk/*.apk; do
                 if [ -f "$apk" ]; then
                   gh release upload ${{ github.ref_name }} "$apk" --clobber
                 fi
@@ -142,24 +124,16 @@ jobs:
         with:
           targets: aarch64-apple-ios,x86_64-apple-ios
       
-      - name: Build iOS Simulator
+      - name: Build iOS using build script
         run: |
           cd xilem-cross-platform/mobile
-          cargo build --release --target x86_64-apple-ios
+          chmod +x build-ios.sh
+          ./build-ios.sh
       
-      - name: Build iOS Device
+      - name: Package Universal Binary
         run: |
           cd xilem-cross-platform/mobile
-          cargo build --release --target aarch64-apple-ios
-      
-      - name: Create Universal Binary
-        run: |
-          mkdir -p dist/ios
-          lipo -create \
-            target/x86_64-apple-ios/release/xilem_abcdeez_mobile \
-            target/aarch64-apple-ios/release/xilem_abcdeez_mobile \
-            -output dist/ios/abcdeez
-          tar czf abcdeez-ios-universal.tar.gz dist/ios/
+          tar czf ../../abcdeez-ios-universal.tar.gz dist/ios/
       
       - name: Upload iOS artifact
         uses: actions/upload-artifact@v4

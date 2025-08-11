@@ -31,7 +31,6 @@ core/
   - `statrs`: Statistical computations
   - `reqwest`: HTTP client for backend communication
   - `tokio`: Async runtime (optional)
-  - `ratatui`/`crossterm`: Terminal UI (optional)
   - `axum`: Backend server (optional)
 
 - **Internal Dependencies**:

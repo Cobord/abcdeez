@@ -24,8 +24,6 @@ name = "abcdeez-cli"
 path = "src/main.rs"
 
 [dependencies]
-crossterm = { version = "0.27", optional = true }
-ratatui = { version = "0.26", optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
@@ -37,7 +35,7 @@ uuid = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["sync", "time", "rt-multi-thread", "macros", "test-util"] }
 tracing = { workspace = true }
 anyhow = "1.0"
-reqwest = { version = "0.12", features = ["blocking", "json"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 toml = "0.8"
 axum = { version = "0.7", optional = true }
 sha2 = "0.10"
@@ -49,7 +47,7 @@ proptest = "1.0"
 criterion = "0.5"
 
 [features]
-default = ["cli", "async"]
-cli = ["crossterm", "ratatui"]
+default = ["async"]
 async = ["tokio"]
 backend-server = ["tokio", "axum"]
+cli = []
