@@ -2,8 +2,7 @@
 members = [
     "core",
     "web-backend",
-	"xilem-app",
-
+    "xilem-app",
     "xilem-cross-platform/desktop",
     "xilem-cross-platform/mobile",
     "xilem-cross-platform/web",
@@ -26,9 +25,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.6", features = ["v4", "serde"] }
-rand = "0.8"
-rand_distr = "0.4"
-statrs = "0.17"
+rand = "0.9"
+rand_distr = "0.5"
+statrs = "0.18"
 
 # GUI
 winit = { version = "0.30.12", features = ["android-native-activity"] }
@@ -42,4 +41,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Error handling
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"
