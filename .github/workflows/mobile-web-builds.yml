@@ -1,0 +1,183 @@
+name: Mobile and Web Builds
+
+# Trigger on the same events as the main release workflow
+on:
+  push:
+    tags:
+      - '**[0-9]+.[0-9]+.[0-9]+*'
+
+permissions:
+  contents: write
+
+jobs:
+  # Build Web PWA
+  build-web-pwa:
+    name: Build Web PWA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      
+      - name: Build Web PWA
+        run: |
+          cd xilem-cross-platform/web
+          wasm-pack build --target web --out-name abcdeez --release
+          cp manifest.json pkg/ || true
+          cp service-worker.js pkg/ || true
+          cp index.html pkg/ || true
+      
+      - name: Package Web PWA
+        run: |
+          cd xilem-cross-platform/web/pkg
+          tar czf ../../../abcdeez-web-pwa.tar.gz *
+      
+      - name: Upload Web PWA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-web-pwa
+          path: abcdeez-web-pwa.tar.gz
+      
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Wait for release to be created by main workflow
+          for i in {1..60}; do
+            if gh release view ${{ github.ref_name }} 2>/dev/null; then
+              echo "Release found, uploading artifact..."
+              gh release upload ${{ github.ref_name }} abcdeez-web-pwa.tar.gz --clobber
+              break
+            fi
+            echo "Waiting for release to be created... ($i/60)"
+            sleep 5
+          done
+
+  # Build Android APK
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Install cargo-apk
+        run: cargo install cargo-apk
+      
+      - name: Build Android APK (ARM64)
+        run: |
+          cd xilem-cross-platform/mobile
+          cargo apk build --release --target aarch64-linux-android
+      
+      - name: Build Android APK (ARMv7)
+        run: |
+          cd xilem-cross-platform/mobile
+          cargo apk build --release --target armv7-linux-androideabi
+      
+      - name: Package APKs
+        run: |
+          mkdir -p dist/android
+          for apk in target/release/apk/*.apk; do
+            if [ -f "$apk" ]; then
+              cp "$apk" dist/android/
+            fi
+          done
+          cd dist/android
+          tar czf ../../abcdeez-android-apks.tar.gz *.apk
+      
+      - name: Upload Android APKs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-android-apk
+          path: abcdeez-android-apks.tar.gz
+      
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Wait for release to be created by main workflow
+          for i in {1..60}; do
+            if gh release view ${{ github.ref_name }} 2>/dev/null; then
+              echo "Release found, uploading artifacts..."
+              # Upload all APKs individually
+              for apk in dist/android/*.apk; do
+                if [ -f "$apk" ]; then
+                  gh release upload ${{ github.ref_name }} "$apk" --clobber
+                fi
+              done
+              break
+            fi
+            echo "Waiting for release to be created... ($i/60)"
+            sleep 5
+          done
+
+  # Build iOS App
+  build-ios:
+    name: Build iOS App
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,x86_64-apple-ios
+      
+      - name: Build iOS Simulator
+        run: |
+          cd xilem-cross-platform/mobile
+          cargo build --release --target x86_64-apple-ios
+      
+      - name: Build iOS Device
+        run: |
+          cd xilem-cross-platform/mobile
+          cargo build --release --target aarch64-apple-ios
+      
+      - name: Create Universal Binary
+        run: |
+          mkdir -p dist/ios
+          lipo -create \
+            target/x86_64-apple-ios/release/xilem_abcdeez_mobile \
+            target/aarch64-apple-ios/release/xilem_abcdeez_mobile \
+            -output dist/ios/abcdeez
+          tar czf abcdeez-ios-universal.tar.gz dist/ios/
+      
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-ios-universal
+          path: abcdeez-ios-universal.tar.gz
+      
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Wait for release to be created by main workflow
+          for i in {1..60}; do
+            if gh release view ${{ github.ref_name }} 2>/dev/null; then
+              echo "Release found, uploading artifact..."
+              gh release upload ${{ github.ref_name }} abcdeez-ios-universal.tar.gz --clobber
+              break
+            fi
+            echo "Waiting for release to be created... ($i/60)"
+            sleep 5
+          done

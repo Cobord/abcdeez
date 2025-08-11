@@ -123,9 +123,9 @@
                         <Component Id='binary0' Guid='*'>
                             <File
                                 Id='exe0'
-                                Name='xilem_abcdeez_desktop.exe'
+                                Name='abcdeez.exe'
                                 DiskId='1'
-                                Source='$(var.CargoTargetBinDir)\xilem_abcdeez_desktop.exe'
+                                Source='$(var.CargoTargetBinDir)\abcdeez.exe'
                                 KeyPath='yes'/>
                         </Component>
                     </Directory>
