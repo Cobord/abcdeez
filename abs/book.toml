@@ -1,0 +1,18 @@
+[book]
+authors = ["ABCDeez Team"]
+language = "en"
+multilingual = false
+src = "."
+title = "ABCDeez Documentation"
+
+[build]
+build-dir = "book"
+
+[output.html]
+#theme = "rust"
+#default-theme = "light"
+#preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/abcdeez/abcdeez"
+edit-url-template = "https://github.com/abcdeez/abcdeez/edit/main/abs/{path}"
+site-url = "/docs/"
+cname = ""

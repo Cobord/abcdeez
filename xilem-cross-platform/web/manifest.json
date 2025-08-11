@@ -2,57 +2,57 @@
   "name": "ABCDEEZ Graph Learning System",
   "short_name": "ABCDEEZ",
   "description": "Adaptive learning system for cognitive skill acquisition with offline support",
-  "start_url": "/",
+  "start_url": "/app/",
   "display": "standalone",
   "background_color": "#667eea",
   "theme_color": "#667eea",
   "orientation": "any",
-  "scope": "/",
+  "scope": "/app/",
   "icons": [
     {
-      "src": "/icons/icon-72x72.png",
+      "src": "/app/icons/icon-72x72.png",
       "sizes": "72x72",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-96x96.png",
+      "src": "/app/icons/icon-96x96.png",
       "sizes": "96x96",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-128x128.png",
+      "src": "/app/icons/icon-128x128.png",
       "sizes": "128x128",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-144x144.png",
+      "src": "/app/icons/icon-144x144.png",
       "sizes": "144x144",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-152x152.png",
+      "src": "/app/icons/icon-152x152.png",
       "sizes": "152x152",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-192x192.png",
+      "src": "/app/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-384x384.png",
+      "src": "/app/icons/icon-384x384.png",
       "sizes": "384x384",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icons/icon-512x512.png",
+      "src": "/app/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -61,13 +61,13 @@
   "categories": ["education", "productivity"],
   "screenshots": [
     {
-      "src": "/screenshots/desktop.png",
+      "src": "/app/screenshots/desktop.png",
       "sizes": "1920x1080",
       "type": "image/png",
       "form_factor": "wide"
     },
     {
-      "src": "/screenshots/mobile.png",
+      "src": "/app/screenshots/mobile.png",
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow"
@@ -78,14 +78,14 @@
       "name": "Start Training",
       "short_name": "Train",
       "description": "Start a new training session",
-      "url": "/?screen=training",
+      "url": "/app/?screen=training",
       "icons": [{ "src": "/icons/training.png", "sizes": "96x96" }]
     },
     {
       "name": "Dashboard",
       "short_name": "Dashboard",
       "description": "View your progress",
-      "url": "/?screen=dashboard",
+      "url": "/app/?screen=dashboard",
       "icons": [{ "src": "/icons/dashboard.png", "sizes": "96x96" }]
     }
   ],

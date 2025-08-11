@@ -1,10 +1,10 @@
 const CACHE_NAME = 'abcdeez-v1.0.0';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/pkg/abcdeez_web.js',
-  '/pkg/abcdeez_web_bg.wasm',
+  '/app/',
+  '/app/index.html',
+  '/app/manifest.json',
+  '/app/abcdeez.js',
+  '/app/abcdeez_bg.wasm',
 ];
 
 // Install event - cache resources
@@ -76,7 +76,7 @@ self.addEventListener('fetch', (event) => {
           return response;
         }).catch(() => {
           // Network request failed, try to get from cache
-          return caches.match('/index.html');
+          return caches.match('/app/index.html');
         });
       })
   );
@@ -136,8 +136,8 @@ async function storeSyncData(data) {
 self.addEventListener('push', (event) => {
   const options = {
     body: event.data ? event.data.text() : 'New update available',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/badge-72x72.png',
+    icon: '/app/icons/icon-192x192.png',
+    badge: '/app/icons/badge-72x72.png',
     vibrate: [100, 50, 100],
     data: {
       dateOfArrival: Date.now(),
@@ -147,12 +147,12 @@ self.addEventListener('push', (event) => {
       {
         action: 'explore',
         title: 'Open App',
-        icon: '/icons/checkmark.png'
+        icon: '/app/icons/checkmark.png'
       },
       {
         action: 'close',
         title: 'Dismiss',
-        icon: '/icons/xmark.png'
+        icon: '/app/icons/xmark.png'
       }
     ]
   };
@@ -168,7 +168,7 @@ self.addEventListener('notificationclick', (event) => {
 
   if (event.action === 'explore') {
     event.waitUntil(
-      clients.openWindow('/')
+      clients.openWindow('/app/')
     );
   }
 });

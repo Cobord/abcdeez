@@ -60,12 +60,13 @@ dependencies = [
 
 [[package]]
 name = "abcdeez-core"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "axum 0.7.9",
  "chrono",
  "criterion",
+ "getrandom 0.2.16",
  "md5",
  "proptest",
  "rand 0.8.5",
@@ -85,7 +86,7 @@ dependencies = [
 
 [[package]]
 name = "abcdeez-web"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "abcdeez-core",
  "console_error_panic_hook",
@@ -7037,7 +7038,7 @@ dependencies = [
 
 [[package]]
 name = "web-backend"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "abcdeez-core",
  "aes-gcm",
@@ -8008,7 +8009,7 @@ dependencies = [
 
 [[package]]
 name = "xilem_abcdeez_desktop"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "abcdeez-app",
  "winit",

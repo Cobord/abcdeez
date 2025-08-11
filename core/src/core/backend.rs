@@ -65,6 +65,7 @@ impl BackendConfig {
 }
 
 /// Client for communicating with the backend
+#[cfg(not(target_arch = "wasm32"))]
 pub struct BackendClient {
     config: BackendConfig,
     client: reqwest::blocking::Client,
@@ -72,6 +73,7 @@ pub struct BackendClient {
     last_sync: DateTime<Utc>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl BackendClient {
     pub fn new(config: BackendConfig) -> Result<Self> {
         let client = reqwest::blocking::Client::builder()
@@ -376,7 +378,7 @@ pub struct ExperimentConfig {
 }
 
 // Async version using tokio (optional)
-#[cfg(feature = "async")]
+#[cfg(all(feature = "async", not(target_arch = "wasm32")))]
 pub mod async_client {
     use super::*;
     use tokio::time::sleep;
