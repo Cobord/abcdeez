@@ -163,8 +163,10 @@ pub mod native_components;
 pub mod web_components;
 
 // Export the current platform's implementation
+// Prefer native if both features are set
+
 #[cfg(feature = "xilem-native")]
 pub use native_components::{NativeComponents as Components, NativeComponent as ComponentOutput};
 
-#[cfg(feature = "xilem-web")]
+#[cfg(all(feature = "xilem-web", not(feature = "xilem-native")))]
 pub use web_components::{WebComponents as Components, WebComponent as ComponentOutput};

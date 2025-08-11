@@ -53,6 +53,7 @@ image = "0.25"
 imageproc = "0.25"
 rusttype = "0.9"
 once_cell = "1.19"
+base64 = "0.22"
 
 # Offline storage dependencies
 rusqlite = { version = "0.32", features = ["bundled", "chrono", "serde_json"], optional = true }

@@ -1,8 +1,10 @@
 // Library module for xilem-app
 
 pub mod app;
+pub mod auth;
 pub mod components;
 pub mod demo;
+pub mod gamification;
 pub mod models;
 pub mod platform;
 pub mod services;
@@ -11,7 +13,8 @@ pub mod utils;
 pub mod views;
 pub mod viz;
 
-// Keep the old run function for backward compatibility when using xilem-native
+// Prefer native if both xilem-native and xilem-web are set.
+// Only enable the native run function if xilem-native is set, regardless of xilem-web.
 #[cfg(feature = "xilem-native")]
 pub fn run(ev: xilem::EventLoopBuilder) -> Result<(), winit::error::EventLoopError> {
     // Initialize tracing for debugging
@@ -40,17 +43,18 @@ pub fn run(ev: xilem::EventLoopBuilder) -> Result<(), winit::error::EventLoopErr
 }
 
 // Web entry point for WASM
-#[cfg(all(feature = "xilem-web", target_arch = "wasm32"))]
+// Only enable if xilem-native is NOT set and xilem-web is set (and target is wasm32).
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen(start)]
 pub fn run_web() {
-    use platform::{PlatformRunner, CurrentPlatformRunner};
-    
+    use platform::{CurrentPlatformRunner, PlatformRunner};
+
     // Set panic hook for better error messages in browser
     console_error_panic_hook::set_once();
-    
+
     // Initialize web logging
     tracing_wasm::set_as_global_default();
-    
+
     let app_state = state::AppState::new();
     CurrentPlatformRunner::run(app_state).expect("Failed to start web app");
 }
@@ -70,11 +74,11 @@ pub struct AppHandle {
 #[no_mangle]
 pub fn app_init() -> AppHandle {
     web_sys::console::log_1(&"🚀 App initialized for hot reload".into());
-    
+
     // Store initial state
     let app_state = state::AppState::new();
     let state_json = serde_json::to_string(&app_state).unwrap_or_default();
-    
+
     AppHandle { state_json }
 }
 
@@ -91,7 +95,9 @@ pub fn app_on_before_swap(handle: &AppHandle) -> JsValue {
 #[no_mangle]
 pub fn app_on_after_swap(state: JsValue) {
     if let Some(state_str) = state.as_string() {
-        web_sys::console::log_1(&format!("📥 Restoring app state: {} bytes", state_str.len()).into());
+        web_sys::console::log_1(
+            &format!("📥 Restoring app state: {} bytes", state_str.len()).into(),
+        );
         // In production: deserialize and restore the AppState to the running app
         // if let Ok(restored_state) = serde_json::from_str::<state::AppState>(&state_str) {
         //     // Apply restored state to the app

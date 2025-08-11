@@ -25,6 +25,7 @@ dependencies = [
  "abcdeez-core",
  "anyhow",
  "async-trait",
+ "base64",
  "chrono",
  "console_error_panic_hook",
  "cpal",

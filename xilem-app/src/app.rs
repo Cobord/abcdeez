@@ -1,7 +1,7 @@
 // Main application logic and root view
 
 use crate::state::{AppState, Screen};
-use crate::views::{auth, dashboard, learning, settings, widget_gallery};
+use crate::views::{auth, dashboard, learning, settings, welcome, widget_gallery};
 use crate::components::{Components, AppComponents, ComponentOutput};
 
 pub fn app_logic(state: &mut AppState) -> ComponentOutput {
@@ -15,6 +15,7 @@ pub fn app_logic(state: &mut AppState) -> ComponentOutput {
     // Route to the appropriate view based on current screen
     match state.current_screen {
         Screen::Login | Screen::Signup => auth::auth_view(state),
+        Screen::Welcome => welcome::welcome_screen(state),
         Screen::Dashboard => dashboard::dashboard_view(state),
         Screen::Learning | Screen::Training => learning::learning_view(state),
         Screen::Settings | Screen::Profile => settings::settings_view(state),
@@ -23,7 +24,7 @@ pub fn app_logic(state: &mut AppState) -> ComponentOutput {
             use crate::viz::visualization_dashboard;
             visualization_dashboard(state)
         },
-        Screen::Welcome | Screen::DomainSelection => dashboard::dashboard_view(state),
+        Screen::DomainSelection => dashboard::dashboard_view(state),
         _ => Components::loading_spinner(Some("Loading...")),
     }
 }

@@ -6,4 +6,5 @@ pub mod learning;
 pub mod settings;
 pub mod core_task_visual;
 pub mod extended_task_visual;
+pub mod welcome;
 pub mod widget_gallery;

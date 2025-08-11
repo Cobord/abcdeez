@@ -138,43 +138,30 @@ pub fn session_comparison_chart(
     )
 }
 
-/// Visualization dashboard combining multiple charts
+/// Visualization dashboard combining multiple charts with real plotters integration
 pub fn visualization_dashboard(state: &AppState) -> ComponentOutput {
-    use crate::components::{button, card, column, row, text};
+    use crate::components::{button, card, column, row, text, Components};
+    use crate::viz::chart_components::create_chart_dashboard;
     
-    // Sample data for visualization
-    let learning_data = vec![(0.0, 0.5), (1.0, 0.7), (2.0, 0.85), (3.0, 0.9)];
-    let response_times = vec![1200, 1100, 950, 900, 850];
-    let metrics = vec![
-        ("Accuracy", 0.85),
-        ("Speed", 0.72),
-        ("Retention", 0.90),
-        ("Focus", 0.68),
-    ];
+    // Create the main chart dashboard with plotters charts
+    let chart_dashboard = create_chart_dashboard(state);
     
-    card(
-        "📊 Visualizations",
-        column(vec![
-            text("Performance Analytics"),
-            
-            row(vec![
-                learning_curve_chart(&learning_data, 400, 240),
-                response_time_histogram(&response_times, 400, 240),
-            ]),
-            
-            row(vec![
-                performance_heatmap(10, 400, 240),
-                metrics_radar_chart(&metrics, 400, 240),
-            ]),
-            
-            row(vec![
-                progress_ring_chart(0.85, "Overall Progress", 120),
-                sparkline(&[0.3, 0.5, 0.4, 0.7, 0.8, 0.75, 0.9], 200, 40),
-            ]),
-            
-            button("Export Charts", |_state: &mut AppState| {
-                // Would export visualizations
-            }),
-        ])
-    )
+    // Also include some of our custom widgets for variety
+    let custom_widgets = column(vec![
+        text("📊 Quick Metrics"),
+        row(vec![
+            progress_ring_chart(0.85, "Overall Progress", 120),
+            sparkline(&[0.3, 0.5, 0.4, 0.7, 0.8, 0.75, 0.9], 200, 40),
+        ]),
+        button("Export Charts", |_state: &mut AppState| {
+            println!("Exporting charts...");
+        }),
+    ]);
+    
+    // Combine everything
+    column(vec![
+        text("📊 Data Visualization Center"),
+        chart_dashboard,
+        card("Additional Metrics", custom_widgets),
+    ])
 }
