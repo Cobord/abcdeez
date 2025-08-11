@@ -28,7 +28,7 @@ use crate::{
     services::{AdaptationService, AnalyticsService, LearnerService},
     state::AppState,
 };
-use abcdeez_core::Task;
+use abcdeez_core::tasks::core::Task;
 use crate::services::adaptation_service::{HintLevel, InterventionAction};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -225,7 +225,8 @@ async fn handle_session_socket_internal(
                         user_id: None,
                         timestamp: chrono::Utc::now().timestamp(),
                     })
-                    .unwrap(),
+                    .unwrap()
+                    .into(),
                 ))
                 .await;
             let _ = sender.close().await;
@@ -248,7 +249,8 @@ async fn handle_session_socket_internal(
                     message: "Session access denied".to_string(),
                     timestamp: chrono::Utc::now().timestamp(),
                 })
-                .unwrap(),
+                .unwrap()
+                .into(),
             ))
             .await;
         let _ = sender.close().await;
@@ -264,7 +266,8 @@ async fn handle_session_socket_internal(
                 user_id: Some(authenticated_claims.sub.to_string()),
                 timestamp: chrono::Utc::now().timestamp(),
             })
-            .unwrap(),
+            .unwrap()
+            .into(),
         ))
         .await;
 
@@ -294,7 +297,8 @@ async fn handle_session_socket_internal(
                         message: "Session not found".to_string(),
                         timestamp: chrono::Utc::now().timestamp(),
                     })
-                    .unwrap_or_default(),
+                    .unwrap_or_default()
+                    .into(),
                 ))
                 .await;
             return;
@@ -356,7 +360,7 @@ async fn handle_session_socket_internal(
                 if let Err(_) = sender.send(Message::Text(
                     serde_json::to_string(&ServerMessage::Heartbeat {
                         timestamp: chrono::Utc::now().timestamp(),
-                    }).unwrap_or_default()
+                    }).unwrap_or_default().into()
                 )).await {
                     break;
                 }
@@ -384,7 +388,8 @@ async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>) {
                             user_id: None,
                             timestamp: chrono::Utc::now().timestamp(),
                         })
-                        .unwrap(),
+                        .unwrap()
+                        .into(),
                     ))
                     .await;
                 let _ = sender.close().await;
@@ -411,7 +416,8 @@ async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>) {
                     user_id: Some(authenticated_claims.sub.to_string()),
                     timestamp: chrono::Utc::now().timestamp(),
                 })
-                .unwrap(),
+                .unwrap()
+                .into(),
             ))
             .await;
         let _ = sender.close().await;
@@ -427,7 +433,8 @@ async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>) {
                 user_id: Some(authenticated_claims.sub.to_string()),
                 timestamp: chrono::Utc::now().timestamp(),
             })
-            .unwrap(),
+            .unwrap()
+            .into(),
         ))
         .await;
 
@@ -485,7 +492,7 @@ async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>) {
                         };
 
                         if let Ok(msg_text) = serde_json::to_string(&live_metrics) {
-                            if sender.send(Message::Text(msg_text)).await.is_err() {
+                            if sender.send(Message::Text(msg_text.into())).await.is_err() {
                                 break;
                             }
                         }
@@ -541,13 +548,13 @@ async fn handle_client_message(
             };
 
             sender
-                .send(Message::Text(serde_json::to_string(&response)?))
+                .send(Message::Text(serde_json::to_string(&response)?.into()))
                 .await?;
         }
 
         ClientMessage::SubmitResponse {
-            task_type,
-            task_data,
+            task_type: _,
+            task_data: _,
             user_answer,
             response_time_ms,
         } => {
@@ -577,7 +584,7 @@ async fn handle_client_message(
                         payload: feedback,
                         timestamp,
                     },
-                )?))
+                )?.into()))
                 .await?;
 
             // Check for intervention
@@ -633,7 +640,7 @@ async fn handle_client_message(
                             payload: intervention_msg,
                             timestamp,
                         },
-                    )?))
+                    )?.into()))
                     .await?;
             }
 
@@ -658,7 +665,7 @@ async fn handle_client_message(
                         payload: stats,
                         timestamp,
                     },
-                )?))
+                )?.into()))
                 .await?;
         }
 
@@ -686,7 +693,7 @@ async fn handle_client_message(
                             payload: hint_msg,
                             timestamp,
                         },
-                    )?))
+                    )?.into()))
                     .await?;
             }
         }
@@ -750,7 +757,7 @@ async fn get_session_info(
 async fn get_session_topology(
     state: &AppState,
     session_id: Uuid,
-) -> Result<abcdeez_core::Topology, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<abcdeez_core::core::Topology, Box<dyn std::error::Error + Send + Sync>> {
     let session_id_bytes = session_id.as_bytes();
 
     // Use a raw query with proper binding
@@ -760,15 +767,15 @@ async fn get_session_topology(
             .bind(&session_id_bytes[..])
             .fetch_one(&mut *conn)
             .await?;
-    let topology: abcdeez_core::Topology = serde_json::from_str(&topology_data)
-        .unwrap_or_else(|_| abcdeez_core::Topology::alphabet());
+    let topology: abcdeez_core::core::Topology = serde_json::from_str(&topology_data)
+        .unwrap_or_else(|_| abcdeez_core::core::Topology::alphabet());
 
     Ok(topology)
 }
 
 /// Authenticate WebSocket connection by waiting for the first authentication message
 async fn authenticate_websocket(
-    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    _sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
     receiver: &mut futures_util::stream::SplitStream<WebSocket>,
     state: &Arc<AppState>,
 ) -> Result<Claims, String> {

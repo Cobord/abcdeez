@@ -206,40 +206,16 @@ impl Config {
     }
 
     pub fn validate_production_safety(&self) -> Result<(), String> {
+        // CRITICAL: Always validate JWT security regardless of environment
+        self.validate_jwt_security()?;
+        
         if !self.is_production() {
+            // Additional production-only checks below
             return Ok(());
         }
 
         if self.cors_origin == "*" {
             return Err("Wildcard CORS not allowed in production".to_string());
-        }
-
-        if self.jwt_secret.len() < 64 {
-            return Err("JWT secret must be at least 64 characters for production".to_string());
-        }
-
-        // Check for common weak patterns in JWT secret
-        let jwt_lower = self.jwt_secret.to_lowercase();
-        if jwt_lower.contains("secret")
-            || jwt_lower.contains("password")
-            || jwt_lower.contains("default")
-            || jwt_lower.contains("admin")
-            || jwt_lower.contains("test")
-            || jwt_lower.contains("demo")
-        {
-            return Err("JWT secret contains weak patterns".to_string());
-        }
-
-        // Check for any placeholder or default values
-        if self.jwt_secret.contains("placeholder")
-            || self.jwt_secret.contains("change_me")
-            || self.jwt_secret.contains("development")
-            || self.jwt_secret == "development_secret_change_in_production"
-        {
-            return Err(
-                "JWT secret contains placeholder or default values not allowed in production"
-                    .to_string(),
-            );
         }
 
         if self.database_url.starts_with("sqlite://") && !self.database_url.contains("?mode=ro") {
@@ -319,6 +295,64 @@ impl Config {
         }
 
         Ok(())
+    }
+    
+    /// Critical security validation for JWT - runs in ALL environments
+    pub fn validate_jwt_security(&self) -> Result<(), String> {
+        // Minimum length check - applies to all environments
+        if self.jwt_secret.len() < 64 {
+            return Err("JWT secret must be at least 64 characters".to_string());
+        }
+
+        // Check for common weak patterns
+        let jwt_lower = self.jwt_secret.to_lowercase();
+        if jwt_lower.contains("secret")
+            || jwt_lower.contains("password")
+            || jwt_lower.contains("default")
+            || jwt_lower.contains("admin")
+            || jwt_lower.contains("test")
+            || jwt_lower.contains("demo")
+        {
+            return Err("JWT secret contains weak patterns".to_string());
+        }
+
+        // Check for any placeholder or default values
+        if self.jwt_secret.contains("placeholder")
+            || self.jwt_secret.contains("change_me")
+            || self.jwt_secret.contains("development")
+            || self.jwt_secret == "development_secret_change_in_production"
+        {
+            return Err(
+                "JWT secret contains placeholder or default values".to_string(),
+            );
+        }
+        
+        // Calculate Shannon entropy
+        let entropy = self.calculate_shannon_entropy(&self.jwt_secret);
+        if entropy < 4.0 {
+            return Err(format!("JWT secret has insufficient entropy: {:.2} (minimum: 4.0)", entropy));
+        }
+        
+        Ok(())
+    }
+    
+    fn calculate_shannon_entropy(&self, s: &str) -> f64 {
+        use std::collections::HashMap;
+        
+        let mut char_counts = HashMap::new();
+        let len = s.len() as f64;
+        
+        for ch in s.chars() {
+            *char_counts.entry(ch).or_insert(0) += 1;
+        }
+        
+        let mut entropy = 0.0;
+        for count in char_counts.values() {
+            let probability = *count as f64 / len;
+            entropy -= probability * probability.log2();
+        }
+        
+        entropy
     }
 }
 

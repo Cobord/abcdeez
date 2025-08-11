@@ -1,30 +1,20 @@
-// Test modules
 #[cfg(test)]
-pub mod bayesian_tests;
-
+mod bayesian_tests;
 #[cfg(test)]
-pub mod learner_tests;
-
+mod empirical_tests;
 #[cfg(test)]
-pub mod statistics_tests;
-
+mod integration_tests;
 #[cfg(test)]
-pub mod integration_tests;
-
+mod learner_tests;
 #[cfg(test)]
-pub mod mathematical_tests;
-
+mod mathematical_tests;
 #[cfg(test)]
-pub mod property_tests;
-
+mod model_validation_tests;
 #[cfg(test)]
-pub mod empirical_tests;
-
+mod property_tests;
 #[cfg(test)]
-pub mod stress_tests;
-
+mod statistical_correctness_tests;
 #[cfg(test)]
-pub mod statistical_correctness_tests;
-
+mod statistics_tests;
 #[cfg(test)]
-pub mod model_validation_tests;
+mod stress_tests;

@@ -171,9 +171,7 @@ pub async fn update_preregistration(
         ));
     }
 
-    // Build update query dynamically based on provided fields
-    let mut updates: Vec<&'static str> = vec![];
-
+    // Update each field individually if provided
     if let Some(title) = &payload.title {
         sqlx::query("UPDATE preregistrations SET title = ? WHERE id = ?")
             .bind(title)

@@ -1,26 +1,22 @@
-use crate::core::config::LearnerConfig;
-use crate::core::topology::Topology;
+use std::collections::HashMap;
+
 use rand::prelude::*;
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
-/// Experimental Design Tools for Research Applications
-/// Provides counterbalancing, randomization, and design validation
+use crate::core::config::LearnerConfig;
+use crate::core::topology::Topology;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExperimentalDesign {
-    /// Between-subjects design with random assignment
     BetweenSubjects {
         conditions: Vec<ExperimentCondition>,
         randomization: RandomizationType,
     },
-    /// Within-subjects design with counterbalancing
     WithinSubjects {
         conditions: Vec<ExperimentCondition>,
         counterbalancing: CounterbalancingMethod,
     },
-    /// Mixed design combining between and within factors
     Mixed {
         between_factors: Vec<Factor>,
         within_factors: Vec<Factor>,
@@ -47,29 +43,20 @@ pub struct ExperimentCondition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RandomizationType {
-    /// Simple random assignment
     Simple,
-    /// Block randomization with specified block size
     Block { block_size: usize },
-    /// Stratified randomization based on participant characteristics
     Stratified {
         strata: Vec<StratificationCriterion>,
     },
-    /// Adaptive randomization to balance group sizes
     Adaptive { target_ratio: Vec<f64> },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CounterbalancingMethod {
-    /// Complete counterbalancing (all possible orders)
     Complete,
-    /// Latin Square design
     LatinSquare,
-    /// Balanced Latin Square (each condition follows every other exactly once)
     BalancedLatinSquare,
-    /// Williams Square (controls for first-order carryover effects)
     WilliamsSquare,
-    /// Random counterbalancing with constraints
     RandomWithConstraints { min_separation: usize },
 }
 

@@ -1,5 +1,5 @@
 use crate::learning::learner::OperationType;
-use super::{Task, TaskType};
+use super::core::{Task, TaskType};
 use crate::core::topology::Topology;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -128,7 +128,7 @@ impl ConstrainedNavigator {
                         new_visited.insert(neighbor.label.clone());
                     }
 
-                    came_from.insert(neighbor_id.clone(), current_id.clone());
+                    came_from.insert(neighbor_id.clone(), current_id.to_string());
                     g_score.insert(neighbor_id.clone(), tentative_g);
 
                     let h = self.heuristic(neighbor_id, &goal_node.id);

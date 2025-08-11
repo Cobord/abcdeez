@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -9,7 +9,6 @@ use tokio_rustls::TlsAcceptor;
 use tracing::{debug, error, info, warn};
 use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls_pemfile;
 
 use crate::config::Config;
 
@@ -331,12 +330,13 @@ impl TlsManager {
         // Generate a minimal self-signed cert using rcgen, then build rustls config
         let domains = vec![self.config.server_name.clone(), "localhost".to_string()];
         let certified = rcgen::generate_simple_self_signed(domains)?;
-        // rcgen 0.13 returns a CertifiedKey with cert and key_pair
+        // rcgen 0.14 returns a CertifiedKey with cert and signing_key
         let cert_der_vec: Vec<u8> = certified.cert.der().to_vec();
-        let key_der_vec: Vec<u8> = certified.key_pair.serialize_der();
+        let key_der_vec: Vec<u8> = certified.signing_key.serialize_der();
 
         let certs: Vec<CertificateDer<'static>> = vec![CertificateDer::from(cert_der_vec)];
-        let key: PrivateKeyDer<'static> = PrivateKeyDer::from(key_der_vec);
+        // rcgen generates PKCS#8 format keys
+        let key = PrivateKeyDer::from(rustls::pki_types::PrivatePkcs8KeyDer::from(key_der_vec));
 
         let tls_config = ServerConfig::builder()
             .with_no_client_auth()

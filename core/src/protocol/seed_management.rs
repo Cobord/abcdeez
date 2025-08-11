@@ -1,9 +1,9 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use uuid::Uuid;
 
-/// Comprehensive seed management system for reproducible randomization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SeedManager {
     pub master_seed: Option<u64>,

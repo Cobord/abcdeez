@@ -1,5 +1,5 @@
 use super::learner::{LearnerModel, OperationType};
-use crate::tasks::{Task, TaskType};
+use crate::tasks::core::{Task, TaskType};
 use crate::core::topology::{Topology, TopologyType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

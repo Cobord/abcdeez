@@ -61,7 +61,7 @@ pub async fn list_nodes(
         conditions.push("status = 'Active'");
     }
 
-    if let Some(ref inst_id) = query.institution_id {
+    if let Some(ref _inst_id) = query.institution_id {
         conditions.push("institution_id = ?");
     }
 

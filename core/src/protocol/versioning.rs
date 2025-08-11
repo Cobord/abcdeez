@@ -1,14 +1,11 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+
 use crate::core::config::LearnerConfig;
 use crate::experiments::design::{ExperimentCondition, ExperimentalDesign};
 use crate::experiments::multi_session::MultiSessionExperiment;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-// std::io::Write not used in this module
-use std::path::PathBuf;
-
-/// Version Control System for Experimental Protocols
-/// Tracks changes, maintains version history, and ensures reproducibility
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProtocolRepository {

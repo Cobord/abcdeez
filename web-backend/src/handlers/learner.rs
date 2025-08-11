@@ -16,7 +16,7 @@ use crate::{
     services::{audit::AuditService, LearnerService},
     state::AppState,
 };
-use abcdeez_core::Topology;
+use abcdeez_core::core::Topology;
 
 pub async fn create(
     State(state): State<Arc<AppState>>,
@@ -80,7 +80,7 @@ pub async fn get(
     let learner = learner_service
         .get_learner(id)
         .await
-        .map_err(|e| AppError::NotFound("Learner not found".to_string()))?;
+        .map_err(|_e| AppError::NotFound("Learner not found".to_string()))?;
 
     // Check if the user has permission to access this learner
     if let Some(learner_user_id) = learner.user_id {
@@ -117,7 +117,7 @@ pub async fn update(
     let learner = learner_service
         .get_learner(id)
         .await
-        .map_err(|e| AppError::NotFound("Learner not found".to_string()))?;
+        .map_err(|_e| AppError::NotFound("Learner not found".to_string()))?;
 
     // Check permissions
     if let Some(learner_user_id) = learner.user_id {
@@ -153,7 +153,7 @@ pub async fn update(
     let updated_learner = learner_service
         .get_learner(id)
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     let api_learner = Learner {
         id: updated_learner.id,
@@ -198,7 +198,7 @@ pub async fn stats(
     let learner = learner_service
         .get_learner(id)
         .await
-        .map_err(|e| AppError::NotFound("Learner not found".to_string()))?;
+        .map_err(|_e| AppError::NotFound("Learner not found".to_string()))?;
 
     if let Some(learner_user_id) = learner.user_id {
         if learner_user_id != claims.sub {
@@ -295,7 +295,7 @@ pub async fn export(
     let learner = learner_service
         .get_learner(id)
         .await
-        .map_err(|e| AppError::NotFound("Learner not found".to_string()))?;
+        .map_err(|_e| AppError::NotFound("Learner not found".to_string()))?;
 
     if let Some(learner_user_id) = learner.user_id {
         if learner_user_id != claims.sub {
@@ -354,7 +354,7 @@ pub async fn delete(
     let learner = learner_service
         .get_learner(id)
         .await
-        .map_err(|e| AppError::NotFound("Learner not found".to_string()))?;
+        .map_err(|_e| AppError::NotFound("Learner not found".to_string()))?;
 
     if let Some(learner_user_id) = learner.user_id {
         if learner_user_id != claims.sub {
@@ -366,7 +366,7 @@ pub async fn delete(
     learner_service
         .delete_learner(id)
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     // Log audit event for GDPR compliance
     AuditService::log_event(
@@ -397,7 +397,7 @@ pub async fn sessions(
     let learner = learner_service
         .get_learner(id)
         .await
-        .map_err(|e| AppError::NotFound("Learner not found".to_string()))?;
+        .map_err(|_e| AppError::NotFound("Learner not found".to_string()))?;
 
     if let Some(learner_user_id) = learner.user_id {
         if learner_user_id != claims.sub {

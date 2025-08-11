@@ -1,8 +1,8 @@
 // Root application state
 
+use abcdeez_core::learning::learner::LearnerModel;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
-use uuid::Uuid;
 
 use crate::models::{PendingResponse, Task};
 use crate::services::AdaptiveLearningService;
@@ -96,7 +96,7 @@ pub struct AppState {
 
     // Current Session
     pub session: Option<SessionState>,
-    pub learner_model: Option<abcdeez_core::learning::LearnerModel>,
+    pub learner_model: Option<LearnerModel>,
     pub adaptive_service: Option<AdaptiveLearningService>,
 
     // Navigation

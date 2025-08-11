@@ -19,7 +19,12 @@ use crate::{
 };
 
 use abcdeez_core::{
-    BayesianLearnerModel, LearnerModel, Task, TaskGenerator, TaskType, Topology,
+    core::Topology,
+    learning::{
+        bayesian::BayesianLearnerModel,
+        learner::LearnerModel,
+    },
+    tasks::core::{Task, TaskGenerator, TaskType},
 };
 
 /// Generate next task using adaptive scheduling
@@ -170,7 +175,8 @@ pub async fn generate(
             .min(0.9);
 
         let task = task_generator.generate_task(None); // Generate random task, difficulty handled separately
-        let expected_difficulty = calculate_task_difficulty(&task, &learner);
+        // Use the actual_difficulty with variance instead of recalculating
+        let expected_difficulty = actual_difficulty;
 
         // Update difficulty distribution
         total_difficulty += expected_difficulty;
@@ -312,8 +318,8 @@ pub async fn difficulty(
 
 /// Request a hint for current task
 pub async fn request_hint(
-    State(state): State<Arc<AppState>>,
-    claims: Extension<Claims>,
+    State(_state): State<Arc<AppState>>,
+    _claims: Extension<Claims>,
     Json(req): Json<HintRequest>,
 ) -> AppResult<(StatusCode, Json<HintResponse>)> {
     // For now, generate basic hints
@@ -405,7 +411,7 @@ fn calculate_task_difficulty(task: &Task, learner: &Learner) -> f64 {
     difficulty.clamp(0.1, 1.0)
 }
 
-fn get_node_uncertainty(model: &LearnerModel, item: &str) -> f64 {
+fn get_node_uncertainty(model: &LearnerModel, _item: &str) -> f64 {
     // Find node by label and get uncertainty
     for (_, embedding) in &model.node_embeddings {
         // This is a simplified lookup - in practice we'd need topology access
@@ -505,8 +511,8 @@ async fn get_recent_accuracy(state: &AppState, learner_id: Uuid) -> AppResult<f6
 }
 
 async fn get_item_difficulties(
-    state: &AppState,
-    learner_id: Uuid,
+    _state: &AppState,
+    _learner_id: Uuid,
 ) -> AppResult<std::collections::HashMap<String, f64>> {
     // Get item-specific performance data
     let mut item_difficulties = std::collections::HashMap::new();

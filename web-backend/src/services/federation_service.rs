@@ -3,12 +3,12 @@ use reqwest::Client;
 use serde_json::json;
 use sqlx::Row;
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::{
     config::Config,
-    db::{DbPool, DbUuid, DbJson, uuid_to_db, uuid_from_db, json_to_db, json_from_db},
+    db::{DbPool, uuid_to_db, json_to_db},
     error::{AppError, AppResult},
     models::federation::*,
 };
@@ -402,8 +402,8 @@ impl FederationService {
     async fn verify_signature(
         &self,
         node_id: &Uuid,
-        data: &serde_json::Value,
-        signature: &str,
+        _data: &serde_json::Value,
+        _signature: &str,
     ) -> AppResult<bool> {
         // CRITICAL: Signature verification must be implemented before production use
         // This is a security vulnerability that allows any node to impersonate others

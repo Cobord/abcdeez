@@ -1,14 +1,14 @@
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use semver::Version;
 use serde_json::{json, Value};
 use sqlx::Row;
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 use crate::{
     config::Config,
-    db::{DbPool, DbUuid, DbJson, uuid_to_db, uuid_from_db, json_to_db, json_from_db},
+    db::{DbPool, uuid_to_db, json_to_db},
     error::{AppError, AppResult},
     models::{federation::ChangeType, protocol::*},
 };
@@ -107,7 +107,7 @@ impl ProtocolService {
         created_by: Uuid,
     ) -> AppResult<Uuid> {
         // Validate semantic version
-        let version = Version::parse(&request.version)
+        let _version = Version::parse(&request.version)
             .map_err(|_| AppError::ValidationError("Invalid semantic version".to_string()))?;
 
         let version_id = Uuid::new_v4();

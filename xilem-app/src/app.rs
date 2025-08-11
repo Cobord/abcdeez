@@ -3,7 +3,7 @@
 use xilem::core::one_of::{OneOf5};
 use xilem::view::*;
 use xilem::WidgetView;
-use xilem::view::Style;
+use xilem::style::{Style, Background};
 
 use crate::state::{AppState, Screen};
 use crate::views::{auth, dashboard, learning, settings};
@@ -18,7 +18,7 @@ pub fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> {
         _ => OneOf5::E(loading_view()),
     })
     .expand()
-    .background(state.theme.background_color())
+    .background(Background::Color(state.theme.background_color()))
 }
 
 fn loading_view() -> impl WidgetView<AppState> {

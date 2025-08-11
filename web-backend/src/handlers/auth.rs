@@ -309,7 +309,7 @@ pub async fn login(
             let username = req.username.clone();
             let state = state.clone();
             async move {
-                track_failed_login_attempt(&state, &username).await;
+                let _ = track_failed_login_attempt(&state, &username).await;
             }
         });
         AppError::Unauthorized

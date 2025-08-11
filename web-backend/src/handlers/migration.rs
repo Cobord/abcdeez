@@ -58,19 +58,19 @@ pub async fn get_migration_status(
     let applied_migrations = manager
         .get_migration_history()
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     let current_version = applied_migrations.iter().map(|m| m.version).max();
 
     let is_up_to_date = manager
         .is_up_to_date()
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     let validation_issues = manager
         .validate_migrations()
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     let status = MigrationStatus {
         current_version,
@@ -90,12 +90,12 @@ pub async fn run_migrations(
 
     let manager = run_migrations_with_rollback(&state.db_pool)
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     let applied_migrations = manager
         .get_migration_history()
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     let response = MigrationResponse {
         success: true,
@@ -196,12 +196,12 @@ pub async fn validate_migrations(
     let issues = manager
         .validate_migrations()
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     let applied_migrations = manager
         .get_migration_history()
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     let response = serde_json::json!({
         "valid": issues.is_empty(),
@@ -247,7 +247,7 @@ pub async fn get_migration_history(
     let migrations = manager
         .get_migration_history()
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     Ok(Json(migrations))
 }
@@ -261,7 +261,7 @@ pub async fn preview_rollback(
     let applied_migrations = manager
         .get_migration_history()
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     // Find migrations that would be rolled back
     let to_rollback: Vec<_> = applied_migrations

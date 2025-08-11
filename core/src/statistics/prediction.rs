@@ -1,5 +1,5 @@
 use crate::learning::learner::LearnerModel;
-use crate::tasks::TaskResponse;
+use crate::tasks::core::TaskResponse;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

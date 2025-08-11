@@ -1,16 +1,18 @@
-use crate::learning::learner::{ChunkBoundary, OperationType};
-use super::{Task, TaskType};
-use crate::core::topology::Topology;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
+use crate::core::topology::Topology;
+use crate::learning::learner::{ChunkBoundary, OperationType};
+use super::core::{Task, TaskType};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BoundaryType {
-    ChunkBoundary,    // Mental segmentation boundary (e.g., F-G in alphabet)
-    OctaveBoundary,   // Musical octave boundary (B→C)
-    ModuleBoundary,   // Programming module boundary
-    CategoryBoundary, // Category transition (vowel→consonant)
-    HierarchicalBoundary { level: usize }, // Multi-level boundaries
+    ChunkBoundary,
+    OctaveBoundary,
+    ModuleBoundary,
+    CategoryBoundary,
+    HierarchicalBoundary { level: usize },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,13 +20,13 @@ pub struct BoundaryBridgingTask {
     pub boundary_type: BoundaryType,
     pub span_size: usize,
     pub boundary_positions: Vec<usize>,
-    pub requires_integration: bool, // Whether task specifically trains boundary crossing
+    pub requires_integration: bool,
 }
 
 pub struct BoundaryTrainer {
     topology: Topology,
     boundaries: Vec<ChunkBoundary>,
-    hierarchical_boundaries: HashMap<usize, Vec<usize>>, // level -> positions
+    hierarchical_boundaries: HashMap<usize, Vec<usize>>,
 }
 
 impl BoundaryTrainer {
@@ -120,7 +122,7 @@ impl BoundaryTrainer {
         // Calculate difficulty based on boundary strength
         let base_difficulty = 0.4;
         let boundary_penalty = boundary.strength * 0.3;
-        let difficulty = (base_difficulty + boundary_penalty).min(0.9);
+        let difficulty = (base_difficulty + boundary_penalty).min(0.9_f64);
 
         Task {
             task_type: TaskType::Segment {
@@ -157,7 +159,7 @@ impl BoundaryTrainer {
             return self.generate_chunk_boundary_task();
         }
 
-        let transition_idx = transitions[rand::random::<usize>() % transitions.len()];
+        let transition_idx: usize = transitions[rand::random::<usize>() % transitions.len()];
         let start_idx = transition_idx.saturating_sub(1);
         let span_size = 4;
 

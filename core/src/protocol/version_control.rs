@@ -1,11 +1,8 @@
+use std::collections::{HashMap, HashSet};
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
-
-/// Protocol Version Control System for Experimental Design Reproducibility
-/// Provides comprehensive versioning, change tracking, and collaboration features
-/// for experimental protocols and research methodologies
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProtocolVersionControl {
@@ -24,7 +21,7 @@ pub struct ProtocolHistory {
     pub protocol_name: String,
     pub versions: Vec<ProtocolVersion>,
     pub current_version: String,
-    pub tags: HashMap<String, String>, // tag_name -> version_hash
+    pub tags: HashMap<String, String>,
     pub merge_history: Vec<MergeRecord>,
 }
 

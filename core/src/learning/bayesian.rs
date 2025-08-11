@@ -14,7 +14,7 @@ pub struct BayesianLearnerModel {
     /// Posterior for chunk boundaries
     pub chunk_boundaries: Vec<ChunkBoundaryPosterior>,
     /// Historical responses for updating posteriors
-    pub response_history: Vec<ResponseData>,
+    pub response_history: Vec<BayesianResponseData>,
     /// Topology reference for node mapping
     topology: crate::core::topology::Topology,
     /// Confusability posteriors
@@ -36,7 +36,7 @@ impl<'de> serde::Deserialize<'de> for BayesianLearnerModel {
             node_positions: HashMap<String, PosteriorDistribution>,
             operation_proficiencies: HashMap<String, PosteriorDistribution>,
             chunk_boundaries: Vec<ChunkBoundaryPosterior>,
-            response_history: Vec<ResponseData>,
+            response_history: Vec<BayesianResponseData>,
             topology: crate::core::topology::Topology,
             confusability: HashMap<(String, String), PosteriorDistribution>,
             memory_strengths: HashMap<String, PosteriorDistribution>,
@@ -163,8 +163,8 @@ pub struct ChunkBoundaryPosterior {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResponseData {
-    pub task: crate::tasks::Task,
+pub struct BayesianResponseData {
+    pub task: crate::tasks::core::Task,
     pub correct: bool,
     pub response_time: f64,
 }
@@ -177,7 +177,7 @@ struct SampledModel {
 
 impl SampledModel {
     /// Predict success probability given sampled parameters
-    fn predict_success_probability(&self, task: &crate::tasks::Task) -> f64 {
+    fn predict_success_probability(&self, task: &crate::tasks::core::Task) -> f64 {
         // Get operation proficiency for this task
         let op_key = format!("{:?}", task.operation);
         let proficiency = self.proficiencies.get(&op_key).unwrap_or(&0.0);
@@ -257,7 +257,7 @@ impl BayesianLearnerModel {
 
     /// Calculate Expected Information Gain for a given task using Monte Carlo simulation
     /// EIG = E[KL(p(θ|D_t) || p(θ|D_t, Response to q))]
-    pub fn calculate_eig(&mut self, task: &crate::tasks::Task) -> f64 {
+    pub fn calculate_eig(&mut self, task: &crate::tasks::core::Task) -> f64 {
         // Use adaptive sampling for better convergence
         let (eig, _samples_used) = self.adaptive_monte_carlo_eig(task);
 
@@ -269,7 +269,7 @@ impl BayesianLearnerModel {
 
     /// Monte Carlo simulation for Expected Information Gain
     /// Samples from the posterior predictive distribution
-    pub fn monte_carlo_eig(&mut self, task: &crate::tasks::Task, n_samples: usize) -> f64 {
+    pub fn monte_carlo_eig(&mut self, task: &crate::tasks::core::Task, n_samples: usize) -> f64 {
         use rand::prelude::*;
 
         // Use the seeded RNG instead of thread_rng
@@ -297,7 +297,7 @@ impl BayesianLearnerModel {
     }
 
     /// Adaptive Monte Carlo EIG with convergence checking
-    pub fn adaptive_monte_carlo_eig(&mut self, task: &crate::tasks::Task) -> (f64, usize) {
+    pub fn adaptive_monte_carlo_eig(&mut self, task: &crate::tasks::core::Task) -> (f64, usize) {
         const MIN_SAMPLES: usize = 100;
         const MAX_SAMPLES: usize = 10000;
         const RELATIVE_ERROR_THRESHOLD: f64 = 0.01; // 1% relative error
@@ -375,12 +375,12 @@ impl BayesianLearnerModel {
     /// Calculate KL divergence for correct response in Monte Carlo
     fn calculate_kl_if_correct_monte_carlo(
         &self,
-        task: &crate::tasks::Task,
+        task: &crate::tasks::core::Task,
         _sampled: &SampledModel,
     ) -> f64 {
         // Create updated posterior given correct response
         let mut updated_model = self.clone();
-        updated_model.update_with_response(ResponseData {
+        updated_model.update_with_response(BayesianResponseData {
             task: task.clone(),
             correct: true,
             response_time: 1000.0, // Default for simulation
@@ -393,12 +393,12 @@ impl BayesianLearnerModel {
     /// Calculate KL divergence for incorrect response in Monte Carlo
     fn calculate_kl_if_incorrect_monte_carlo(
         &self,
-        task: &crate::tasks::Task,
+        task: &crate::tasks::core::Task,
         _sampled: &SampledModel,
     ) -> f64 {
         // Create updated posterior given incorrect response
         let mut updated_model = self.clone();
-        updated_model.update_with_response(ResponseData {
+        updated_model.update_with_response(BayesianResponseData {
             task: task.clone(),
             correct: false,
             response_time: 2000.0, // Default for simulation
@@ -429,7 +429,7 @@ impl BayesianLearnerModel {
         total_kl
     }
 
-    fn predict_accuracy(&self, task: &crate::tasks::Task) -> f64 {
+    fn predict_accuracy(&self, task: &crate::tasks::core::Task) -> f64 {
         // Get operation proficiency
         let op_key = format!("{:?}", task.operation);
         let proficiency = self
@@ -443,12 +443,12 @@ impl BayesianLearnerModel {
         1.0 / (1.0 + (-z).exp())
     }
 
-    fn calculate_kl_if_correct(&self, task: &crate::tasks::Task) -> f64 {
+    fn calculate_kl_if_correct(&self, task: &crate::tasks::core::Task) -> f64 {
         let mut total_kl = 0.0;
 
         // Calculate KL for affected parameters
         match &task.task_type {
-            crate::tasks::TaskType::PairwiseOrder { a, b } => {
+            crate::tasks::core::TaskType::PairwiseOrder { a, b } => {
                 // This task would reduce uncertainty about relative positions
                 if let (Some(pos_a), Some(pos_b)) =
                     (self.get_node_position(a), self.get_node_position(b))
@@ -465,15 +465,15 @@ impl BayesianLearnerModel {
                     total_kl += pos_b.kl_divergence(&post_b);
                 }
             }
-            crate::tasks::TaskType::Successor { item }
-            | crate::tasks::TaskType::Predecessor { item } => {
+            crate::tasks::core::TaskType::Successor { item }
+            | crate::tasks::core::TaskType::Predecessor { item } => {
                 if let Some(pos) = self.get_node_position(item) {
                     let mut post = pos.clone();
                     post.variance *= 0.7; // Greater reduction for local adjacency
                     total_kl += pos.kl_divergence(&post);
                 }
             }
-            crate::tasks::TaskType::Segment { start, count, .. } => {
+            crate::tasks::core::TaskType::Segment { start, count, .. } => {
                 // Segment tasks affect multiple nodes and chunk boundaries
                 for i in 0..*count {
                     let boundary_kl = self.calculate_boundary_kl(start, i);
@@ -494,12 +494,12 @@ impl BayesianLearnerModel {
         total_kl
     }
 
-    fn calculate_kl_if_incorrect(&self, task: &crate::tasks::Task) -> f64 {
+    fn calculate_kl_if_incorrect(&self, task: &crate::tasks::core::Task) -> f64 {
         let mut total_kl = 0.0;
 
         // Incorrect responses often increase uncertainty
         match &task.task_type {
-            crate::tasks::TaskType::PairwiseOrder { a, b } => {
+            crate::tasks::core::TaskType::PairwiseOrder { a, b } => {
                 if let (Some(pos_a), Some(pos_b)) =
                     (self.get_node_position(a), self.get_node_position(b))
                 {
@@ -555,7 +555,7 @@ impl BayesianLearnerModel {
         0.0
     }
 
-    pub fn update_with_response(&mut self, response: ResponseData) {
+    pub fn update_with_response(&mut self, response: BayesianResponseData) {
         self.response_history.push(response.clone());
 
         // Calculate observation variance before mutable borrows
@@ -570,15 +570,15 @@ impl BayesianLearnerModel {
 
         // Update node position posteriors and other parameters
         match &response.task.task_type {
-            crate::tasks::TaskType::PairwiseOrder { a, b } => {
+            crate::tasks::core::TaskType::PairwiseOrder { a, b } => {
                 // Update beliefs about relative positions
                 self.update_pairwise_positions(a, b, response.correct);
             }
-            crate::tasks::TaskType::Successor { item }
-            | crate::tasks::TaskType::Predecessor { item } => {
+            crate::tasks::core::TaskType::Successor { item }
+            | crate::tasks::core::TaskType::Predecessor { item } => {
                 self.update_adjacency_beliefs(item, &response.task.task_type, response.correct);
             }
-            crate::tasks::TaskType::Segment { start, count, .. } => {
+            crate::tasks::core::TaskType::Segment { start, count, .. } => {
                 self.update_segment_beliefs(
                     start,
                     *count,
@@ -586,7 +586,7 @@ impl BayesianLearnerModel {
                     response.response_time,
                 );
             }
-            crate::tasks::TaskType::KJump { start, k } => {
+            crate::tasks::core::TaskType::KJump { start, k } => {
                 self.update_kjump_beliefs(start, *k, response.correct);
             }
             _ => {}
@@ -647,7 +647,7 @@ impl BayesianLearnerModel {
     }
 
     /// Calculate adaptive observation variance based on response characteristics
-    fn calculate_observation_variance(&self, response: &ResponseData) -> f64 {
+    fn calculate_observation_variance(&self, response: &BayesianResponseData) -> f64 {
         // Base variance
         let mut variance = 0.1;
 
@@ -679,7 +679,7 @@ impl BayesianLearnerModel {
     fn update_adjacency_beliefs(
         &mut self,
         item: &str,
-        task_type: &crate::tasks::TaskType,
+        task_type: &crate::tasks::core::TaskType,
         correct: bool,
     ) {
         if let Some(node) = self.topology.get_node_by_label(item) {
@@ -695,14 +695,14 @@ impl BayesianLearnerModel {
 
             // Update adjacency-specific beliefs
             match task_type {
-                crate::tasks::TaskType::Successor { .. } => {
+                crate::tasks::core::TaskType::Successor { .. } => {
                     if let Some(next_id) = self.topology.get_successor(&node.id) {
                         if let Some(next_mem) = self.memory_strengths.get_mut(&next_id) {
                             next_mem.update(if correct { 0.7 } else { 0.3 }, 0.15);
                         }
                     }
                 }
-                crate::tasks::TaskType::Predecessor { .. } => {
+                crate::tasks::core::TaskType::Predecessor { .. } => {
                     if let Some(prev_id) = self.topology.get_predecessor(&node.id) {
                         if let Some(prev_mem) = self.memory_strengths.get_mut(&prev_id) {
                             prev_mem.update(if correct { 0.7 } else { 0.3 }, 0.15);
@@ -794,9 +794,9 @@ impl BayesianLearnerModel {
     /// Get tasks ranked by Expected Information Gain
     pub fn rank_tasks_by_eig(
         &mut self,
-        tasks: Vec<crate::tasks::Task>,
-    ) -> Vec<(crate::tasks::Task, f64)> {
-        let mut ranked: Vec<(crate::tasks::Task, f64)> = tasks
+        tasks: Vec<crate::tasks::core::Task>,
+    ) -> Vec<(crate::tasks::core::Task, f64)> {
+        let mut ranked: Vec<(crate::tasks::core::Task, f64)> = tasks
             .into_iter()
             .map(|task| {
                 let eig = self.calculate_eig(&task);
@@ -829,7 +829,7 @@ impl BayesianLearnerModel {
     }
 
     /// Calculate entropy for parameters relevant to a specific task
-    fn calculate_task_specific_entropy(&self, task: &crate::tasks::Task) -> f64 {
+    fn calculate_task_specific_entropy(&self, task: &crate::tasks::core::Task) -> f64 {
         let mut entropy = 0.0;
 
         // Add entropy of operation proficiency for this task
@@ -840,7 +840,7 @@ impl BayesianLearnerModel {
 
         // Add entropy of relevant node positions based on task type
         match &task.task_type {
-            crate::tasks::TaskType::PairwiseOrder { a, b } => {
+            crate::tasks::core::TaskType::PairwiseOrder { a, b } => {
                 if let Some(pos_a) = self.get_node_position(a) {
                     entropy += pos_a.entropy();
                 }
@@ -848,17 +848,17 @@ impl BayesianLearnerModel {
                     entropy += pos_b.entropy();
                 }
             }
-            crate::tasks::TaskType::Successor { item }
-            | crate::tasks::TaskType::Predecessor { item } => {
+            crate::tasks::core::TaskType::Successor { item }
+            | crate::tasks::core::TaskType::Predecessor { item } => {
                 if let Some(pos) = self.get_node_position(item) {
                     entropy += pos.entropy();
                     // Also include adjacent node uncertainty
                     if let Some(node) = self.topology.get_node_by_label(item) {
                         if let Some(adj_id) = match &task.task_type {
-                            crate::tasks::TaskType::Successor { .. } => {
+                            crate::tasks::core::TaskType::Successor { .. } => {
                                 self.topology.get_successor(&node.id)
                             }
-                            crate::tasks::TaskType::Predecessor { .. } => {
+                            crate::tasks::core::TaskType::Predecessor { .. } => {
                                 self.topology.get_predecessor(&node.id)
                             }
                             _ => None,
@@ -872,7 +872,7 @@ impl BayesianLearnerModel {
                     }
                 }
             }
-            crate::tasks::TaskType::KJump { start, k } => {
+            crate::tasks::core::TaskType::KJump { start, k } => {
                 if let Some(pos) = self.get_node_position(start) {
                     entropy += pos.entropy();
                 }
@@ -913,7 +913,7 @@ impl MonteCarloEIG {
         }
     }
 
-    pub fn estimate_eig(&mut self, model: &BayesianLearnerModel, task: &crate::tasks::Task) -> f64 {
+    pub fn estimate_eig(&mut self, model: &BayesianLearnerModel, task: &crate::tasks::core::Task) -> f64 {
         let mut total_gain = 0.0;
 
         for _ in 0..self.samples {
@@ -959,7 +959,7 @@ impl MonteCarloEIG {
         sampled
     }
 
-    fn simulate_response(&self, params: &SampledParameters, task: &crate::tasks::Task) -> f64 {
+    fn simulate_response(&self, params: &SampledParameters, task: &crate::tasks::core::Task) -> f64 {
         // Simulate response probability given sampled parameters
         let op_key = format!("{:?}", task.operation);
         let proficiency = params.operation_proficiencies.get(&op_key).unwrap_or(&0.0);
@@ -1212,7 +1212,7 @@ impl BayesianLearnerModel {
     }
 
     /// Helper: predict with specific sampled parameters
-    fn predict_with_params(&self, params: &SampledModel, task: &crate::tasks::Task) -> f64 {
+    fn predict_with_params(&self, params: &SampledModel, task: &crate::tasks::core::Task) -> f64 {
         params.predict_success_probability(task)
     }
 
@@ -1238,7 +1238,7 @@ impl BayesianLearnerModel {
                 let rt_mean = 1000.0 + response.task.difficulty * 500.0;
                 let rt = self.sample_response_time(rt_mean);
 
-                replicated_responses.push(ResponseData {
+                replicated_responses.push(BayesianResponseData {
                     task: response.task.clone(),
                     correct: replicated_correct,
                     response_time: rt,
@@ -1282,7 +1282,7 @@ impl BayesianLearnerModel {
     }
 
     /// Calculate test statistics for a set of responses
-    fn calculate_test_statistics(&self, responses: &[ResponseData]) -> TestStatistics {
+    fn calculate_test_statistics(&self, responses: &[BayesianResponseData]) -> TestStatistics {
         let n = responses.len() as f64;
         let n_correct = responses.iter().filter(|r| r.correct).count() as f64;
         let accuracy = n_correct / n;

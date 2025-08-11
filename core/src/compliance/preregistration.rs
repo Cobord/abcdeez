@@ -1,42 +1,20 @@
-//! Pre-registration framework for scientific integrity
-//!
-//! This module enforces pre-registration of hypotheses, analysis plans, and decision criteria
-//! before data collection, preventing p-hacking and HARKing (Hypothesizing After Results are Known).
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
 
-/// Pre-registration document for an experiment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreRegistration {
-    /// Unique identifier
     pub id: String,
-
-    /// Timestamp when pre-registered
     pub registered_at: DateTime<Utc>,
-
-    /// Cryptographic hash of the registration for verification
     #[serde(skip)]
     pub registration_hash: String,
-
-    /// Study metadata
     pub study: StudyMetadata,
-
-    /// Hypotheses to test
     pub hypotheses: Hypotheses,
-
-    /// Analysis plan
     pub analysis_plan: AnalysisPlan,
-
-    /// Data collection plan
     pub data_collection: DataCollectionPlan,
-
-    /// Exclusion criteria
     pub exclusion_criteria: ExclusionCriteria,
-
-    /// Decision rules for interpreting results
     pub decision_rules: DecisionRules,
 
     /// Status of the pre-registration
@@ -141,7 +119,7 @@ pub struct DataCollectionPlan {
     pub inclusion_criteria: Vec<String>,
     pub randomization_procedure: Option<String>,
     pub blinding: BlindingLevel,
-    pub stopping_rule: StoppingRule,
+    pub stopping_rule: StatisticalStoppingRule,
     pub data_quality_checks: Vec<String>,
 }
 
@@ -154,7 +132,7 @@ pub enum BlindingLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum StoppingRule {
+pub enum StatisticalStoppingRule {
     FixedSampleSize {
         n: usize,
     },
@@ -252,7 +230,7 @@ impl PreRegistration {
                 inclusion_criteria: Vec::new(),
                 randomization_procedure: None,
                 blinding: BlindingLevel::None,
-                stopping_rule: StoppingRule::None,
+                stopping_rule: StatisticalStoppingRule::None,
                 data_quality_checks: Vec::new(),
             },
             exclusion_criteria: ExclusionCriteria {

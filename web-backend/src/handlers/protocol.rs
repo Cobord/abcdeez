@@ -257,7 +257,7 @@ pub async fn get_version(
 pub async fn publish_version(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
-    Path((protocol_id, version_id)): Path<(Uuid, Uuid)>,
+    Path((_protocol_id, version_id)): Path<(Uuid, Uuid)>,
     Json(request): Json<PublishVersionRequest>,
 ) -> AppResult<StatusCode> {
     let protocol_service =
@@ -277,7 +277,7 @@ pub async fn publish_version(
 pub async fn compare_versions(
     State(state): State<Arc<AppState>>,
     Extension(_claims): Extension<Claims>,
-    Path(protocol_id): Path<Uuid>,
+    Path(_protocol_id): Path<Uuid>,
     Json(request): Json<CompareVersionsRequest>,
 ) -> AppResult<Json<CompareVersionsResponse>> {
     let protocol_service =

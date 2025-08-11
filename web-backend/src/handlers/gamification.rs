@@ -128,7 +128,7 @@ pub async fn add_xp(
     Json(req): Json<AddXpRequest>,
 ) -> AppResult<Json<XpResponse>> {
     let user_id = claims.sub;
-    let conn = state.db_pool.acquire().await?;
+    let _conn = state.db_pool.acquire().await?;
 
     // Start transaction
     let mut tx = state.db_pool.begin().await?;

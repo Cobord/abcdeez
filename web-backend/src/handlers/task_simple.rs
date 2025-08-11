@@ -13,7 +13,10 @@ use crate::{
     state::AppState,
 };
 
-use abcdeez_core::{TaskGenerator, Topology};
+use abcdeez_core::{
+    core::Topology,
+    tasks::core::TaskGenerator,
+};
 
 // Task difficulty constants
 const DIFFICULTY_PAIRWISE_ORDER: f64 = 0.3;

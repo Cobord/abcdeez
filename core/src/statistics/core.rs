@@ -540,11 +540,11 @@ impl ResponseTimeDistribution {
 }
 
 pub struct SessionAnalyzer {
-    pub responses: Vec<crate::tasks::TaskResponse>,
+    pub responses: Vec<crate::tasks::core::TaskResponse>,
 }
 
 impl SessionAnalyzer {
-    pub fn new(responses: Vec<crate::tasks::TaskResponse>) -> Self {
+    pub fn new(responses: Vec<crate::tasks::core::TaskResponse>) -> Self {
         SessionAnalyzer { responses }
     }
 
@@ -610,13 +610,13 @@ impl SessionAnalyzer {
         }
     }
 
-    fn calculate_task_distance(&self, task: &crate::tasks::Task) -> Option<usize> {
+    fn calculate_task_distance(&self, task: &crate::tasks::core::Task) -> Option<usize> {
         match &task.task_type {
-            crate::tasks::TaskType::PairwiseOrder { a, b } => {
+            crate::tasks::core::TaskType::PairwiseOrder { a, b } => {
                 Some((a.chars().next()? as usize).abs_diff(b.chars().next()? as usize))
             }
-            crate::tasks::TaskType::KJump { k, .. } => Some(k.unsigned_abs() as usize),
-            crate::tasks::TaskType::Segment { count, .. } => Some(*count),
+            crate::tasks::core::TaskType::KJump { k, .. } => Some(k.unsigned_abs() as usize),
+            crate::tasks::core::TaskType::Segment { count, .. } => Some(*count),
             _ => Some(1),
         }
     }

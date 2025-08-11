@@ -234,7 +234,7 @@ async fn estimate_active_users(snapshot: &crate::monitoring::MetricsSnapshot) ->
     recent_auth_rate
 }
 
-async fn calculate_db_pool_utilization(state: &AppState) -> f32 {
+async fn calculate_db_pool_utilization(_state: &AppState) -> f32 {
     // Get database pool stats
     // This is simplified - sqlx doesn't expose detailed pool metrics easily
     // In production, you might use a monitoring-aware connection pool

@@ -1,12 +1,16 @@
-use crate::learning::learner::LearnerModel;
-use crate::statistics::StrategyType;
-use crate::tasks::{TaskResponse, TaskSession};
+use crate::{
+    learning::learner::LearnerModel,
+    statistics::core::StrategyType,
+    tasks::core::{TaskResponse, TaskSession},
+};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::Write,
+    path::Path,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LearnerDataExport {
@@ -98,7 +102,6 @@ impl LearnerDataExport {
         let learner_id = model.learner_id.clone();
         let export_timestamp = Utc::now();
 
-        // Convert sessions
         let session_data: Vec<SessionData> = sessions
             .iter()
             .map(|session| {
@@ -119,7 +122,6 @@ impl LearnerDataExport {
             })
             .collect();
 
-        // Calculate performance trajectories
         let mut performance_trajectories = Vec::new();
         let mut running_correct = 0;
         let mut running_total = 0;
@@ -142,10 +144,8 @@ impl LearnerDataExport {
             }
         }
 
-        // Analyze errors
         let error_patterns = Self::analyze_errors(&session_data);
 
-        // Create model snapshot
         let model_snapshot = ModelSnapshot {
             timestamp: export_timestamp,
             node_embeddings: model
@@ -242,12 +242,11 @@ impl LearnerDataExport {
         }
     }
 
-    fn detect_strategy(responses: &[TaskResponse]) -> Option<crate::statistics::StrategyType> {
+    fn detect_strategy(responses: &[TaskResponse]) -> Option<crate::statistics::core::StrategyType> {
         if responses.is_empty() {
             return None;
         }
 
-        // Collect response times and distances for correlation analysis
         let mut rts = Vec::new();
         let mut distances = Vec::new();
 
@@ -256,16 +255,14 @@ impl LearnerDataExport {
 
             // Extract distance information from task type
             let distance = match &response.task.task_type {
-                crate::tasks::TaskType::KJump { k, .. } => *k as usize,
-                crate::tasks::TaskType::Segment { count, .. } => *count,
-                _ => 1, // Default distance for other tasks
+                crate::tasks::core::TaskType::KJump { k, .. } => *k as usize,
+                crate::tasks::core::TaskType::Segment { count, .. } => *count,
+                _ => 1,
             };
             distances.push(distance);
         }
 
-        // Use the existing strategy analysis logic
         let correlation = if rts.len() >= 2 && distances.len() >= 2 {
-            // Calculate correlation between RT and distance
             let n = rts.len() as f64;
             let sum_x: f64 = distances.iter().map(|&d| d as f64).sum();
             let sum_y: f64 = rts.iter().sum();
@@ -289,16 +286,12 @@ impl LearnerDataExport {
             0.0
         };
 
-        // Classify strategy based on correlation
-        // Using Cohen's effect size conventions:
-        // r > 0.7: Strong correlation (r² > 0.49) - serial scanning
-        // r < 0.3: Weak correlation (r² < 0.09) - direct access
         if correlation > 0.7 {
-            Some(crate::statistics::StrategyType::SerialScan)
+            Some(crate::statistics::core::StrategyType::SerialScan)
         } else if correlation < 0.3 {
-            Some(crate::statistics::StrategyType::DirectIndex)
+            Some(crate::statistics::core::StrategyType::DirectIndex)
         } else {
-            Some(crate::statistics::StrategyType::Hybrid)
+            Some(crate::statistics::core::StrategyType::Hybrid)
         }
     }
 

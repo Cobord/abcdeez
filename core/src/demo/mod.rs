@@ -1,3 +1,3 @@
-pub mod demo;
+mod demo;
 
-pub use demo::*;
+pub use self::demo::*;

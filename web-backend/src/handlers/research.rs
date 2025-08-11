@@ -1,6 +1,5 @@
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
     Extension, Json,
 };
 use chrono::{DateTime, Utc};
@@ -17,9 +16,9 @@ use crate::{
 use abcdeez_core::{
     // statistical_validation::{StatisticalValidator, ValidationReport, CrossValidationResults},
     // transfer_learning::{TransferLearningSystem, IsomorphicMapping},
-    statistics::{ExGaussianModel, DetailedStatistics, SessionAnalyzer, StrategyType},
+    experiments::core::Experiment,
+    statistics::core::{ExGaussianModel, SessionAnalyzer, StrategyType},
     // population::{PopulationAnalyzer, PopulationInsights},
-    experiments::{Experiment, HypothesisTest},
 };
 
 // TODO: These modules need to be implemented in abcdeez_core
@@ -38,7 +37,7 @@ impl ValidationReport {
 
 struct StatisticalValidator(f64, f64);
 impl StatisticalValidator {
-    fn new(alpha: f64, power: f64) -> Self { Self(alpha, power) }
+    fn new(_alpha: f64, power: f64) -> Self { Self(0.0, power) }
     fn validate(&self, _experiment: &Experiment) -> Result<ValidationReport, AppError> {
         Ok(ValidationReport { sample_size_adequate: Some(true), assumptions_met: Some(true) })
     }
@@ -72,7 +71,7 @@ struct PopulationInsights;
 
 #[derive(Debug, Deserialize)]
 pub struct ValidationRequest {
-    experiment_id: Uuid,
+    _experiment_id: Uuid,
     alpha: Option<f64>,
     power: Option<f64>,
     effect_size: Option<f64>,
@@ -160,7 +159,7 @@ pub async fn validate_experiment(
 
 /// Calculate statistical power for an experiment
 pub async fn calculate_power(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     Json(req): Json<ValidationRequest>,
 ) -> AppResult<Json<PowerAnalysisResponse>> {
@@ -212,7 +211,7 @@ pub struct ExGaussianRequest {
 
 #[derive(Debug, Serialize)]
 pub struct ExGaussianResponse {
-    parameters: abcdeez_core::statistics::ExGaussianParameters,
+    parameters: abcdeez_core::statistics::core::ExGaussianParameters,
     goodness_of_fit: f64,
     outliers: Vec<f64>,
     visualization_data: Vec<(f64, f64)>, // For plotting
@@ -329,11 +328,11 @@ pub async fn detect_strategies(
     .unwrap_or_default();
     
     // Analyze strategies using SessionAnalyzer
-    let analyzer = SessionAnalyzer::new(Vec::new());
-    let mut all_strategies = Vec::new();
-    let mut confidence_scores = Vec::new();
+    let _analyzer = SessionAnalyzer::new(Vec::new());
+    let all_strategies = Vec::new();
+    let confidence_scores = Vec::new();
     
-    for session in sessions {
+    for _session in sessions {
         // Load responses for this session
         let _responses: Vec<sqlx::sqlite::SqliteRow> = sqlx::query(
             "SELECT * FROM session_responses WHERE session_id = ? ORDER BY created_at",
@@ -378,7 +377,7 @@ pub async fn detect_strategies(
 pub struct TransferAnalysisRequest {
     source_domain: String,
     target_domain: String,
-    learner_id: Uuid,
+    _learner_id: Uuid,
 }
 
 #[derive(Debug, Serialize)]
@@ -391,7 +390,7 @@ pub struct TransferAnalysisResponse {
 
 /// Analyze transfer learning potential between domains
 pub async fn analyze_transfer(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     Json(req): Json<TransferAnalysisRequest>,
 ) -> AppResult<Json<TransferAnalysisResponse>> {
@@ -454,7 +453,7 @@ pub struct PopulationAnalysisResponse {
 pub async fn analyze_population(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
-    Query(params): Query<PopulationQuery>,
+    Query(_params): Query<PopulationQuery>,
 ) -> AppResult<Json<PopulationAnalysisResponse>> {
     if !claims.permissions.contains(&"research".to_string()) {
         return Err(AppError::Forbidden);
@@ -515,9 +514,9 @@ pub async fn analyze_population(
 
 #[derive(Debug, Deserialize)]
 pub struct PopulationQuery {
-    from_date: Option<DateTime<Utc>>,
-    to_date: Option<DateTime<Utc>>,
-    domain: Option<String>,
+    _from_date: Option<DateTime<Utc>>,
+    _to_date: Option<DateTime<Utc>>,
+    _domain: Option<String>,
 }
 
 // ============= Cross-Validation Endpoints =============
@@ -538,7 +537,7 @@ pub struct CrossValidationResponse {
 
 /// Run cross-validation on learner models
 pub async fn cross_validate_models(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Extension(claims): Extension<Claims>,
     Json(req): Json<CrossValidationRequest>,
 ) -> AppResult<Json<CrossValidationResponse>> {

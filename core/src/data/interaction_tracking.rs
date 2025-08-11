@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 
+use super::audio_recording::ConfidenceLevel;
+
 /// Comprehensive Interaction Pattern Tracking for Research Applications
 /// Captures keystroke dynamics, mouse movements, hesitations, and behavioral patterns
 
@@ -217,14 +219,8 @@ pub enum ProcrastinationIndicator {
     OfftaskActivity,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ConfidenceLevel {
-    VeryLow,
-    Low,
-    Medium,
-    High,
-    VeryHigh,
-}
+// ConfidenceLevel has been moved to data::audio_recording module to avoid duplication
+// Use: use crate::data::audio_recording::ConfidenceLevel;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CognitiveLoadLevel {

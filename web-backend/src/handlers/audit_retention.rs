@@ -34,7 +34,7 @@ pub async fn get_retention_statistics(
 
     let stats = AuditService::get_retention_statistics(&state.db_pool, &retention_manager)
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     Ok(Json(stats))
 }
@@ -50,7 +50,7 @@ pub async fn apply_retention_policies(
 
     let stats = AuditService::apply_retention_policies(&state.db_pool, &retention_manager, dry_run)
         .await
-        .map_err(|e| AppError::InternalServerError)?;
+        .map_err(|_e| AppError::InternalServerError)?;
 
     Ok(Json(serde_json::json!({
         "cleanup_stats": stats,
@@ -78,7 +78,7 @@ pub async fn generate_compliance_report(
         params.to_date,
     )
     .await
-    .map_err(|e| AppError::InternalServerError)?;
+    .map_err(|_e| AppError::InternalServerError)?;
 
     Ok(Json(report))
 }
@@ -133,7 +133,7 @@ pub async fn update_retention_policy(
         Some("AdminInterface".to_string()),
     )
     .await
-    .map_err(|e| AppError::InternalServerError)?;
+    .map_err(|_e| AppError::InternalServerError)?;
 
     Ok(Json(serde_json::json!({
         "message": "Retention policy updated successfully",
@@ -174,7 +174,7 @@ pub async fn delete_retention_policy(
         Some("AdminInterface".to_string()),
     )
     .await
-    .map_err(|e| AppError::InternalServerError)?;
+    .map_err(|_e| AppError::InternalServerError)?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -195,7 +195,7 @@ pub async fn get_audit_trail_with_retention(
         params.limit,
     )
     .await
-    .map_err(|e| AppError::InternalServerError)?;
+    .map_err(|_e| AppError::InternalServerError)?;
 
     // Add retention policy information to each record
     let enriched_records: Vec<serde_json::Value> = audit_records

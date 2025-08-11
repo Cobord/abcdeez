@@ -1,16 +1,15 @@
-use crate::core::config::LearnerConfig;
-use crate::statistics::power_analysis::PowerAnalyzer;
-use crate::statistics::validation::StatisticalValidator;
-use crate::statistics::TestResult;
-use crate::core::topology::Topology;
-use rand::prelude::*;
-use rand::seq::SliceRandom;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-/// A/B Testing Framework for Intervention Comparisons
-/// Supports multi-armed bandits, sequential testing, and adaptive allocation
+use rand::prelude::*;
+use rand::seq::SliceRandom;
+use serde::{Deserialize, Serialize};
+
+use crate::core::config::LearnerConfig;
+use crate::core::topology::Topology;
+use crate::statistics::power_analysis::PowerAnalyzer;
+use crate::statistics::validation::StatisticalValidator;
+use crate::statistics::core::TestResult;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ABTest {
@@ -74,34 +73,28 @@ pub enum InterventionType {
     MotivationalFraming { frame: String },
     InterfaceDesign { layout: String },
     AdaptiveAlgorithm { algorithm: String },
-    Control, // No intervention
+    Control,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AllocationStrategy {
-    /// Simple randomization with fixed proportions
     FixedRandomization { proportions: Vec<f64> },
 
-    /// Block randomization to ensure balance
     BlockRandomization { block_size: usize },
 
-    /// Stratified randomization based on participant characteristics
     StratifiedRandomization { strata: Vec<String> },
 
-    /// Multi-armed bandit with exploration/exploitation
     MultiarmedBandit {
         strategy: BanditStrategy,
         exploration_rate: f64,
         burn_in_samples: usize,
     },
 
-    /// Adaptive allocation based on observed performance
     AdaptiveAllocation {
         reallocation_frequency: usize,
         min_allocation_per_arm: f64,
     },
 
-    /// Sequential probability ratio test
     SequentialTesting {
         alpha_spending_function: AlphaSpendingFunction,
         beta_spending_function: BetaSpendingFunction,

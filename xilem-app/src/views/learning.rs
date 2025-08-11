@@ -4,7 +4,7 @@ use xilem::core::one_of::{Either, OneOf3};
 use xilem::view::*;
 use xilem::core::one_of::OneOf5;
 use xilem::WidgetView;
-use xilem::Style;
+use xilem::style::{Style, Background};
 use xilem::FontWeight;
 use xilem::Color;
 use xilem::TextAlign;
@@ -65,7 +65,7 @@ fn learning_header(state: &AppState) -> impl WidgetView<AppState> {
                     sized_box(label(""))
                         .width(100.0 * (session.tasks_completed as f64 / 20.0))
                         .height(4.0)
-                        .background(state.theme.success_color()),
+                        .background(Background::Color(state.theme.success_color())),
                 ))
             )
         } else {
@@ -81,12 +81,12 @@ fn learning_header(state: &AppState) -> impl WidgetView<AppState> {
             }
         })
         .padding(10.0)
-        .background(state.theme.warning_color())
+        .background(Background::Color(state.theme.warning_color()))
         .corner_radius(5.0),
     ))
     .cross_axis_alignment(CrossAxisAlignment::Center)
     .padding(15.0)
-    .background(state.theme.surface_color())
+    .background(Background::Color(state.theme.surface_color()))
 }
 
 fn task_presenter(state: &AppState, task: &Task) -> impl WidgetView<AppState> + use<> {
@@ -137,7 +137,7 @@ fn core_task_view(
                             submit_response(state, option.clone(), task_val.clone());
                         },
                     )
-                    .background(surface)
+                    .background(Background::Color(surface))
                     .padding(25.0)
                     .corner_radius(10.0)
                     .grid_pos((i % 2) as i32, (i / 2) as i32)
@@ -179,7 +179,7 @@ fn no_session_view(state: &AppState) -> impl WidgetView<AppState> {
             // For now, create a mock session
             create_mock_session(state);
         })
-        .background(state.theme.primary_color())
+        .background(Background::Color(state.theme.primary_color()))
         .padding(15.0)
         .corner_radius(10.0),
         FlexSpacer::Flex(1.0),
@@ -205,7 +205,7 @@ fn response_controls(state: &AppState) -> impl WidgetView<AppState> {
         .padding(10.0),
     ))
     .padding(15.0)
-    .background(state.theme.surface_color())
+    .background(Background::Color(state.theme.surface_color()))
 }
 
 fn learning_footer(state: &AppState) -> impl WidgetView<AppState> + use<> {
@@ -221,7 +221,7 @@ fn learning_footer(state: &AppState) -> impl WidgetView<AppState> + use<> {
             ))
             .main_axis_alignment(MainAxisAlignment::SpaceEvenly)
             .padding(15.0)
-            .background(state.theme.surface_color()),
+            .background(Background::Color(state.theme.surface_color())),
         )
     } else {
         Either::B(sized_box(label("")).height(0.0))
@@ -354,7 +354,7 @@ fn extended_task_view(
                 // Free text input for tasks without options
                 sized_box(label("Type your answer below"))
                     .padding(20.0)
-                    .background(surface)
+                    .background(Background::Color(surface))
                     .corner_radius(10.0)
             )
         } else {
@@ -370,7 +370,7 @@ fn extended_task_view(
                                 submit_response(state, option.clone(), task_val.clone());
                             },
                         )
-                        .background(surface)
+                        .background(Background::Color(surface))
                         .padding(25.0)
                         .corner_radius(10.0)
                         .grid_pos((i % 2) as i32, (i / 2) as i32)

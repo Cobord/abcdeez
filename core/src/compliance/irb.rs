@@ -199,7 +199,7 @@ pub struct MonitoringPlan {
     pub monitoring_frequency: MonitoringFrequency,
     pub monitoring_methods: Vec<MonitoringMethod>,
     pub reporting_procedures: Vec<ReportingProcedure>,
-    pub stopping_rules: Vec<StoppingRule>,
+    pub stopping_rules: Vec<EthicsStoppingRule>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,7 +230,7 @@ pub struct ReportingProcedure {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoppingRule {
+pub struct EthicsStoppingRule {
     pub rule_name: String,
     pub trigger_condition: String,
     pub action_required: String,

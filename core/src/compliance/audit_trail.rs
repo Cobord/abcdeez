@@ -1,10 +1,10 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
-/// Comprehensive audit trail system for research compliance and data integrity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditTrailManager {
     pub config: AuditConfiguration,
@@ -26,10 +26,10 @@ pub struct AuditConfiguration {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AuditLevel {
-    Minimal,  // Only critical events
-    Standard, // Common events for compliance
-    Detailed, // All events for research
-    Forensic, // Everything including debug info
+    Minimal,
+    Standard,
+    Detailed,
+    Forensic,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

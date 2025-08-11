@@ -1,7 +1,13 @@
-use super::learner::LearnerModel;
-use crate::tasks::{Task, TaskType};
+use std::collections::HashMap;
+
+use rand::{Rng, SeedableRng};
+use serde::{Deserialize, Serialize};
+use statrs::distribution::{Continuous, Normal};
+
 use crate::core::topology::Topology;
-// Define our own strategy types for the mixture model
+use crate::tasks::core::{Task, TaskType};
+use super::learner::LearnerModel;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum MixtureStrategyType {
     Sequential,
@@ -10,12 +16,7 @@ pub enum MixtureStrategyType {
     Random,
     Pattern,
 }
-use rand::{Rng, SeedableRng};
-use serde::{Deserialize, Serialize};
-use statrs::distribution::{Continuous, Normal};
-use std::collections::HashMap;
 
-/// Represents a cognitive strategy for solving tasks
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CognitiveStrategy {
     pub name: String,
@@ -34,7 +35,6 @@ pub struct StrategyParameters {
     pub learning_rate: f64,
 }
 
-/// Mixture model for multiple strategies
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyMixtureModel {
     pub strategies: Vec<CognitiveStrategy>,

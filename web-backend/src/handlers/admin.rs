@@ -89,11 +89,30 @@ pub async fn dashboard(
         return Err(AppError::Forbidden);
     }
 
-    // Get database statistics
-    let db_stats = get_database_status(&state.db_pool).await?;
+    // Get database statistics if requested
+    let db_stats = if params.include_db_stats.unwrap_or(true) {
+        get_database_status(&state.db_pool).await?
+    } else {
+        DatabaseStatus {
+            connected: false,
+            pool_size: 0,
+            active_connections: 0,
+            total_queries: None,
+            avg_query_time_ms: None,
+        }
+    };
 
-    // Get Redis status
-    let redis_stats = get_redis_status(&state).await?;
+    // Get Redis status if requested
+    let redis_stats = if params.include_cache.unwrap_or(true) {
+        get_redis_status(&state).await?
+    } else {
+        RedisStatus {
+            connected: false,
+            memory_usage_mb: None,
+            total_connections: None,
+            cache_hit_rate: None,
+        }
+    };
 
     // Get active sessions count
     let mut conn = state
@@ -143,6 +162,11 @@ pub async fn list_users(
     claims: Extension<Claims>,
     Query(params): Query<HashMap<String, String>>,
 ) -> AppResult<Json<serde_json::Value>> {
+    // Check if user has admin permissions
+    if !has_admin_permissions(&claims.sub, &state).await? {
+        return Err(AppError::Forbidden);
+    }
+
     let limit = params
         .get("limit")
         .and_then(|s| s.parse::<i64>().ok())
@@ -226,7 +250,7 @@ pub async fn list_users(
 // List all learners with detailed information
 pub async fn list_learners(
     State(state): State<Arc<AppState>>,
-    claims: Extension<Claims>,
+    _claims: Extension<Claims>,
     Query(params): Query<HashMap<String, String>>,
 ) -> AppResult<Json<serde_json::Value>> {
     let limit = params
@@ -358,6 +382,11 @@ pub async fn list_jobs(
     claims: Extension<Claims>,
     Query(params): Query<JobQuery>,
 ) -> AppResult<Json<Vec<JobStatus>>> {
+    // Check if user has admin permissions
+    if !has_admin_permissions(&claims.sub, &state).await? {
+        return Err(AppError::Forbidden);
+    }
+
     let limit = params.limit.unwrap_or(50);
 
     let mut query = "SELECT id, job_type, status, created_at, started_at, completed_at, error_message, retry_count FROM job_queue".to_string();
@@ -557,6 +586,11 @@ pub async fn audit_report(
     claims: Extension<Claims>,
     Query(params): Query<AuditQuery>,
 ) -> AppResult<Json<serde_json::Value>> {
+    // Check if user has admin permissions
+    if !has_admin_permissions(&claims.sub, &state).await? {
+        return Err(AppError::Forbidden);
+    }
+
     // Generate a comprehensive audit report with security analysis
     let mut conn = state
         .db_pool
@@ -564,13 +598,36 @@ pub async fn audit_report(
         .await
         .map_err(|e| AppError::DatabaseError(e))?;
 
-    // Security events summary
-    let security_events: i64 = sqlx::query_scalar(
+    // Build query using parameterized queries to prevent SQL injection
+    // SECURITY: Use bind parameters instead of string concatenation
+    
+    // Base query for security events
+    let mut security_query = String::from(
         "SELECT COUNT(*) FROM audit_log WHERE action = 'security_event' AND timestamp >= datetime('now', '-24 hours')"
-    )
-    .fetch_one(&mut *conn)
-    .await
-    .unwrap_or(0);
+    );
+    
+    // Add conditions safely using bind parameters
+    let mut bind_values = Vec::new();
+    
+    if let Some(ref action) = params.action {
+        security_query.push_str(" AND action = ?");
+        bind_values.push(action.clone());
+    }
+    if let Some(ref user_id) = params.user_id {
+        security_query.push_str(" AND user_id = ?");
+        bind_values.push(user_id.clone());
+    }
+    
+    // Build the query safely with bind parameters
+    let mut query = sqlx::query_scalar::<_, i64>(&security_query);
+    for value in &bind_values {
+        query = query.bind(value);
+    }
+    
+    let security_events: i64 = query
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap_or(0);
 
     // Failed login attempts
     let failed_logins: i64 = sqlx::query_scalar(

@@ -182,7 +182,7 @@ pub async fn enhanced_health_check(
 pub async fn detailed_health_check(
     State(state): State<Arc<AppState>>,
 ) -> AppResult<Json<SystemHealth>> {
-    let start_time = Instant::now();
+    let _start_time = Instant::now();
 
     // Check database health
     let db_status = check_database_health(&state).await;
@@ -310,7 +310,7 @@ async fn check_database_health_detailed(state: &AppState) -> ComponentStatus {
     let mut total_time = 0u64;
     let mut error_details = Vec::new();
 
-    for (query, test_name) in tests {
+    for (query, test_name) in &tests {
         let test_start = Instant::now();
 
         match sqlx::query(query).fetch_optional(&state.db_pool).await {
@@ -327,15 +327,21 @@ async fn check_database_health_detailed(state: &AppState) -> ComponentStatus {
     }
 
     let response_time = start.elapsed().as_millis() as u64;
+    // Use total_time for more accurate database response time
+    let db_response_time = if error_details.is_empty() && tests.len() > 0 {
+        total_time / tests.len() as u64
+    } else {
+        response_time
+    };
 
     if error_details.is_empty() {
         ComponentStatus {
-            status: if response_time > 2000 {
+            status: if db_response_time > 2000 {
                 HealthStatus::Degraded
             } else {
                 HealthStatus::Healthy
             },
-            response_time_ms: response_time,
+            response_time_ms: db_response_time,
             last_error: None,
             last_check: Utc::now(),
         }
@@ -619,7 +625,7 @@ async fn check_external_dependencies(state: &AppState) -> HashMap<String, Compon
     deps
 }
 
-async fn get_application_health_metrics(state: &AppState) -> ApplicationHealthMetrics {
+async fn get_application_health_metrics(_state: &AppState) -> ApplicationHealthMetrics {
     let metrics = crate::monitoring::global_metrics().get_snapshot().await;
 
     // Calculate active sessions (simplified - would need proper tracking)

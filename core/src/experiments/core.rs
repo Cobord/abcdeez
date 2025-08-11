@@ -1,21 +1,22 @@
-use crate::learning::learner::LearnerModel;
-use crate::statistics::validation::StatisticalValidator;
-use crate::tasks::TaskGenerator;
-use crate::core::topology::Topology;
-use chrono::{DateTime, Utc};
-use rand::prelude::*;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 
-/// Complete experimental framework for running and analyzing learning experiments
+use chrono::{DateTime, Utc};
+use rand::prelude::*;
+use serde::{Deserialize, Serialize};
+
+use crate::core::topology::Topology;
+use crate::learning::learner::LearnerModel;
+use crate::statistics::validation::StatisticalValidator;
+use crate::tasks::core::TaskGenerator;
+
 pub struct ExperimentFramework {
     pub experiments: Vec<Experiment>,
     pub current_experiment: Option<usize>,
     pub output_directory: String,
     pub random_seed: Option<u64>,
-    rng: StdRng, // Properly managed RNG for reproducibility
+    rng: StdRng,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,7 +25,7 @@ pub struct Experiment {
     pub name: String,
     pub description: String,
     pub config: ExperimentConfig,
-    pub conditions: Vec<ExperimentCondition>,
+    pub conditions: Vec<BaseExperimentCondition>,
     pub participants: Vec<Participant>,
     pub sessions: Vec<ExperimentSession>,
     pub results: Option<ExperimentResults>,
@@ -55,7 +56,7 @@ pub struct RandomizationConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExperimentCondition {
+pub struct BaseExperimentCondition {
     pub name: String,
     pub parameters: HashMap<String, f64>,
     pub task_distribution: TaskDistribution,
@@ -183,17 +184,15 @@ impl ExperimentFramework {
             current_experiment: None,
             output_directory,
             random_seed: None,
-            rng: StdRng::from_entropy(), // Initialize with system entropy
+            rng: StdRng::from_entropy(),
         }
     }
 
-    /// Set seed for reproducibility (must be called before run_experiment)
     pub fn set_seed(&mut self, seed: u64) {
         self.random_seed = Some(seed);
         self.rng = StdRng::seed_from_u64(seed);
     }
 
-    /// Create a new experiment
     pub fn create_experiment(&mut self, name: String, config: ExperimentConfig) -> String {
         let id = format!("exp_{}", Utc::now().timestamp());
 
@@ -221,21 +220,15 @@ impl ExperimentFramework {
         id
     }
 
-    /// Add experimental condition
-    pub fn add_condition(&mut self, condition: ExperimentCondition) {
+    pub fn add_condition(&mut self, condition: BaseExperimentCondition) {
         if let Some(idx) = self.current_experiment {
             self.experiments[idx].conditions.push(condition);
         }
     }
 
-    /// Run the current experiment
     pub fn run_experiment(&mut self) -> Result<(), String> {
         let exp_idx = self.current_experiment.ok_or("No current experiment")?;
 
-        // Ensure RNG is properly seeded for reproducibility
-        // Seed should be set via set_seed() before calling this method
-
-        // Get config values before mutable operations
         let (n_participants, n_sessions) = {
             let experiment = &self.experiments[exp_idx];
             (
@@ -244,23 +237,15 @@ impl ExperimentFramework {
             )
         };
 
-        // Create participants
         self.create_participants(exp_idx)?;
-
-        // Assign conditions
         self.assign_conditions(exp_idx)?;
-
-        // Run sessions for each participant
         for participant_idx in 0..n_participants {
             for session_num in 0..n_sessions {
                 self.run_session(exp_idx, participant_idx, session_num)?;
             }
         }
 
-        // Analyze results
         self.analyze_experiment(exp_idx)?;
-
-        // Save results
         self.save_experiment(exp_idx)?;
 
         Ok(())
@@ -273,7 +258,7 @@ impl ExperimentFramework {
         for i in 0..n_participants {
             let participant = Participant {
                 id: format!("P{:03}", i + 1),
-                condition: String::new(), // Will be assigned later
+                condition: String::new(),
                 demographics: None,
                 learner_model: None,
                 performance_metrics: PerformanceMetrics {
@@ -300,14 +285,12 @@ impl ExperimentFramework {
         let n_conditions = experiment.conditions.len();
         let _n_participants = experiment.participants.len();
 
-        // Assign conditions (round-robin or randomized)
         if experiment.config.randomization.randomize_conditions {
             for participant in &mut experiment.participants {
                 let condition_idx = self.rng.gen_range(0..n_conditions);
                 participant.condition = experiment.conditions[condition_idx].name.clone();
             }
         } else {
-            // Counterbalanced assignment
             for (i, participant) in experiment.participants.iter_mut().enumerate() {
                 let condition_idx = i % n_conditions;
                 participant.condition = experiment.conditions[condition_idx].name.clone();
@@ -323,7 +306,6 @@ impl ExperimentFramework {
         participant_idx: usize,
         session_num: usize,
     ) -> Result<(), String> {
-        // Get necessary data before mutable operations
         let (participant_id, participant_condition) = {
             let experiment = &self.experiments[exp_idx];
             let participant = &experiment.participants[participant_idx];
@@ -340,16 +322,9 @@ impl ExperimentFramework {
                 .clone()
         };
 
-        // Create topology
         let topology = Topology::alphabet();
-
-        // Create learner model
         let mut learner_model = LearnerModel::new(participant_id.clone(), &topology);
-
-        // Create task generator
         let mut task_generator = TaskGenerator::new(topology.clone());
-
-        // Create session
         let mut session = ExperimentSession {
             participant_id: participant_id.clone(),
             session_number: session_num,
@@ -367,18 +342,12 @@ impl ExperimentFramework {
             },
         };
 
-        // Run trials
         let n_trials = self.experiments[exp_idx].config.n_trials_per_session;
         let mut response_times = Vec::new();
 
         for trial_num in 0..n_trials {
-            // Generate task based on condition distribution
             let task = self.generate_task_for_condition(&mut task_generator, &topology, &condition);
-
-            // Simulate participant response
             let (response, rt, correct) = self.simulate_response(&mut learner_model, &task);
-
-            // Record trial
             let trial = Trial {
                 trial_number: trial_num,
                 task_type: format!("{:?}", task.task_type),
@@ -398,16 +367,14 @@ impl ExperimentFramework {
                 session.session_metrics.correct_trials += 1;
             }
 
-            // Update learner model
             learner_model.update_operation_proficiency(&task.operation, correct);
-            if let crate::tasks::TaskType::Successor { ref item }
-            | crate::tasks::TaskType::Predecessor { ref item } = task.task_type
+            if let crate::tasks::core::TaskType::Successor { ref item }
+            | crate::tasks::core::TaskType::Predecessor { ref item } = task.task_type
             {
                 learner_model.update_memory_strength(item, correct);
             }
         }
 
-        // Update session metrics
         session.session_metrics.total_trials = n_trials;
         session.session_metrics.mean_rt = response_times.iter().sum::<f64>() / n_trials as f64;
         response_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -415,10 +382,8 @@ impl ExperimentFramework {
 
         session.end_time = Utc::now();
 
-        // Update participant metrics
         let accuracy = session.session_metrics.correct_trials as f64 / n_trials as f64;
 
-        // Store session and update participant
         let experiment = &mut self.experiments[exp_idx];
         experiment.sessions.push(session);
         experiment.participants[participant_idx]
@@ -433,8 +398,8 @@ impl ExperimentFramework {
         &mut self,
         generator: &mut TaskGenerator,
         topology: &Topology,
-        condition: &ExperimentCondition,
-    ) -> crate::tasks::Task {
+        condition: &BaseExperimentCondition,
+    ) -> crate::tasks::core::Task {
         let r: f64 = self.rng.gen();
 
         let dist = &condition.task_distribution;
@@ -444,11 +409,11 @@ impl ExperimentFramework {
         let random_item = nodes[self.rng.gen_range(0..nodes.len())].label.clone();
 
         let task_type = if r < dist.successor_prob {
-            crate::tasks::TaskType::Successor { item: random_item }
+            crate::tasks::core::TaskType::Successor { item: random_item }
         } else if r < dist.successor_prob + dist.predecessor_prob {
-            crate::tasks::TaskType::Predecessor { item: random_item }
+            crate::tasks::core::TaskType::Predecessor { item: random_item }
         } else if r < dist.successor_prob + dist.predecessor_prob + dist.k_jump_prob {
-            crate::tasks::TaskType::KJump {
+            crate::tasks::core::TaskType::KJump {
                 start: random_item,
                 k: 2,
             }
@@ -457,14 +422,14 @@ impl ExperimentFramework {
             + dist.k_jump_prob
             + dist.segment_prob
         {
-            crate::tasks::TaskType::Segment {
+            crate::tasks::core::TaskType::Segment {
                 start: random_item,
                 count: 3,
                 reverse: false,
             }
         } else {
             let random_item2 = nodes[self.rng.gen_range(0..nodes.len())].label.clone();
-            crate::tasks::TaskType::PairwiseOrder {
+            crate::tasks::core::TaskType::PairwiseOrder {
                 a: random_item,
                 b: random_item2,
             }
@@ -476,7 +441,7 @@ impl ExperimentFramework {
     fn simulate_response(
         &mut self,
         model: &mut LearnerModel,
-        task: &crate::tasks::Task,
+        task: &crate::tasks::core::Task,
     ) -> (String, f64, bool) {
         // Use model-based prediction instead of arbitrary simulation
         let op_key = format!("{:?}", task.operation);

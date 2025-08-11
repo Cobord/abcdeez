@@ -543,11 +543,11 @@ async fn get_entity_version(
 }
 
 async fn apply_entity_change(
-    tx: &mut DbTransaction<'_>,
-    user_id: Uuid,
+    _tx: &mut DbTransaction<'_>,
+    _user_id: Uuid,
     entity_type: &str,
-    entity_id: &str,
-    data: &serde_json::Value,
+    _entity_id: &str,
+    _data: &serde_json::Value,
 ) -> AppResult<()> {
     // Route to appropriate handler based on entity type
     match entity_type {
@@ -569,7 +569,7 @@ async fn apply_entity_change(
 
 async fn delete_entity(
     tx: &mut DbTransaction<'_>,
-    user_id: Uuid,
+    _user_id: Uuid,
     entity_type: &str,
     entity_id: &str,
 ) -> AppResult<()> {
@@ -655,11 +655,11 @@ async fn get_deleted_entities_since(
 }
 
 async fn apply_resolved_data(
-    conn: &mut DbConnection,
-    user_id: Uuid,
-    entity_type: &str,
-    entity_id: &str,
-    data: &serde_json::Value,
+    _conn: &mut DbConnection,
+    _user_id: Uuid,
+    _entity_type: &str,
+    _entity_id: &str,
+    _data: &serde_json::Value,
 ) -> AppResult<()> {
     // Apply the resolved data to the appropriate entity
     // This is simplified - implement based on your entity types

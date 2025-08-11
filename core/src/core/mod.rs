@@ -1,7 +1,7 @@
-mod backend;
-mod config;
-mod error;
-mod topology;
+pub mod backend;
+pub mod config;
+pub mod error;
+pub mod topology;
 
 pub use self::{
     backend::*,

@@ -69,12 +69,16 @@ impl PrivacyAccountingService {
         let principal_id_bytes = principal_id.map(|u| u.as_bytes().to_vec());
 
         let mut conn = self.db.acquire().await.map_err(AppError::DatabaseError)?;
+        
+        // Start a transaction to ensure atomicity
+        let mut tx = conn.begin().await.map_err(AppError::DatabaseError)?;
 
-        // Fetch current budget within window
+        // Use SELECT FOR UPDATE to lock the row and prevent race conditions
         let row_opt = sqlx::query(
             "SELECT id, epsilon_total, delta_total, epsilon_spent, delta_spent
              FROM privacy_budgets
              WHERE principal_type = ? AND (principal_id IS ? OR principal_id = ?) AND window_start <= ? AND window_end >= ?
+             FOR UPDATE
              LIMIT 1"
         )
         .bind(principal_type)
@@ -82,7 +86,7 @@ impl PrivacyAccountingService {
         .bind(principal_id_bytes.as_deref())
         .bind(window.end)
         .bind(window.start)
-        .fetch_optional(&mut *conn)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(AppError::DatabaseError)?;
 
@@ -97,18 +101,18 @@ impl PrivacyAccountingService {
             let d_rem = delta_total - delta_spent;
 
             if epsilon_cost <= e_rem + f64::EPSILON && delta_cost <= d_rem + f64::EPSILON {
-                // Update budget
+                // Update budget atomically within the transaction
                 sqlx::query(
                     "UPDATE privacy_budgets SET epsilon_spent = epsilon_spent + ?, delta_spent = delta_spent + ? WHERE id = ?"
                 )
                 .bind(epsilon_cost.max(0.0))
                 .bind(delta_cost.max(0.0))
                 .bind(&id)
-                .execute(&mut *conn)
+                .execute(&mut *tx)
                 .await
                 .map_err(AppError::DatabaseError)?;
 
-                // Log spend
+                // Log spend within the same transaction
                 let spend_id = Uuid::new_v4();
                 let spend_bytes = spend_id.as_bytes();
                 sqlx::query(
@@ -122,17 +126,96 @@ impl PrivacyAccountingService {
                 .bind(mechanism)
                 .bind(epsilon_cost)
                 .bind(delta_cost)
-                .execute(&mut *conn)
+                .execute(&mut *tx)
                 .await
                 .map_err(AppError::DatabaseError)?;
 
+                // Commit the transaction
+                tx.commit().await.map_err(AppError::DatabaseError)?;
                 Ok(true)
             } else {
+                // Rollback the transaction if budget exceeded
+                tx.rollback().await.map_err(AppError::DatabaseError)?;
                 Ok(false)
             }
         } else {
+            // Rollback and ensure budget row exists
+            tx.rollback().await.map_err(AppError::DatabaseError)?;
+            
             // No budget in window yet; create and retry once
             self.ensure_budget_row(principal_type, principal_id).await?;
+            Ok(false)
+        }
+    }
+    
+    /// Atomic version using a single UPDATE query with conditions
+    /// This is more efficient and completely eliminates race conditions
+    pub async fn spend_atomic(
+        &self,
+        principal_type: &str,
+        principal_id: Option<Uuid>,
+        endpoint: &str,
+        mechanism: &str,
+        epsilon_cost: f64,
+        delta_cost: f64,
+    ) -> Result<bool, AppError> {
+        let window = self.current_window();
+        let principal_id_bytes = principal_id.map(|u| u.as_bytes().to_vec());
+
+        // Ensure budget row exists first
+        self.ensure_budget_row(principal_type, principal_id).await?;
+
+        let mut conn = self.db.acquire().await.map_err(AppError::DatabaseError)?;
+        let mut tx = conn.begin().await.map_err(AppError::DatabaseError)?;
+
+        // Atomic update with condition check in SQL
+        let result = sqlx::query(
+            "UPDATE privacy_budgets 
+             SET epsilon_spent = epsilon_spent + ?, 
+                 delta_spent = delta_spent + ?
+             WHERE principal_type = ? 
+               AND (principal_id IS ? OR principal_id = ?)
+               AND window_start <= ? 
+               AND window_end >= ?
+               AND epsilon_spent + ? <= epsilon_total
+               AND delta_spent + ? <= delta_total"
+        )
+        .bind(epsilon_cost.max(0.0))
+        .bind(delta_cost.max(0.0))
+        .bind(principal_type)
+        .bind(principal_id_bytes.as_deref())
+        .bind(principal_id_bytes.as_deref())
+        .bind(window.end)
+        .bind(window.start)
+        .bind(epsilon_cost.max(0.0))
+        .bind(delta_cost.max(0.0))
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::DatabaseError)?;
+
+        if result.rows_affected() > 0 {
+            // Log the successful spend
+            let spend_id = Uuid::new_v4();
+            let spend_bytes = spend_id.as_bytes();
+            sqlx::query(
+                "INSERT INTO privacy_spend_log (id, principal_type, principal_id, endpoint, mechanism, epsilon_spent, delta_spent)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)"
+            )
+            .bind(&spend_bytes[..])
+            .bind(principal_type)
+            .bind(principal_id_bytes.as_deref())
+            .bind(endpoint)
+            .bind(mechanism)
+            .bind(epsilon_cost)
+            .bind(delta_cost)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::DatabaseError)?;
+
+            tx.commit().await.map_err(AppError::DatabaseError)?;
+            Ok(true)
+        } else {
+            tx.rollback().await.map_err(AppError::DatabaseError)?;
             Ok(false)
         }
     }

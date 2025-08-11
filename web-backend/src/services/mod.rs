@@ -2,11 +2,13 @@ pub mod adaptation_service;
 pub mod analytics_service;
 pub mod audit;
 pub mod batch_jobs;
+pub mod batch_jobs_enhanced;
 pub mod federation_service;
 pub mod learner_service;
 pub mod privacy;
 pub mod privacy_accounting;
 pub mod protocol_service;
+pub mod session_service;
 
 // OAuth services
 pub mod apple_auth_service;

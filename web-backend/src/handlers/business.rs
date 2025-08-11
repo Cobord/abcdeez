@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use crate::{
     error::AppResult,
-    middleware::require_admin,
     monitoring::business::{
         global_business_metrics, BusinessDashboard, DailyBusinessMetrics,
         LearningEffectivenessMetrics,

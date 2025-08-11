@@ -241,7 +241,7 @@ impl From<uuid::Error> for AppError {
 }
 
 impl From<anyhow::Error> for AppError {
-    fn from(err: anyhow::Error) -> Self {
+    fn from(_err: anyhow::Error) -> Self {
         AppError::InternalServerError
     }
 }

@@ -1,12 +1,21 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::{HashMap, VecDeque},
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    thread,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
 
-/// Audio Recording and Think-Aloud Protocol System
-/// Provides cross-platform audio recording with think-aloud protocol integration
+const DEFAULT_SAMPLE_RATE: u32 = 44100;
+const DEFAULT_CHANNELS: u16 = 1;
+const DEFAULT_BIT_DEPTH: u16 = 16;
+const DEFAULT_BUFFER_SIZE: usize = 10000;
+const SILENCE_THRESHOLD: f32 = 0.01;
+const QUALITY_SILENCE_THRESHOLD: f32 = 0.005;
+const CLIPPING_THRESHOLD: f32 = 0.95;
+const SAMPLE_SLEEP_MS: u64 = 10;
+const STOP_RECORDING_WAIT_MS: u64 = 100;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioSession {
@@ -30,7 +39,7 @@ pub struct AudioFile {
     pub channels: u16,
     pub bit_depth: u16,
     pub file_size_bytes: u64,
-    pub quality_score: f64, // 0.0 to 1.0
+    pub quality_score: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,7 +56,7 @@ pub struct Transcript {
     pub text: String,
     pub start_time: chrono::DateTime<chrono::Utc>,
     pub end_time: chrono::DateTime<chrono::Utc>,
-    pub confidence: f64, // 0.0 to 1.0
+    pub confidence: f64,
     pub speaker_id: Option<String>,
     pub language: String,
     pub processing_method: TranscriptionMethod,
@@ -75,21 +84,21 @@ pub struct ThinkAloudSegment {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ThinkAloudType {
-    Planning,      // "I need to figure out what comes next"
-    Execution,     // "So I'll click here"
-    Monitoring,    // "That doesn't look right"
-    Evaluation,    // "I think I got it"
-    Struggle,      // "I'm not sure about this"
-    Insight,       // "Oh, I see the pattern now!"
-    Metacognition, // "I always have trouble with this type"
-    Emotion,       // "This is frustrating"
-    Strategy,      // "Let me try a different approach"
+    Planning,
+    Execution,
+    Monitoring,
+    Evaluation,
+    Struggle,
+    Insight,
+    Metacognition,
+    Emotion,
+    Strategy,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmotionalMarker {
     pub emotion: EmotionType,
-    pub intensity: f64, // 0.0 to 1.0
+    pub intensity: f64,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub trigger: Option<String>,
 }
@@ -128,11 +137,11 @@ pub enum CognitiveProcessType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConfidenceLevel {
-    VeryLow,  // "I have no idea"
-    Low,      // "I'm not sure"
-    Medium,   // "I think..."
-    High,     // "I'm pretty sure"
-    VeryHigh, // "I know this"
+    VeryLow,
+    Low,
+    Medium,
+    High,
+    VeryHigh,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,7 +195,6 @@ pub struct PrivacySettings {
     pub anonymize_transcripts: bool,
 }
 
-/// Main audio recording system
 pub struct AudioRecorder {
     session: Option<AudioSession>,
     recording_active: Arc<Mutex<bool>>,
@@ -223,7 +231,6 @@ pub struct AudioSample {
     pub sample_rate: u32,
 }
 
-// Platform-specific implementations (stubs for compilation)
 #[cfg(target_os = "macos")]
 struct AudioUnit;
 
@@ -289,7 +296,7 @@ impl AudioRecorder {
                     microphone_distance: None,
                     other_speakers_present: false,
                 },
-                consent_given: true, // Should be verified before calling
+                consent_given: true,
                 privacy_settings: PrivacySettings {
                     store_audio_files: true,
                     delete_after_days: Some(365),
@@ -315,10 +322,8 @@ impl AudioRecorder {
             }
         }
 
-        // Initialize platform-specific recorder
         self.initialize_recorder()?;
 
-        // Create audio file for this recording
         let audio_file = AudioFile {
             file_path: self.output_directory.join(format!("audio_{}.wav", chrono::Utc::now().timestamp())),
             start_timestamp: chrono::Utc::now(),
@@ -338,7 +343,6 @@ impl AudioRecorder {
             *recording_active = true;
         }
 
-        // Start recording thread
         let buffer = Arc::clone(&self.audio_buffer);
         let active_flag = Arc::clone(&self.recording_active);
         let config = self.recorder_config.clone();
@@ -360,10 +364,8 @@ impl AudioRecorder {
         *recording_active = false;
         drop(recording_active); // Release lock before processing
 
-        // Wait a moment for recording thread to finish
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(STOP_RECORDING_WAIT_MS));
 
-        // Process recorded audio
         let audio_file = if let Some(mut file) = self.current_file.take() {
             // Update file with actual recording data
             self.update_audio_file(&mut file)?;
@@ -372,7 +374,6 @@ impl AudioRecorder {
             self.save_audio_buffer()?
         };
 
-        // Add to session
         if let Some(ref mut session) = self.session {
             session.audio_files.push(audio_file.clone());
         }
@@ -395,18 +396,14 @@ impl AudioRecorder {
         if let Some(mut session) = self.session.take() {
             session.end_time = Some(chrono::Utc::now());
 
-            // Process any remaining audio
             if *self.recording_active.lock().unwrap() {
                 self.stop_recording()?;
             }
 
-            // Perform final quality assessment
             self.assess_recording_quality(&mut session);
 
-            // Generate transcripts if needed
             self.generate_transcripts(&mut session)?;
 
-            // Analyze think-aloud segments
             self.analyze_think_aloud_segments(&mut session);
 
             Ok(session)
@@ -427,9 +424,7 @@ impl AudioRecorder {
         for sample in &recent_samples {
             let rms = Self::calculate_rms(&sample.data);
             volume_levels.push(rms);
-
-            if rms < 0.01 {
-                // Silence threshold
+            if rms < SILENCE_THRESHOLD {
                 silence_count += 1;
             }
         }
@@ -451,16 +446,13 @@ impl AudioRecorder {
             silence_percentage,
             recording_duration: chrono::Utc::now()
                 .signed_duration_since(
-                    self.session
-                        .as_ref()
-                        .map(|s| s.start_time)
-                        .unwrap_or_else(chrono::Utc::now),
+                    self.session.as_ref().map_or_else(chrono::Utc::now, |s| s.start_time),
                 )
                 .num_seconds() as f64,
             buffer_status: BufferStatus {
                 current_size: recent_samples.len(),
-                max_size: 10000, // Config-based
-                usage_percentage: recent_samples.len() as f32 / 10000.0,
+                max_size: DEFAULT_BUFFER_SIZE, // Config-based
+                usage_percentage: recent_samples.len() as f32 / DEFAULT_BUFFER_SIZE as f32,
             },
         }
     }
@@ -491,31 +483,24 @@ impl AudioRecorder {
 
     #[cfg(target_os = "macos")]
     fn initialize_macos_audio_unit(&self) -> Result<(), String> {
-        // Initialize Core Audio AudioUnit
-        // This would use the AudioUnit framework
         println!("Initializing macOS Core Audio");
         Ok(())
     }
 
     #[cfg(target_os = "ios")]
     fn initialize_ios_av_recorder(&self) -> Result<(), String> {
-        // Initialize AVAudioRecorder
-        // This would use AVFoundation framework
         println!("Initializing iOS AVAudioRecorder");
         Ok(())
     }
 
     #[cfg(target_os = "android")]
     fn initialize_android_media_recorder(&self) -> Result<(), String> {
-        // Initialize Android MediaRecorder
-        // This would use Android NDK audio APIs
         println!("Initializing Android MediaRecorder");
         Ok(())
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
     fn initialize_generic_recorder(&self) -> Result<(), String> {
-        // Use cross-platform audio library like cpal
         println!("Initializing generic cross-platform recorder");
         Ok(())
     }
@@ -526,10 +511,9 @@ impl AudioRecorder {
         config: RecorderConfig,
     ) {
         while *active_flag.lock().unwrap() {
-            // Simulate audio capture
             let sample = AudioSample {
                 timestamp: Instant::now(),
-                data: vec![0.0; 1024], // Would contain real audio data
+                data: vec![0.0; 1024],
                 sample_rate: config.sample_rate,
             };
 
@@ -537,27 +521,20 @@ impl AudioRecorder {
                 let mut buffer_guard = buffer.lock().unwrap();
                 buffer_guard.push_back(sample);
 
-                // Keep buffer size manageable
                 while buffer_guard.len() > config.buffer_size {
                     buffer_guard.pop_front();
                 }
             }
 
-            // Sleep for appropriate sample period
-            thread::sleep(Duration::from_millis(10));
+            thread::sleep(Duration::from_millis(SAMPLE_SLEEP_MS));
         }
     }
 
     fn update_audio_file(&mut self, file: &mut AudioFile) -> Result<(), String> {
         let buffer = self.audio_buffer.lock().unwrap();
-        
-        // Update file metadata based on actual recording
         file.duration_ms = ((buffer.len() as f32 / self.recorder_config.sample_rate as f32) * 1000.0) as u64;
         file.file_size_bytes = (buffer.len() * std::mem::size_of::<f32>() * self.recorder_config.channels as usize) as u64;
-        file.quality_score = 0.9; // Mock quality score
-        
-        // Save the actual audio data to file
-        // In a real implementation, this would write to the file system
+        file.quality_score = 0.9;
         
         Ok(())
     }
@@ -579,10 +556,8 @@ impl AudioRecorder {
         let filename = format!("{}_{}.wav", session_id, timestamp);
         let file_path = self.output_directory.join(filename);
 
-        // Write audio data to file (simplified)
-        let duration_ms = samples.len() as u64 * 10; // Approximate based on sample rate
+        let duration_ms = samples.len() as u64 * 10;
 
-        // Calculate quality metrics
         let quality_score = self.calculate_quality_score(&samples);
 
         let audio_file = AudioFile {
@@ -593,7 +568,7 @@ impl AudioRecorder {
             sample_rate: self.recorder_config.sample_rate,
             channels: self.recorder_config.channels,
             bit_depth: self.recorder_config.bit_depth,
-            file_size_bytes: samples.len() as u64 * 4, // Rough estimate
+            file_size_bytes: samples.len() as u64 * 4,
             quality_score,
         };
 
@@ -612,13 +587,10 @@ impl AudioRecorder {
         for sample in samples {
             let rms = Self::calculate_rms(&sample.data);
             total_rms += rms;
-
-            if rms < 0.005 {
+            if rms < QUALITY_SILENCE_THRESHOLD {
                 silence_count += 1;
             }
-
-            // Check for clipping
-            if sample.data.iter().any(|&x| x.abs() > 0.95) {
+            if sample.data.iter().any(|&x| x.abs() > CLIPPING_THRESHOLD) {
                 clipping_count += 1;
             }
         }
@@ -627,7 +599,6 @@ impl AudioRecorder {
         let silence_ratio = silence_count as f32 / samples.len() as f32;
         let clipping_ratio = clipping_count as f32 / samples.len() as f32;
 
-        // Quality score based on signal level, silence, and clipping
         let signal_quality = if avg_rms > 0.1 && avg_rms < 0.8 {
             1.0
         } else {
@@ -649,14 +620,13 @@ impl AudioRecorder {
     }
 
     fn assess_recording_quality(&self, session: &mut AudioSession) {
-        // Analyze all audio files for quality assessment
         let mut total_snr = 0.0;
         let mut total_silence = 0.0;
         let mut has_clipping = false;
 
         for audio_file in &session.audio_files {
-            total_snr += 20.0; // Placeholder SNR calculation
-            total_silence += audio_file.quality_score * 0.1; // Rough silence estimate
+            total_snr += 20.0;
+            total_silence += audio_file.quality_score * 0.1;
 
             if audio_file.quality_score < 0.7 {
                 has_clipping = true;
@@ -684,12 +654,6 @@ impl AudioRecorder {
     }
 
     fn generate_transcripts(&self, session: &mut AudioSession) -> Result<(), String> {
-        // Placeholder for speech-to-text integration
-        // In a real implementation, this would integrate with:
-        // - Apple Speech Framework (iOS/macOS)
-        // - Google Speech-to-Text API
-        // - Azure Cognitive Services
-        // - Local ASR models like Whisper
 
         for audio_file in &session.audio_files {
             let transcript = Transcript {
@@ -712,12 +676,9 @@ impl AudioRecorder {
     }
 
     fn analyze_think_aloud_segments(&self, session: &mut AudioSession) {
-        // Process existing segments and add analysis
         for segment in &mut session.think_aloud_segments {
-            // Analyze transcript for cognitive processes and emotions
             let text = segment.transcript.to_lowercase();
 
-            // Simple keyword-based analysis (would be more sophisticated)
             if text.contains("i think") || text.contains("maybe") || text.contains("probably") {
                 segment.confidence_level = Some(ConfidenceLevel::Medium);
             } else if text.contains("i know") || text.contains("definitely") {
@@ -726,7 +687,6 @@ impl AudioRecorder {
                 segment.confidence_level = Some(ConfidenceLevel::Low);
             }
 
-            // Detect emotional markers
             if text.contains("frustrat") || text.contains("annoying") {
                 segment.emotional_markers.push(EmotionalMarker {
                     emotion: EmotionType::Frustration,
@@ -745,7 +705,6 @@ impl AudioRecorder {
                 });
             }
 
-            // Detect cognitive processes
             if text.contains("let me think") || text.contains("what if") {
                 segment.cognitive_processes.push(CognitiveProcess {
                     process_type: CognitiveProcessType::ProblemSolving,
@@ -776,7 +735,6 @@ impl AudioRecorder {
     }
 
     fn get_recording_device_info(&self) -> String {
-        // Get platform-specific device information
         #[cfg(target_os = "macos")]
         return "macOS Built-in Microphone".to_string();
         #[cfg(target_os = "ios")]
@@ -791,14 +749,14 @@ impl AudioRecorder {
 impl Default for RecorderConfig {
     fn default() -> Self {
         Self {
-            sample_rate: 44100,
-            channels: 1, // Mono for think-aloud
-            bit_depth: 16,
+            sample_rate: DEFAULT_SAMPLE_RATE,
+            channels: DEFAULT_CHANNELS,
+            bit_depth: DEFAULT_BIT_DEPTH,
             format: AudioFormat::WAV,
-            buffer_size: 10000,
+            buffer_size: DEFAULT_BUFFER_SIZE,
             auto_gain_control: true,
             noise_suppression: true,
-            echo_cancellation: false, // Not needed for think-aloud
+            echo_cancellation: false,
         }
     }
 }
@@ -807,7 +765,7 @@ impl Default for RecorderConfig {
 pub struct AudioMetrics {
     pub current_volume: f32,
     pub silence_percentage: f32,
-    pub recording_duration: f64, // seconds
+    pub recording_duration: f64,
     pub buffer_status: BufferStatus,
 }
 
@@ -1043,7 +1001,6 @@ mod tests {
             .unwrap();
         assert!(recorder.session.is_some());
 
-        // Session should contain correct IDs
         let session = recorder.session.as_ref().unwrap();
         assert_eq!(session.session_id, "test_session");
         assert_eq!(session.participant_id, "test_participant");
@@ -1058,13 +1015,10 @@ mod tests {
             "I think I need to click here first, but I'm not sure if that's right",
         );
 
-        // Should detect planning/thinking
         assert!(matches!(segment_type, ThinkAloudType::Planning));
 
-        // Should detect uncertainty emotion
         assert!(!emotions.is_empty());
 
-        // Should detect problem solving
         assert!(!cognitive.is_empty());
     }
 
@@ -1074,20 +1028,18 @@ mod tests {
         let config = RecorderConfig::default();
         let recorder = AudioRecorder::new(temp_dir.path().to_path_buf(), config);
 
-        // Test with good quality samples
         let good_samples = vec![AudioSample {
             timestamp: Instant::now(),
-            data: vec![0.1, -0.1, 0.2, -0.2], // Good signal level
+            data: vec![0.1, -0.1, 0.2, -0.2],
             sample_rate: 44100,
         }];
 
         let quality = recorder.calculate_quality_score(&good_samples);
         assert!(quality > 0.5);
 
-        // Test with poor quality (silence)
         let poor_samples = vec![AudioSample {
             timestamp: Instant::now(),
-            data: vec![0.0, 0.0, 0.0, 0.0], // Silence
+            data: vec![0.0, 0.0, 0.0, 0.0],
             sample_rate: 44100,
         }];
 

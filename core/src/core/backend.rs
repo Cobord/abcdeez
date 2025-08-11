@@ -6,7 +6,7 @@ use std::time::Duration;
 use crate::{
     data::export::LearnerDataExport,
     learning::learner::LearnerMetrics,
-    tasks::{Task, TaskResponse},
+    tasks::core::{Task, TaskResponse},
 };
 
 /// Configuration for backend connection

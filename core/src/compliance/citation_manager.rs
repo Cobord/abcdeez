@@ -1,11 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::io::Write;
-use std::path::PathBuf;
-
-/// Citation Management System for Research Methodology
-/// Tracks and formats references for experimental methods, statistical procedures, and tools
+use std::{
+    collections::{HashMap, HashSet},
+    fs::File,
+    io::Write,
+    path::PathBuf,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CitationManager {
@@ -171,13 +170,11 @@ impl CitationManager {
     }
 
     pub fn add_method_citation(&mut self, method_name: &str, reference_ids: Vec<String>) {
-        self.methodology_citations
-            .insert(method_name.to_string(), reference_ids);
+        self.methodology_citations.insert(method_name.to_string(), reference_ids);
     }
 
     pub fn add_software_citation(&mut self, software_name: &str, reference_id: String) {
-        self.software_citations
-            .insert(software_name.to_string(), reference_id);
+        self.software_citations.insert(software_name.to_string(), reference_id);
     }
 
     pub fn mark_method_used(&mut self, method_name: &str) {
@@ -237,11 +234,7 @@ impl CitationManager {
         }
     }
 
-    pub fn export_bibliography(
-        &self,
-        path: &PathBuf,
-        format: BibliographyFormat,
-    ) -> std::io::Result<()> {
+    pub fn export_bibliography(&self, path: &PathBuf, format: BibliographyFormat) -> std::io::Result<()> {
         let content = match format {
             BibliographyFormat::BibTeX => self.generate_bibtex(),
             BibliographyFormat::RIS => self.generate_ris(),
@@ -249,9 +242,7 @@ impl CitationManager {
             BibliographyFormat::Formatted => self.generate_formatted_bibliography(),
         };
 
-        let mut file = File::create(path)?;
-        file.write_all(content.as_bytes())?;
-        Ok(())
+        File::create(path)?.write_all(content.as_bytes())
     }
 
     pub fn import_from_doi(&mut self, doi: &str) -> Result<String, String> {
@@ -262,28 +253,21 @@ impl CitationManager {
     pub fn search_references(&self, query: &str) -> Vec<&Reference> {
         let query_lower = query.to_lowercase();
 
-        self.references
-            .values()
+        self.references.values()
             .filter(|reference| {
                 reference.title.to_lowercase().contains(&query_lower)
-                    || reference
-                        .authors
-                        .iter()
-                        .any(|author| author.last_name.to_lowercase().contains(&query_lower))
-                    || reference
-                        .keywords
-                        .iter()
-                        .any(|keyword| keyword.to_lowercase().contains(&query_lower))
+                    || reference.authors.iter().any(|author| 
+                        author.last_name.to_lowercase().contains(&query_lower))
+                    || reference.keywords.iter().any(|keyword| 
+                        keyword.to_lowercase().contains(&query_lower))
             })
             .collect()
     }
 
     pub fn get_in_text_citation(&self, reference_id: &str) -> String {
-        if let Some(reference) = self.references.get(reference_id) {
-            self.format_in_text_citation(reference)
-        } else {
-            format!("[{}]", reference_id)
-        }
+        self.references.get(reference_id)
+            .map(|reference| self.format_in_text_citation(reference))
+            .unwrap_or_else(|| format!("[{reference_id}]"))
     }
 
     pub fn generate_methods_section(&self, experiment_id: &str) -> String {
@@ -630,10 +614,7 @@ impl CitationManager {
     }
 
     fn is_software_used(&self, software_name: &str) -> bool {
-        // Check if software is mentioned in used methods
-        self.used_methods
-            .iter()
-            .any(|method| method.contains(software_name))
+        self.used_methods.iter().any(|method| method.contains(software_name))
             || matches!(software_name, "R" | "Python" | "SciPy" | "lme4")
     }
 
@@ -692,11 +673,9 @@ impl CitationManager {
     }
 
     fn get_all_justifications(&self) -> HashMap<String, String> {
-        let mut justifications = HashMap::new();
-        for method in &self.used_methods {
-            justifications.insert(method.clone(), self.get_method_justification(method));
-        }
-        justifications
+        self.used_methods.iter()
+            .map(|method| (method.clone(), self.get_method_justification(method)))
+            .collect()
     }
 
     fn format_bibliography(&self, reference_ids: &HashSet<String>) -> Vec<FormattedCitation> {

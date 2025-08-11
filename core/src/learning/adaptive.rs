@@ -1,10 +1,11 @@
-use super::bayesian::{BayesianLearnerModel, ResponseData};
-use super::learner::LearnerModel;
-use crate::tasks::{Task, TaskGenerator, TaskType};
-use crate::core::topology::Topology;
-use crate::core::config::AdaptiveSchedulingConfig;
 use rand::Rng;
 use tracing::{debug, info, instrument, span, warn, Level};
+
+use crate::core::config::AdaptiveSchedulingConfig;
+use crate::core::topology::Topology;
+use crate::tasks::core::{Task, TaskGenerator, TaskType};
+use super::bayesian::{BayesianLearnerModel, BayesianResponseData};
+use super::learner::LearnerModel;
 
 #[derive(Debug)]
 pub struct AdaptiveScheduler {
@@ -23,10 +24,6 @@ pub struct AdaptiveScheduler {
 impl AdaptiveScheduler {
     #[instrument(level = "debug", fields(topology_size = topology.nodes.len()))]
     pub fn new(learner_model: LearnerModel, topology: Topology) -> Self {
-        info!(
-            topology_size = topology.nodes.len(),
-            "Creating new adaptive scheduler"
-        );
 
         let task_generator = TaskGenerator::new(topology.clone());
         let bayesian_model = BayesianLearnerModel::new(&topology);
@@ -46,8 +43,7 @@ impl AdaptiveScheduler {
             config: cfg,
         };
 
-        debug!(
-            epsilon = scheduler.epsilon,
+        debug!(epsilon = scheduler.epsilon,
             use_eig = scheduler.use_eig,
             "Adaptive scheduler initialized"
         );
@@ -177,7 +173,7 @@ impl AdaptiveScheduler {
         );
 
         // Update Bayesian model
-        self.bayesian_model.update_with_response(ResponseData {
+        self.bayesian_model.update_with_response(BayesianResponseData {
             task: task.clone(),
             correct,
             response_time,
@@ -415,7 +411,7 @@ impl AdaptiveScheduler {
 
     pub fn update_model(&mut self, task: &Task, correct: bool, response_time_ms: u128) {
         // Update Bayesian model with response
-        let response_data = ResponseData {
+        let response_data = BayesianResponseData {
             task: task.clone(),
             correct,
             response_time: response_time_ms as f64,

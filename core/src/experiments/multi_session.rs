@@ -1,13 +1,12 @@
-use crate::core::config::LearnerConfig;
-use super::design::{ExperimentalDesign, ParticipantAssignment};
-use crate::statistics::power_analysis::StatisticalTestType;
-use crate::core::topology::Topology;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-/// Multi-Session Experiment Management System
-/// Handles longitudinal studies, scheduling, and cross-session analysis
+use serde::{Deserialize, Serialize};
+
+use crate::core::config::LearnerConfig;
+use crate::core::topology::Topology;
+use crate::statistics::power_analysis::StatisticalTestType;
+use super::design::{ExperimentalDesign, ParticipantAssignment};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiSessionExperiment {
@@ -32,8 +31,8 @@ pub struct SessionPlan {
     pub description: String,
     pub order: usize,
     pub duration_minutes: Option<u32>,
-    pub minimum_interval_hours: Option<u32>, // Minimum time since previous session
-    pub maximum_interval_hours: Option<u32>, // Maximum time before session expires
+    pub minimum_interval_hours: Option<u32>,
+    pub maximum_interval_hours: Option<u32>,
     pub config: LearnerConfig,
     pub topology: Topology,
     pub tasks: Vec<SessionTask>,
@@ -80,7 +79,7 @@ pub struct TimeWindow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReminderSettings {
     pub enabled: bool,
-    pub advance_hours: Vec<u32>, // e.g., [24, 1] for 24h and 1h reminders
+    pub advance_hours: Vec<u32>,
     pub method: Vec<ReminderMethod>,
 }
 
@@ -158,12 +157,12 @@ pub struct PlannedComparison {
 pub struct InterimAnalysis {
     pub scheduled_after_session: usize,
     pub outcomes_to_check: Vec<String>,
-    pub stopping_rules: Vec<StoppingRule>,
+    pub stopping_rules: Vec<InterimStoppingRule>,
     pub required_power: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum StoppingRule {
+pub enum InterimStoppingRule {
     Efficacy { alpha_spent: f64 },
     Futility { conditional_power_threshold: f64 },
     Safety { adverse_event_rate: f64 },
@@ -211,7 +210,6 @@ pub enum Procedure {
     ScheduleNextSession,
 }
 
-/// Participant session tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParticipantProgress {
     pub participant_id: String,
@@ -268,7 +266,6 @@ pub enum NoteCategory {
     DataQuality,
 }
 
-/// Main experiment management system
 pub struct MultiSessionManager {
     experiments: HashMap<String, MultiSessionExperiment>,
     participant_progress: HashMap<String, ParticipantProgress>,
@@ -865,7 +862,6 @@ impl Default for AnalysisPlan {
 
 /// Scheduling system for experiments
 pub struct ExperimentScheduler {
-    // Would implement calendar integration, conflict resolution, etc.
 }
 
 impl ExperimentScheduler {

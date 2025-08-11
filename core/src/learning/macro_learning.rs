@@ -1,5 +1,5 @@
 use super::learner::OperationType;
-use crate::tasks::{Task, TaskType};
+use crate::tasks::core::{Task, TaskType};
 use crate::core::topology::Topology;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};

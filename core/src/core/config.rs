@@ -1,101 +1,58 @@
 use serde::{Deserialize, Serialize};
 
-/// Configuration system to address methodological and ecological validity
-/// Removes hardcoded priors and allows population-specific adaptations
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LearnerConfig {
-    /// Initial uncertainty for new nodes (default: 1.0)
-    /// Lower values indicate prior knowledge assumption
     pub initial_uncertainty: f64,
-
-    /// Initial memory strength (default: 0.5)
-    /// Higher values assume faster initial learning
     pub initial_memory_strength: f64,
-
-    /// Initial operation proficiency theta (default: 0.0)
-    /// Positive values assume prior skill
     pub initial_proficiency: f64,
-
-    /// Base learning rate (default: 0.3)
-    /// Population-specific (children might need higher rates)
     pub learning_rate_base: f64,
-
-    /// Learning rate decay exponent (default: 0.5)
-    /// Controls how quickly learning slows with practice
     pub learning_rate_decay: f64,
-
-    /// Position update weight for old vs new (default: 0.7)
-    /// Higher values = more conservative updating
     pub position_update_weight: f64,
-
-    /// Minimum uncertainty floor (default: 0.1)
-    /// Prevents overconfidence in the model
     pub min_uncertainty: f64,
-
-    /// Theta bounds for proficiency (default: (-3.0, 3.0))
-    /// May need wider range for expert populations
     pub theta_bounds: (f64, f64),
-
-    /// Memory update on correct response (default: 0.2)
-    /// Higher values = faster reinforcement
     pub memory_update_correct: f64,
-
-    /// Memory update on incorrect response (default: -0.1)
-    /// More negative = stronger penalty for errors
     pub memory_update_incorrect: f64,
-
-    /// Memory decay rate base (default: 0.05)
-    /// Higher values = faster forgetting
     pub memory_decay_rate: f64,
-
-    /// Edge emphasis percentage (default: 0.01)
-    /// Primacy/recency effect strength
     pub edge_emphasis: f64,
 }
 
 impl LearnerConfig {
-    /// Validate configuration parameters
     pub fn validate(&self) -> Result<(), String> {
-        // Check that all probabilities/rates are in valid ranges
-        if self.initial_uncertainty <= 0.0 {
-            return Err("initial_uncertainty must be positive".to_string());
+        macro_rules! validate_range {
+            ($field:expr, $range:expr, $name:literal) => {
+                if !$range.contains(&$field) {
+                    return Err(format!("{} must be in {:?}", $name, $range));
+                }
+            };
         }
-        if self.initial_memory_strength < 0.0 || self.initial_memory_strength > 1.0 {
-            return Err("initial_memory_strength must be in [0, 1]".to_string());
+        
+        macro_rules! validate_positive {
+            ($field:expr, $name:literal) => {
+                if $field <= 0.0 {
+                    return Err(format!("{} must be positive", $name));
+                }
+            };
         }
-        if self.learning_rate_base <= 0.0 || self.learning_rate_base > 1.0 {
-            return Err("learning_rate_base must be in (0, 1]".to_string());
-        }
-        if self.learning_rate_decay < 0.0 || self.learning_rate_decay > 1.0 {
-            return Err("learning_rate_decay must be in [0, 1]".to_string());
-        }
-        if self.position_update_weight < 0.0 || self.position_update_weight > 1.0 {
-            return Err("position_update_weight must be in [0, 1]".to_string());
-        }
-        if self.min_uncertainty <= 0.0 {
-            return Err("min_uncertainty must be positive".to_string());
-        }
+        
+        validate_positive!(self.initial_uncertainty, "initial_uncertainty");
+        validate_range!(self.initial_memory_strength, 0.0..=1.0, "initial_memory_strength");
+        validate_range!(self.learning_rate_base, 0.0..=1.0, "learning_rate_base");
+        validate_range!(self.learning_rate_decay, 0.0..=1.0, "learning_rate_decay");
+        validate_range!(self.position_update_weight, 0.0..=1.0, "position_update_weight");
+        validate_positive!(self.min_uncertainty, "min_uncertainty");
+        validate_range!(self.memory_update_correct, 0.0..=1.0, "memory_update_correct");
+        validate_range!(self.memory_update_incorrect, -1.0..=0.0, "memory_update_incorrect");
+        validate_range!(self.memory_decay_rate, 0.0..=1.0, "memory_decay_rate");
+        validate_range!(self.edge_emphasis, 0.0..=1.0, "edge_emphasis");
+        
         if self.theta_bounds.0 >= self.theta_bounds.1 {
             return Err("theta_bounds must have lower < upper".to_string());
         }
-        if self.memory_update_correct < 0.0 || self.memory_update_correct > 1.0 {
-            return Err("memory_update_correct must be in [0, 1]".to_string());
-        }
-        if self.memory_update_incorrect > 0.0 || self.memory_update_incorrect < -1.0 {
-            return Err("memory_update_incorrect must be in [-1, 0]".to_string());
-        }
-        if self.memory_decay_rate < 0.0 || self.memory_decay_rate > 1.0 {
-            return Err("memory_decay_rate must be in [0, 1]".to_string());
-        }
-        if self.edge_emphasis < 0.0 || self.edge_emphasis > 1.0 {
-            return Err("edge_emphasis must be in [0, 1]".to_string());
-        }
+        
         Ok(())
     }
 
-    /// Standard adult learner configuration
     pub fn adult() -> Self {
         Self {
             initial_uncertainty: 1.0,
@@ -113,75 +70,71 @@ impl LearnerConfig {
         }
     }
 
-    /// Configuration for child learners (5-12 years)
     pub fn child() -> Self {
         Self {
-            initial_uncertainty: 1.5,       // More uncertain initially
-            initial_memory_strength: 0.3,   // Weaker initial memory
-            initial_proficiency: -0.5,      // Start with lower proficiency
-            learning_rate_base: 0.5,        // Faster learning rate
-            learning_rate_decay: 0.3,       // Slower decay
-            position_update_weight: 0.5,    // More flexible updating
-            min_uncertainty: 0.2,           // Higher uncertainty floor
-            theta_bounds: (-2.0, 2.0),      // Narrower ability range
-            memory_update_correct: 0.3,     // Stronger positive reinforcement
-            memory_update_incorrect: -0.05, // Gentler error penalty
-            memory_decay_rate: 0.08,        // Faster forgetting
-            edge_emphasis: 0.02,            // Stronger primacy/recency
+            initial_uncertainty: 1.5,
+            initial_memory_strength: 0.3,
+            initial_proficiency: -0.5,
+            learning_rate_base: 0.5,
+            learning_rate_decay: 0.3,
+            position_update_weight: 0.5,
+            min_uncertainty: 0.2,
+            theta_bounds: (-2.0, 2.0),
+            memory_update_correct: 0.3,
+            memory_update_incorrect: -0.05,
+            memory_decay_rate: 0.08,
+            edge_emphasis: 0.02,
         }
     }
 
-    /// Configuration for older adults (65+)
     pub fn older_adult() -> Self {
         Self {
-            initial_uncertainty: 0.8,       // More confident initially
-            initial_memory_strength: 0.4,   // Moderate initial memory
-            initial_proficiency: 0.2,       // Some prior knowledge assumed
-            learning_rate_base: 0.2,        // Slower learning rate
-            learning_rate_decay: 0.6,       // Faster decay
-            position_update_weight: 0.8,    // More conservative
-            min_uncertainty: 0.15,          // Moderate floor
-            theta_bounds: (-2.5, 2.5),      // Slightly narrower range
-            memory_update_correct: 0.15,    // Slower reinforcement
-            memory_update_incorrect: -0.15, // Balanced penalty
-            memory_decay_rate: 0.07,        // Moderate forgetting
-            edge_emphasis: 0.015,           // Moderate edge effects
+            initial_uncertainty: 0.8,
+            initial_memory_strength: 0.4,
+            initial_proficiency: 0.2,
+            learning_rate_base: 0.2,
+            learning_rate_decay: 0.6,
+            position_update_weight: 0.8,
+            min_uncertainty: 0.15,
+            theta_bounds: (-2.5, 2.5),
+            memory_update_correct: 0.15,
+            memory_update_incorrect: -0.15,
+            memory_decay_rate: 0.07,
+            edge_emphasis: 0.015,
         }
     }
 
-    /// Configuration for learners with disabilities
     pub fn learning_disability() -> Self {
         Self {
-            initial_uncertainty: 2.0,     // Much more uncertain
-            initial_memory_strength: 0.2, // Weaker initial memory
-            initial_proficiency: -1.0,    // Lower starting point
-            learning_rate_base: 0.4,      // Moderate learning rate
-            learning_rate_decay: 0.2,     // Very slow decay
-            position_update_weight: 0.4,  // Flexible updating
-            min_uncertainty: 0.3,         // Higher floor
-            theta_bounds: (-2.0, 2.0),    // Adjusted range
-            memory_update_correct: 0.4,   // Strong reinforcement needed
-            memory_update_incorrect: 0.0, // No penalty for errors
-            memory_decay_rate: 0.1,       // Faster forgetting
-            edge_emphasis: 0.03,          // Strong edge effects
+            initial_uncertainty: 2.0,
+            initial_memory_strength: 0.2,
+            initial_proficiency: -1.0,
+            learning_rate_base: 0.4,
+            learning_rate_decay: 0.2,
+            position_update_weight: 0.4,
+            min_uncertainty: 0.3,
+            theta_bounds: (-2.0, 2.0),
+            memory_update_correct: 0.4,
+            memory_update_incorrect: 0.0,
+            memory_decay_rate: 0.1,
+            edge_emphasis: 0.03,
         }
     }
 
-    /// Expert learner configuration (domain experts)
     pub fn expert() -> Self {
         Self {
-            initial_uncertainty: 0.5,      // Less uncertain
-            initial_memory_strength: 0.7,  // Strong initial memory
-            initial_proficiency: 1.0,      // High starting proficiency
-            learning_rate_base: 0.4,       // Fast refinement
-            learning_rate_decay: 0.7,      // Quick stabilization
-            position_update_weight: 0.6,   // Balanced updating
-            min_uncertainty: 0.05,         // Very low floor
-            theta_bounds: (-4.0, 4.0),     // Extended range for expertise
-            memory_update_correct: 0.1,    // Small updates (already skilled)
-            memory_update_incorrect: -0.2, // Strong error signal
-            memory_decay_rate: 0.02,       // Slow forgetting
-            edge_emphasis: 0.005,          // Minimal edge effects
+            initial_uncertainty: 0.5,
+            initial_memory_strength: 0.7,
+            initial_proficiency: 1.0,
+            learning_rate_base: 0.4,
+            learning_rate_decay: 0.7,
+            position_update_weight: 0.6,
+            min_uncertainty: 0.05,
+            theta_bounds: (-4.0, 4.0),
+            memory_update_correct: 0.1,
+            memory_update_incorrect: -0.2,
+            memory_decay_rate: 0.02,
+            edge_emphasis: 0.005,
         }
     }
 }
@@ -195,25 +148,12 @@ impl Default for LearnerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AdaptiveSchedulingConfig {
-    /// Initial exploration rate (default: 0.15)
     pub initial_epsilon: f64,
-
-    /// Exploration decay rate per trial (default: 0.995)
     pub epsilon_decay: f64,
-
-    /// Minimum exploration rate (default: 0.01)
     pub min_epsilon: f64,
-
-    /// Target success rate for optimal difficulty (default: 0.75)
     pub target_success_rate: f64,
-
-    /// Tolerance around target success rate (default: 0.15)
     pub success_tolerance: f64,
-
-    /// Scoring weights for task selection
     pub scoring_weights: ScoringWeights,
-
-    /// Use Expected Information Gain
     pub use_eig: bool,
 }
 
@@ -227,44 +167,42 @@ pub struct ScoringWeights {
 }
 
 impl AdaptiveSchedulingConfig {
-    /// Validate configuration parameters
     pub fn validate(&self) -> Result<(), String> {
-        if self.initial_epsilon < 0.0 || self.initial_epsilon > 1.0 {
-            return Err("initial_epsilon must be in [0, 1]".to_string());
+        const UNIT_RANGE: std::ops::RangeInclusive<f64> = 0.0..=1.0;
+        
+        macro_rules! validate_unit {
+            ($field:expr, $name:literal) => {
+                if !UNIT_RANGE.contains(&$field) {
+                    return Err(format!("{} must be in [0, 1]", $name));
+                }
+            };
         }
-        if self.epsilon_decay < 0.0 || self.epsilon_decay > 1.0 {
-            return Err("epsilon_decay must be in [0, 1]".to_string());
-        }
-        if self.min_epsilon < 0.0 || self.min_epsilon > 1.0 {
-            return Err("min_epsilon must be in [0, 1]".to_string());
-        }
+        
+        validate_unit!(self.initial_epsilon, "initial_epsilon");
+        validate_unit!(self.epsilon_decay, "epsilon_decay");
+        validate_unit!(self.min_epsilon, "min_epsilon");
+        validate_unit!(self.target_success_rate, "target_success_rate");
+        validate_unit!(self.success_tolerance, "success_tolerance");
+        
         if self.min_epsilon > self.initial_epsilon {
             return Err("min_epsilon must be <= initial_epsilon".to_string());
         }
-        if self.target_success_rate < 0.0 || self.target_success_rate > 1.0 {
-            return Err("target_success_rate must be in [0, 1]".to_string());
-        }
-        if self.success_tolerance < 0.0 || self.success_tolerance > 1.0 {
-            return Err("success_tolerance must be in [0, 1]".to_string());
-        }
         
-        // Validate scoring weights
         let weights = &self.scoring_weights;
-        if weights.difficulty < 0.0 || weights.uncertainty < 0.0 || 
-           weights.practice_need < 0.0 || weights.weak_link < 0.0 {
+        let weight_values = [weights.difficulty, weights.uncertainty, weights.practice_need, weights.weak_link];
+        
+        if weight_values.iter().any(|&w| w < 0.0) {
             return Err("All scoring weights must be non-negative".to_string());
         }
         
-        let weight_sum = weights.difficulty + weights.uncertainty + 
-                         weights.practice_need + weights.weak_link;
+        let weight_sum: f64 = weight_values.iter().sum();
         if (weight_sum - 1.0).abs() > 0.001 {
-            return Err(format!("Scoring weights must sum to 1.0, got {}", weight_sum));
+            return Err(format!("Scoring weights must sum to 1.0, got {weight_sum}"));
         }
         
         Ok(())
     }
 
-    /// Standard configuration
     pub fn standard() -> Self {
         Self {
             initial_epsilon: 0.15,
@@ -282,36 +220,34 @@ impl AdaptiveSchedulingConfig {
         }
     }
 
-    /// Exploration-focused (for novel domains)
     pub fn exploratory() -> Self {
         Self {
-            initial_epsilon: 0.3,      // Much more exploration
-            epsilon_decay: 0.999,      // Slower decay
-            min_epsilon: 0.05,         // Higher floor
-            target_success_rate: 0.65, // Accept more errors
-            success_tolerance: 0.25,   // Wider tolerance
+            initial_epsilon: 0.3,
+            epsilon_decay: 0.999,
+            min_epsilon: 0.05,
+            target_success_rate: 0.65,
+            success_tolerance: 0.25,
             scoring_weights: ScoringWeights {
                 difficulty: 0.2,
-                uncertainty: 0.5, // Prioritize uncertain areas
+                uncertainty: 0.5,
                 practice_need: 0.2,
                 weak_link: 0.1,
             },
-            use_eig: true, // Use information gain
+            use_eig: true,
         }
     }
 
-    /// Mastery-focused (for skill development)
     pub fn mastery() -> Self {
         Self {
-            initial_epsilon: 0.05,     // Minimal exploration
-            epsilon_decay: 0.99,       // Fast decay
-            min_epsilon: 0.001,        // Very low floor
-            target_success_rate: 0.85, // High success target
-            success_tolerance: 0.1,    // Narrow tolerance
+            initial_epsilon: 0.05,
+            epsilon_decay: 0.99,
+            min_epsilon: 0.001,
+            target_success_rate: 0.85,
+            success_tolerance: 0.1,
             scoring_weights: ScoringWeights {
-                difficulty: 0.4, // Focus on appropriate difficulty
+                difficulty: 0.4,
                 uncertainty: 0.1,
-                practice_need: 0.3, // Emphasize practice
+                practice_need: 0.3,
                 weak_link: 0.2,
             },
             use_eig: false,
@@ -328,34 +264,22 @@ impl Default for AdaptiveSchedulingConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HintInterventionConfig {
-    /// Response time threshold for struggle (default: 5000ms)
     pub struggle_rt_threshold_ms: u64,
-
-    /// Consecutive errors before intervention (default: 3)
     pub error_streak_threshold: usize,
-
-    /// Delay before showing hints (default: 3000ms)
     pub hint_delay_ms: u64,
-
-    /// Multiplier for adaptive RT threshold (default: 2.0)
     pub adaptive_rt_multiplier: f64,
-
-    /// Difficulty adjustment thresholds
-    pub too_easy_error_rate: f64, // default: 0.1
-    pub too_easy_rt_ms: u64,      // default: 2000
-    pub too_hard_error_rate: f64, // default: 0.5
-
-    /// Struggle level thresholds
-    pub mild_errors: usize, // default: 1
-    pub mild_rt_multiplier: f64,     // default: 1.5
-    pub moderate_errors: usize,      // default: 3
-    pub moderate_rt_multiplier: f64, // default: 2.0
-    pub severe_errors: usize,        // default: 5
-    pub severe_rt_multiplier: f64,   // default: 3.0
+    pub too_easy_error_rate: f64,
+    pub too_easy_rt_ms: u64,
+    pub too_hard_error_rate: f64,
+    pub mild_errors: usize,
+    pub mild_rt_multiplier: f64,
+    pub moderate_errors: usize,
+    pub moderate_rt_multiplier: f64,
+    pub severe_errors: usize,
+    pub severe_rt_multiplier: f64,
 }
 
 impl HintInterventionConfig {
-    /// Standard adult configuration
     pub fn standard() -> Self {
         Self {
             struggle_rt_threshold_ms: 5000,
@@ -374,16 +298,15 @@ impl HintInterventionConfig {
         }
     }
 
-    /// Child-friendly configuration
     pub fn child() -> Self {
         Self {
-            struggle_rt_threshold_ms: 3000, // Shorter attention span
-            error_streak_threshold: 2,      // Earlier intervention
-            hint_delay_ms: 2000,            // Faster hints
-            adaptive_rt_multiplier: 1.5,    // Lower threshold
-            too_easy_error_rate: 0.05,      // Stricter easy threshold
+            struggle_rt_threshold_ms: 3000,
+            error_streak_threshold: 2,
+            hint_delay_ms: 2000,
+            adaptive_rt_multiplier: 1.5,
+            too_easy_error_rate: 0.05,
             too_easy_rt_ms: 1500,
-            too_hard_error_rate: 0.4, // More lenient
+            too_hard_error_rate: 0.4,
             mild_errors: 1,
             mild_rt_multiplier: 1.3,
             moderate_errors: 2,
@@ -393,17 +316,16 @@ impl HintInterventionConfig {
         }
     }
 
-    /// Supportive configuration (learning disabilities)
     pub fn supportive() -> Self {
         Self {
-            struggle_rt_threshold_ms: 8000, // Much more time
-            error_streak_threshold: 1,      // Immediate support
-            hint_delay_ms: 1000,            // Quick hints
-            adaptive_rt_multiplier: 3.0,    // Very lenient
-            too_easy_error_rate: 0.0,       // Never too easy
+            struggle_rt_threshold_ms: 8000,
+            error_streak_threshold: 1,
+            hint_delay_ms: 1000,
+            adaptive_rt_multiplier: 3.0,
+            too_easy_error_rate: 0.0,
             too_easy_rt_ms: 10000,
-            too_hard_error_rate: 0.3, // Early adjustment
-            mild_errors: 0,           // Always provide support
+            too_hard_error_rate: 0.3,
+            mild_errors: 0,
             mild_rt_multiplier: 1.2,
             moderate_errors: 1,
             moderate_rt_multiplier: 1.5,
@@ -422,13 +344,8 @@ impl Default for HintInterventionConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DomainConfig {
-    /// Domain-specific difficulty calibrations
     pub task_difficulties: TaskDifficultyConfig,
-
-    /// Domain-specific chunking patterns
     pub chunk_boundaries: Vec<ChunkBoundaryConfig>,
-
-    /// Expected baseline response times
     pub baseline_rt_ms: ResponseTimeConfig,
 }
 
@@ -462,7 +379,6 @@ pub struct ResponseTimeConfig {
 }
 
 impl DomainConfig {
-    /// Alphabet domain configuration
     pub fn alphabet() -> Self {
         Self {
             task_difficulties: TaskDifficultyConfig {
@@ -478,17 +394,17 @@ impl DomainConfig {
             chunk_boundaries: vec![
                 ChunkBoundaryConfig {
                     name: "Major".to_string(),
-                    positions: vec![6, 13, 19], // After F, M, S
+                    positions: vec![6, 13, 19],
                     strength: 0.8,
                 },
                 ChunkBoundaryConfig {
                     name: "Minor".to_string(),
-                    positions: vec![3, 9, 16, 22], // Every ~3 letters
+                    positions: vec![3, 9, 16, 22],
                     strength: 0.4,
                 },
                 ChunkBoundaryConfig {
                     name: "Vowels".to_string(),
-                    positions: vec![0, 4, 8, 14, 20], // A, E, I, O, U
+                    positions: vec![0, 4, 8, 14, 20],
                     strength: 0.3,
                 },
             ],
@@ -500,13 +416,12 @@ impl DomainConfig {
         }
     }
 
-    /// Musical notes configuration
     pub fn music() -> Self {
         Self {
             task_difficulties: TaskDifficultyConfig {
-                successor: 0.25, // Easier in octave
+                successor: 0.25,
                 predecessor: 0.35,
-                k_jump_base: 0.4, // Intervals are harder
+                k_jump_base: 0.4,
                 k_jump_increment: 0.15,
                 segment_base: 0.4,
                 segment_length_factor: 0.15,
@@ -516,12 +431,12 @@ impl DomainConfig {
             chunk_boundaries: vec![
                 ChunkBoundaryConfig {
                     name: "Octave".to_string(),
-                    positions: vec![7], // After full octave
+                    positions: vec![7],
                     strength: 0.9,
                 },
                 ChunkBoundaryConfig {
                     name: "Tetrachord".to_string(),
-                    positions: vec![3], // After first tetrachord
+                    positions: vec![3],
                     strength: 0.5,
                 },
             ],
@@ -533,13 +448,12 @@ impl DomainConfig {
         }
     }
 
-    /// Numbers/mathematics configuration
     pub fn mathematics() -> Self {
         Self {
             task_difficulties: TaskDifficultyConfig {
-                successor: 0.2, // Very easy
+                successor: 0.2,
                 predecessor: 0.25,
-                k_jump_base: 0.25, // Addition is familiar
+                k_jump_base: 0.25,
                 k_jump_increment: 0.05,
                 segment_base: 0.2,
                 segment_length_factor: 0.05,
@@ -549,12 +463,12 @@ impl DomainConfig {
             chunk_boundaries: vec![
                 ChunkBoundaryConfig {
                     name: "Decade".to_string(),
-                    positions: vec![9, 19, 29], // 10, 20, 30
+                    positions: vec![9, 19, 29],
                     strength: 0.7,
                 },
                 ChunkBoundaryConfig {
                     name: "Five".to_string(),
-                    positions: vec![4, 14, 24], // 5, 15, 25
+                    positions: vec![4, 14, 24],
                     strength: 0.4,
                 },
             ],
@@ -573,7 +487,6 @@ impl Default for DomainConfig {
     }
 }
 
-/// Complete configuration for a learning system
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SystemConfig {

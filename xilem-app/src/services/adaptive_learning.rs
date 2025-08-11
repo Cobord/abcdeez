@@ -1,17 +1,17 @@
 // Adaptive learning service integrating abcdeez-core
 use abcdeez_core::{
-    Topology,
-    AdaptiveScheduler, BayesianLearnerModel, LearnerModel,
-    Task, TaskGenerator, TaskType, TaskType as CoreTaskType,
+    core::Topology,
+    learning::adaptive::AdaptiveScheduler,
+    learning::bayesian::BayesianLearnerModel,
+    learning::learner::LearnerModel,
+    tasks::core::Task,
 };
 // Intervention system removed from core
 use anyhow::Result;
-use chrono::{DateTime, Utc};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use uuid::Uuid;
 
 use crate::models::{self, TaskResponse};
-use crate::state::SessionState;
 
 pub struct AdaptiveLearningService {
     scheduler: AdaptiveScheduler,

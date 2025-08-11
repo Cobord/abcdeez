@@ -30,6 +30,19 @@ use std::{
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+/// Sanitize cache keys to prevent cache poisoning attacks
+fn sanitize_cache_key(key: &str) -> String {
+    // Limit key length to prevent memory exhaustion
+    const MAX_KEY_LENGTH: usize = 250;
+    
+    // Only allow alphanumeric, underscore, hyphen, colon, and dot
+    // These are common cache key characters that are safe
+    key.chars()
+        .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-' || *c == ':' || *c == '.')
+        .take(MAX_KEY_LENGTH)
+        .collect()
+}
+
 #[derive(Debug)]
 pub enum CacheError {
     NotFound,
@@ -92,11 +105,12 @@ impl InMemoryCache {
     }
 
     async fn get(&self, key: &str) -> Option<String> {
+        let sanitized_key = sanitize_cache_key(key);
         let mut map = self.map.lock().await;
         // Purge expired values on access
-        if let Some(entry) = map.get(key) {
+        if let Some(entry) = map.get(&sanitized_key) {
             if entry.is_expired() {
-                map.remove(key);
+                map.remove(&sanitized_key);
                 return None;
             }
             Some(entry.value.clone())
@@ -106,22 +120,25 @@ impl InMemoryCache {
     }
 
     async fn set_ex(&self, key: String, ttl_secs: u64, value: String) {
+        let sanitized_key = sanitize_cache_key(&key);
         let expires_at = Instant::now().checked_add(Duration::from_secs(ttl_secs));
         let mut map = self.map.lock().await;
-        map.insert(key, Entry { value, expires_at });
+        map.insert(sanitized_key, Entry { value, expires_at });
     }
 
     async fn del(&self, key: &str) -> bool {
+        let sanitized_key = sanitize_cache_key(key);
         let mut map = self.map.lock().await;
-        map.remove(key).is_some()
+        map.remove(&sanitized_key).is_some()
     }
 
     async fn exists(&self, key: &str) -> bool {
+        let sanitized_key = sanitize_cache_key(key);
         let mut map = self.map.lock().await;
         // Check existence and remove if expired
-        if let Some(entry) = map.get(key) {
+        if let Some(entry) = map.get(&sanitized_key) {
             if entry.is_expired() {
-                map.remove(key);
+                map.remove(&sanitized_key);
                 return false;
             }
             true
@@ -131,11 +148,12 @@ impl InMemoryCache {
     }
 
     async fn incr(&self, key: &str) -> Result<i64, CacheError> {
+        let sanitized_key = sanitize_cache_key(key);
         let mut map = self.map.lock().await;
         // Get current value or default to 0
-        let current = if let Some(entry) = map.get(key) {
+        let current = if let Some(entry) = map.get(&sanitized_key) {
             if entry.is_expired() {
-                map.remove(key);
+                map.remove(&sanitized_key);
                 0
             } else {
                 entry.value.parse::<i64>().unwrap_or(0)
@@ -147,7 +165,7 @@ impl InMemoryCache {
         let new_value = current + 1;
         // Store with no expiry (will be set by EXPIRE if needed)
         map.insert(
-            key.to_string(),
+            sanitized_key,
             Entry {
                 value: new_value.to_string(),
                 expires_at: None,
@@ -157,8 +175,9 @@ impl InMemoryCache {
     }
 
     async fn expire(&self, key: &str, ttl_secs: u64) -> bool {
+        let sanitized_key = sanitize_cache_key(key);
         let mut map = self.map.lock().await;
-        if let Some(entry) = map.get_mut(key) {
+        if let Some(entry) = map.get_mut(&sanitized_key) {
             entry.expires_at = Instant::now().checked_add(Duration::from_secs(ttl_secs));
             true
         } else {
@@ -275,9 +294,9 @@ impl Command {
                 let key = self.args[0].clone();
                 let value = self.args[1].clone();
 
-                let mut guard = conn.inner.lock().await;
+                let guard = conn.inner.lock().await;
                 // Store without expiry by using a very long TTL (~100 years)
-                guard.set_ex(key, 31_536_000 * 100, value);
+                guard.set_ex(key, 31_536_000 * 100, value).await;
                 T::from_set()
             }
             "GET" => {
@@ -285,7 +304,7 @@ impl Command {
                     return Err(CacheError::InvalidArgs("GET requires 1 argument: key"));
                 }
                 let key = &self.args[0];
-                let mut guard = conn.inner.lock().await;
+                let guard = conn.inner.lock().await;
                 let val = guard.get(key).await;
                 T::from_get(val)
             }

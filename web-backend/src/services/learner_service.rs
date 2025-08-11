@@ -10,11 +10,13 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::models::learner::Learner;
 use abcdeez_core::{
-    ResponseData,
-    data::export::{self, SessionData},
-    tasks::TaskResponse as CoreTaskResponse,
-    BayesianLearnerModel, LearnerDataExport, LearnerMetrics, LearnerModel as CoreLearnerModel,
-    Topology,
+    core::Topology,
+    data::export::{self, LearnerDataExport, SessionData},
+    learning::{
+        bayesian::{BayesianLearnerModel, BayesianResponseData},
+        learner::{LearnerMetrics, LearnerModel as CoreLearnerModel, OperationType},
+    },
+    tasks::core::{Task, TaskResponse as CoreTaskResponse, TaskType},
 };
 
 #[derive(Clone)]
@@ -129,8 +131,8 @@ impl LearnerService {
             .get_or_create_bayesian_model(learner_id, topology)
             .await?;
 
-        // Convert response to ResponseData format for Bayesian update
-        let response_data = ResponseData {
+        // Convert response to BayesianResponseData format for Bayesian update
+        let response_data = BayesianResponseData {
             task: response.task.clone(),
             correct: response.correct,
             response_time: response.response_time_ms as f64,
@@ -555,40 +557,40 @@ impl LearnerService {
         task_type: &str,
         task_data: &str,
         correct_answer: &str,
-    ) -> Result<abcdeez_core::Task> {
+    ) -> Result<Task> {
         // Parse the task data JSON to reconstruct the original task
         let task_json: serde_json::Value = serde_json::from_str(task_data)?;
 
         let task_type_enum = match task_type {
             "Successor" => {
                 let item = task_json["item"].as_str().unwrap_or("A").to_string();
-                abcdeez_core::TaskType::Successor { item }
+                TaskType::Successor { item }
             }
             "Predecessor" => {
                 let item = task_json["item"].as_str().unwrap_or("A").to_string();
-                abcdeez_core::TaskType::Predecessor { item }
+                TaskType::Predecessor { item }
             }
             "PairwiseOrder" => {
                 let a = task_json["a"].as_str().unwrap_or("A").to_string();
                 let b = task_json["b"].as_str().unwrap_or("B").to_string();
-                abcdeez_core::TaskType::PairwiseOrder { a, b }
+                TaskType::PairwiseOrder { a, b }
             }
             "KJump" => {
                 let start = task_json["start"].as_str().unwrap_or("A").to_string();
                 let k = task_json["k"].as_i64().unwrap_or(1) as i32;
-                abcdeez_core::TaskType::KJump { start, k }
+                TaskType::KJump { start, k }
             }
             "Segment" => {
                 let start = task_json["start"].as_str().unwrap_or("A").to_string();
                 let count = task_json["count"].as_u64().unwrap_or(3) as usize;
                 let reverse = task_json["reverse"].as_bool().unwrap_or(false);
-                abcdeez_core::TaskType::Segment {
+                TaskType::Segment {
                     start,
                     count,
                     reverse,
                 }
             }
-            _ => abcdeez_core::TaskType::Successor {
+            _ => TaskType::Successor {
                 item: "A".to_string(),
             },
         };
@@ -604,29 +606,29 @@ impl LearnerService {
             })
             .unwrap_or_else(Vec::new);
 
-        Ok(abcdeez_core::Task {
+        Ok(Task {
             task_type: task_type_enum.clone(),
             prompt,
             correct_answer: correct_answer.to_string(),
             options,
             difficulty,
             operation: match &task_type_enum {
-                abcdeez_core::TaskType::Successor { .. } => {
-                    abcdeez_core::OperationType::Successor
+                TaskType::Successor { .. } => {
+                    OperationType::Successor
                 }
-                abcdeez_core::TaskType::Predecessor { .. } => {
-                    abcdeez_core::OperationType::Predecessor
+                TaskType::Predecessor { .. } => {
+                    OperationType::Predecessor
                 }
-                abcdeez_core::TaskType::PairwiseOrder { .. } => {
-                    abcdeez_core::OperationType::PairwiseOrder
+                TaskType::PairwiseOrder { .. } => {
+                    OperationType::PairwiseOrder
                 }
-                abcdeez_core::TaskType::KJump { k, .. } => {
-                    abcdeez_core::OperationType::KJump(*k)
+                TaskType::KJump { k, .. } => {
+                    OperationType::KJump(*k)
                 }
-                abcdeez_core::TaskType::Segment { count, reverse, .. } => {
-                    abcdeez_core::OperationType::Segment(*count, *reverse)
+                TaskType::Segment { count, reverse, .. } => {
+                    OperationType::Segment(*count, *reverse)
                 }
-                _ => abcdeez_core::OperationType::Successor,
+                _ => OperationType::Successor,
             },
         })
     }

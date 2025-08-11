@@ -1,6 +1,8 @@
 pub mod cache;
 pub mod config;
 pub mod db;
+pub mod db_pool_monitor;
+pub mod encryption;
 pub mod error;
 pub mod handlers;
 pub mod middleware;

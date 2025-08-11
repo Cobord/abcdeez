@@ -1,5 +1,5 @@
 use super::learner::OperationType;
-use crate::tasks::Task;
+use crate::tasks::core::Task;
 use crate::core::topology::Topology;
 use rand::prelude::*;
 use rand::{Rng, SeedableRng};

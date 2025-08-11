@@ -1,6 +1,9 @@
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    f64::consts::PI,
+};
+
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::f64::consts::PI;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TopologyType {
@@ -35,29 +38,32 @@ pub struct Topology {
 impl Topology {
     pub fn new_linear(items: Vec<String>) -> Self {
         let n = items.len();
-        let mut nodes = Vec::new();
-        let mut edges = Vec::new();
-        let mut node_map = HashMap::new();
+        let (mut nodes, mut edges, mut node_map) = (
+            Vec::with_capacity(n),
+            Vec::with_capacity(n.saturating_sub(1)),
+            HashMap::with_capacity(n),
+        );
 
-        for (i, label) in items.iter().enumerate() {
-            let id = format!("node_{}", i);
+        for (i, label) in items.into_iter().enumerate() {
+            let id = format!("node_{i}");
+            
             nodes.push(Node {
                 id: id.clone(),
-                label: label.clone(),
+                label,
                 position: i as f64,
             });
             node_map.insert(id.clone(), i);
 
             if i < n - 1 {
                 edges.push(Edge {
-                    from: id.clone(),
+                    from: id,
                     to: format!("node_{}", i + 1),
                     weight: 1.0,
                 });
             }
         }
 
-        Topology {
+        Self {
             topology_type: TopologyType::Linear,
             nodes,
             edges,
@@ -67,29 +73,29 @@ impl Topology {
 
     pub fn new_cyclic(items: Vec<String>) -> Self {
         let n = items.len();
-        let mut nodes = Vec::new();
-        let mut edges = Vec::new();
-        let mut node_map = HashMap::new();
+        let mut nodes = Vec::with_capacity(n);
+        let mut edges = Vec::with_capacity(n);
+        let mut node_map = HashMap::with_capacity(n);
 
-        for (i, label) in items.iter().enumerate() {
-            let id = format!("node_{}", i);
+        for (i, label) in items.into_iter().enumerate() {
+            let id = format!("node_{i}");
             let angle = (2.0 * PI * i as f64) / n as f64;
             nodes.push(Node {
                 id: id.clone(),
-                label: label.clone(),
+                label,
                 position: angle,
             });
             node_map.insert(id.clone(), i);
 
             let next_idx = (i + 1) % n;
             edges.push(Edge {
-                from: id.clone(),
-                to: format!("node_{}", next_idx),
+                from: id,
+                to: format!("node_{next_idx}"),
                 weight: 1.0,
             });
         }
 
-        Topology {
+        Self {
             topology_type: TopologyType::Cyclic,
             nodes,
             edges,
@@ -98,20 +104,16 @@ impl Topology {
     }
 
     pub fn alphabet() -> Self {
-        let alphabet: Vec<String> = (b'A'..=b'Z').map(|c| (c as char).to_string()).collect();
+        let alphabet = (b'A'..=b'Z').map(|c| (c as char).to_string()).collect();
         Self::new_linear(alphabet)
     }
 
     pub fn days_of_week() -> Self {
-        let days = vec![
-            "Monday".to_string(),
-            "Tuesday".to_string(),
-            "Wednesday".to_string(),
-            "Thursday".to_string(),
-            "Friday".to_string(),
-            "Saturday".to_string(),
-            "Sunday".to_string(),
-        ];
+        let days = ["Monday", "Tuesday", "Wednesday", "Thursday", 
+                   "Friday", "Saturday", "Sunday"]
+            .into_iter()
+            .map(String::from)
+            .collect();
         Self::new_cyclic(days)
     }
 
@@ -120,11 +122,9 @@ impl Topology {
             TopologyType::Cyclic => {
                 let idx = *self.node_map.get(node_id)?;
                 let next_idx = (idx + 1) % self.nodes.len();
-                Some(format!("node_{}", next_idx))
+                Some(format!("node_{next_idx}"))
             }
-            _ => self
-                .edges
-                .iter()
+            _ => self.edges.iter()
                 .find(|e| e.from == node_id)
                 .map(|e| e.to.clone()),
         }
@@ -136,21 +136,18 @@ impl Topology {
                 let idx = *self.node_map.get(node_id)?;
                 let n = self.nodes.len();
                 let prev_idx = (idx + n - 1) % n;
-                Some(format!("node_{}", prev_idx))
+                Some(format!("node_{prev_idx}"))
             }
-            _ => self
-                .edges
-                .iter()
+            _ => self.edges.iter()
                 .find(|e| e.to == node_id)
                 .map(|e| e.from.clone()),
         }
     }
 
     fn get_node_index(&self, identifier: &str) -> Option<usize> {
-        self.node_map.get(identifier).copied().or_else(|| {
-            self.get_node_by_label(identifier)
-                .and_then(|n| self.node_map.get(&n.id).copied())
-        })
+        self.node_map.get(identifier).copied()
+            .or_else(|| self.get_node_by_label(identifier)
+                .and_then(|n| self.node_map.get(&n.id).copied()))
     }
 
     pub fn get_distance(&self, from: &str, to: &str) -> Option<usize> {
@@ -158,7 +155,7 @@ impl Topology {
         let to_idx = self.get_node_index(to)?;
 
         match self.topology_type {
-            TopologyType::Linear => Some((to_idx as i32 - from_idx as i32).abs() as usize),
+            TopologyType::Linear => Some(from_idx.abs_diff(to_idx)),
             TopologyType::Cyclic => {
                 let n = self.nodes.len();
                 let forward = (to_idx + n - from_idx) % n;
@@ -166,35 +163,31 @@ impl Topology {
                 Some(forward.min(backward))
             }
             TopologyType::PartialOrder | TopologyType::GeneralGraph => {
-                let path =
-                    self.shortest_path(&self.nodes[from_idx].label, &self.nodes[to_idx].label)?;
+                let path = self.shortest_path(&self.nodes[from_idx].label, &self.nodes[to_idx].label)?;
                 Some(path.len().saturating_sub(1))
             }
         }
     }
 
     pub fn get_k_jump(&self, start: &str, k: i32) -> Option<String> {
-        let start_idx = self.node_map.get(start)?;
+        let start_idx = *self.node_map.get(start)?;
         let n = self.nodes.len();
 
         let target_idx = match self.topology_type {
             TopologyType::Linear => {
-                let new_idx = *start_idx as i32 + k;
+                let new_idx = start_idx as i32 + k;
                 if new_idx < 0 || new_idx >= n as i32 {
                     return None;
                 }
                 new_idx as usize
             }
             TopologyType::Cyclic => {
-                let new_idx = (*start_idx as i32 + k).rem_euclid(n as i32);
-                new_idx as usize
+                (start_idx as i32 + k).rem_euclid(n as i32) as usize
             }
-            TopologyType::PartialOrder | TopologyType::GeneralGraph => {
-                return None;
-            }
+            TopologyType::PartialOrder | TopologyType::GeneralGraph => return None,
         };
 
-        Some(format!("node_{}", target_idx))
+        Some(format!("node_{target_idx}"))
     }
 
     pub fn get_node_by_label(&self, label: &str) -> Option<&Node> {

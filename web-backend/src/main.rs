@@ -1,4 +1,4 @@
-use web_backend::{build_router, cache, config, db, monitoring, state, tls, AppState};
+use web_backend::{build_router, cache, config, db, monitoring, tls, AppState};
 
 use std::net::SocketAddr;
 use std::sync::Arc;

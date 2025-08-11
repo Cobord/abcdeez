@@ -1,23 +1,21 @@
 use std::{env, process};
 
+use abcdeez_core::demo;
 use anyhow::Result;
 
-use abcdeez_core::demo;
+const PROGRAM_NAME: &str = "abcdeez-core";
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    let program_name = args.first().map(String::as_str).unwrap_or("abcdeez-core");
+    let program_name = args.first().map(String::as_str).unwrap_or(PROGRAM_NAME);
 
     if args.len() < 2 {
         print_usage(program_name);
         process::exit(1);
     }
 
-    let command = &args[1];
-    let command_args = &args[2..];
-
-    match command.as_str() {
-        "demo" => run_demo_command(command_args),
+    match args[1].as_str() {
+        "demo" => run_demo_command(&args[2..]),
         "version" | "--version" | "-v" => print_version(),
         "help" | "--help" | "-h" => print_help(program_name),
         cmd => {
@@ -50,22 +48,18 @@ fn run_demo_command(args: &[String]) -> Result<()> {
 
 fn run_all_demos() {
     println!("Running all demonstrations...\n");
-    let demos = [
+    [
         demo::run_demo,
         demo::demonstrate_task_types,
         demo::demonstrate_dag_tasks,
         demo::demonstrate_statistical_analysis,
         demo::demonstrate_eig,
         demo::demonstrate_extended_tasks,
-    ];
-    
-    for demo in demos {
-        demo();
-    }
+    ].iter().for_each(|demo| demo());
 }
 
 fn print_demo_help() {
-    let commands = [
+    const COMMANDS: &[(&str, &str)] = &[
         ("basic", "Run basic demonstration"),
         ("tasks", "Demonstrate task types"),
         ("dag", "Demonstrate DAG tasks"),
@@ -76,9 +70,9 @@ fn print_demo_help() {
     ];
     
     eprintln!("Available demo subcommands:");
-    for (cmd, desc) in commands {
+    COMMANDS.iter().for_each(|(cmd, desc)| {
         eprintln!("  {cmd:<8} - {desc}");
-    }
+    });
 }
 
 fn print_version() -> Result<()> {
@@ -87,29 +81,30 @@ fn print_version() -> Result<()> {
 }
 
 fn print_usage(program_name: &str) {
-    eprintln!("Usage: {program_name} <command> [options]\n");
-    eprintln!("Commands:");
-    eprintln!("  demo [subcommand]  Run demonstrations");
-    eprintln!("  version            Show version information");
-    eprintln!("  help               Show this help message\n");
-    eprintln!("Run '{program_name} help' for more information");
+    eprintln!(
+        "Usage: {program_name} <command> [options]\n\
+         Commands:\n\
+           demo [subcommand]  Run demonstrations\n\
+           version            Show version information\n\
+           help               Show this help message\n\n\
+         Run '{program_name} help' for more information"
+    );
 }
 
 fn print_help(program_name: &str) -> Result<()> {
-    println!("abcdeez-core - Adaptive Learning Research Framework\n");
-    println!("Usage: {program_name} <command> [options]\n");
-    
-    println!("Commands:");
-    println!("  demo [subcommand]  Run demonstrations of the framework capabilities");
-    println!("                     Subcommands: basic, tasks, dag, stats, eig, extended, all");
-    println!("  version            Show version information");
-    println!("  help               Show this help message\n");
-    
-    println!("Examples:");
-    println!("  {program_name} demo           # Run all demonstrations");
-    println!("  {program_name} demo basic     # Run basic demonstration only");
-    println!("  {program_name} demo stats     # Run statistical analysis demo\n");
-    
-    println!("For more information, visit the project documentation.");
+    println!(
+        "abcdeez-core - Adaptive Learning Research Framework\n\n\
+         Usage: {program_name} <command> [options]\n\n\
+         Commands:\n\
+           demo [subcommand]  Run demonstrations of the framework capabilities\n\
+                              Subcommands: basic, tasks, dag, stats, eig, extended, all\n\
+           version            Show version information\n\
+           help               Show this help message\n\n\
+         Examples:\n\
+           {program_name} demo           # Run all demonstrations\n\
+           {program_name} demo basic     # Run basic demonstration only\n\
+           {program_name} demo stats     # Run statistical analysis demo\n\n\
+         For more information, visit the project documentation."
+    );
     Ok(())
 }

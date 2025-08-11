@@ -331,7 +331,7 @@ impl BatchJobService {
 
                 let parameters = serde_json::to_string(&learner.learning_model)?;
                 let metrics = serde_json::to_string(
-                    &abcdeez_core::LearnerMetrics::from_model(&learner.learning_model),
+                    &abcdeez_core::learning::learner::LearnerMetrics::from_model(&learner.learning_model),
                 )?;
 
                 sqlx::query(

@@ -1,6 +1,5 @@
 use axum::{
     extract::State,
-    http::StatusCode,
     response::{Html, IntoResponse, Json},
 };
 use chrono;
@@ -24,9 +23,9 @@ pub async fn metrics_dashboard_html() -> impl IntoResponse {
 }
 
 /// API endpoint for dashboard data (JSON)
-#[instrument(level = "debug", skip(state))]
+#[instrument(level = "debug", skip(_state))]
 pub async fn dashboard_data(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
 ) -> AppResult<Json<serde_json::Value>> {
     let metrics_snapshot = global_metrics().get_snapshot().await;
     let db_health = global_database_monitor().get_health_metrics().await;
@@ -192,14 +191,14 @@ pub async fn realtime_metrics() -> AppResult<Json<serde_json::Value>> {
 }
 
 /// OpenTelemetry metrics export for external systems
-#[instrument(level = "info", skip(state))]
+#[instrument(level = "info", skip(_state))]
 pub async fn otel_metrics(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
 ) -> AppResult<Json<serde_json::Value>> {
     let exporter = OtelMetricsExporter::new(
         "learning-system".to_string(),
         env!("CARGO_PKG_VERSION").to_string(),
-        format!("{:?}", state.config.environment),
+        "production".to_string(), // Or get from config if available
     );
 
     let app_metrics = exporter.export_application_metrics().await;
@@ -268,9 +267,9 @@ pub async fn database_report() -> AppResult<Json<serde_json::Value>> {
 }
 
 /// Health check with detailed component status
-#[instrument(level = "debug", skip(state))]
+#[instrument(level = "debug", skip(_state))]
 pub async fn detailed_health(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
 ) -> AppResult<Json<serde_json::Value>> {
     // This would ideally call the existing health check functionality
     // For now, we'll create a basic health summary

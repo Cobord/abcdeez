@@ -1,6 +1,5 @@
 use crate::error::{AppError, AppResult};
 use crate::db::DbPool;
-use std::sync::Arc;
 
 /// Common database operations and error handling helpers
 pub struct DbHelper;
@@ -44,12 +43,27 @@ impl DbHelper {
     }
 
     /// Check if a resource exists by ID with consistent error handling
+    /// SECURITY: This function uses a whitelist approach for table and column names
     pub async fn resource_exists(
         pool: &DbPool,
         table: &str,
         id_column: &str,
         id_value: &str,
     ) -> AppResult<bool> {
+        // Whitelist of allowed tables and columns to prevent SQL injection
+        const ALLOWED_TABLES: &[&str] = &["users", "learners", "sessions", "responses", "experiments", "protocols"];
+        const ALLOWED_COLUMNS: &[&str] = &["id", "user_id", "learner_id", "session_id", "experiment_id", "protocol_id"];
+        
+        // Validate table and column names against whitelist
+        if !ALLOWED_TABLES.contains(&table) {
+            return Err(AppError::ValidationError(format!("Invalid table name: {}", table)));
+        }
+        
+        if !ALLOWED_COLUMNS.contains(&id_column) {
+            return Err(AppError::ValidationError(format!("Invalid column name: {}", id_column)));
+        }
+        
+        // Now safe to use in query since we've validated against whitelist
         let query = format!("SELECT 1 FROM {} WHERE {} = ? LIMIT 1", table, id_column);
         
         let mut conn = Self::acquire_connection(pool).await?;

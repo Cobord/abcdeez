@@ -7,7 +7,9 @@ use crate::error::AppError;
 use crate::services::LearnerService;
 use crate::utils::math;
 use abcdeez_core::{
-    AdaptiveScheduler, Task, Topology,
+    core::Topology,
+    learning::{adaptive::AdaptiveScheduler, learner::LearnerModel},
+    tasks::core::{Task, TaskType},
 };
 
 // TODO: These types need to be implemented in abcdeez_core
@@ -85,7 +87,7 @@ impl AdaptationService {
     /// Enhanced EIG calculation using Bayesian model (legacy method for compatibility)
     pub async fn calculate_eig_legacy(
         &self,
-        learner_model: &abcdeez_core::LearnerModel,
+        learner_model: &LearnerModel,
         task: &Task,
     ) -> Result<f64> {
         // Calculate Expected Information Gain for this task
@@ -118,8 +120,22 @@ impl AdaptationService {
         let topology = Topology::alphabet();
         let _intervention_system = InterventionSystem::new(topology);
 
-        // Determine struggle level based on time and recent errors
-        let struggle_level = if elapsed_ms > 30000 {
+        // Adjust thresholds based on learner's performance
+        // Use average uncertainty as a proxy for ability level
+        let avg_uncertainty: f64 = learner_model.node_embeddings.values()
+            .map(|e| e.uncertainty)
+            .sum::<f64>() / learner_model.node_embeddings.len().max(1) as f64;
+        
+        let ability_adjustment = match avg_uncertainty {
+            x if x > 0.7 => 0.7,  // High uncertainty = lower ability, give more time
+            x if x < 0.3 => 1.3,  // Low uncertainty = higher ability, give less time  
+            _ => 1.0,
+        };
+        
+        let adjusted_time = (elapsed_ms as f64 * ability_adjustment) as u64;
+
+        // Determine struggle level based on adjusted time and recent errors
+        let struggle_level = if adjusted_time > 30000 {
             // 30 seconds
             match recent_errors {
                 0..=1 => StruggleLevel::None,
@@ -127,7 +143,7 @@ impl AdaptationService {
                 4..=6 => StruggleLevel::Moderate,
                 _ => StruggleLevel::Severe,
             }
-        } else if elapsed_ms > 15000 {
+        } else if adjusted_time > 15000 {
             // 15 seconds
             match recent_errors {
                 0 => StruggleLevel::None,
@@ -141,9 +157,9 @@ impl AdaptationService {
         // Check if intervention is needed
         let should_intervene = match struggle_level {
             StruggleLevel::None => false,
-            StruggleLevel::Mild => elapsed_ms > 20000,
-            StruggleLevel::Moderate => elapsed_ms > 15000,
-            StruggleLevel::Severe => elapsed_ms > 10000,
+            StruggleLevel::Mild => adjusted_time > 20000,
+            StruggleLevel::Moderate => adjusted_time > 15000,
+            StruggleLevel::Severe => adjusted_time > 10000,
         };
 
         if should_intervene {
@@ -169,7 +185,7 @@ impl AdaptationService {
 
     pub async fn adjust_difficulty(
         &self,
-        learner_id: Uuid,
+        _learner_id: Uuid,
         recent_responses: &[bool],
     ) -> Result<f64> {
         if recent_responses.is_empty() {
@@ -216,7 +232,7 @@ impl AdaptationService {
     }
 
     // Private helper methods
-    fn calculate_model_uncertainty(&self, model: &abcdeez_core::LearnerModel) -> f64 {
+    fn calculate_model_uncertainty(&self, model: &LearnerModel) -> f64 {
         // Calculate overall uncertainty in the learner model
         // This could be based on embedding uncertainties, proficiency variances, etc.
         let embedding_uncertainty: f64 = model
@@ -229,7 +245,7 @@ impl AdaptationService {
         embedding_uncertainty
     }
 
-    fn predict_task_accuracy(&self, model: &abcdeez_core::LearnerModel, task: &Task) -> f64 {
+    fn predict_task_accuracy(&self, model: &LearnerModel, task: &Task) -> f64 {
         // Predict probability of correct response for this task
         let difficulty = task.difficulty;
 
@@ -240,7 +256,7 @@ impl AdaptationService {
 
     fn calculate_uncertainty_reduction_if_correct(
         &self,
-        model: &abcdeez_core::LearnerModel,
+        model: &LearnerModel,
         task: &Task,
     ) -> f64 {
         // Calculate how much we'd learn if the response is correct
@@ -250,7 +266,7 @@ impl AdaptationService {
 
     fn calculate_uncertainty_reduction_if_incorrect(
         &self,
-        model: &abcdeez_core::LearnerModel,
+        model: &LearnerModel,
         task: &Task,
     ) -> f64 {
         // Calculate how much we'd learn if the response is incorrect
@@ -260,7 +276,7 @@ impl AdaptationService {
 
     fn monte_carlo_information_gain(
         &self,
-        model: &abcdeez_core::LearnerModel,
+        model: &LearnerModel,
         task: &Task,
         response_correct: bool,
     ) -> f64 {
@@ -293,7 +309,7 @@ impl AdaptationService {
         information_gain.max(0.0)
     }
 
-    fn calculate_model_entropy(&self, model: &abcdeez_core::LearnerModel) -> f64 {
+    fn calculate_model_entropy(&self, model: &LearnerModel) -> f64 {
         // Calculate Shannon entropy of the model's beliefs
         let mut total_entropy = 0.0;
         let mut node_count = 0;
@@ -318,7 +334,7 @@ impl AdaptationService {
 
     fn simulate_model_update(
         &self,
-        model: &mut abcdeez_core::LearnerModel,
+        model: &mut LearnerModel,
         task: &Task,
         response_correct: bool,
     ) {
@@ -351,16 +367,16 @@ impl AdaptationService {
     fn generate_subtle_hint(
         &self,
         task: &Task,
-        _model: &abcdeez_core::LearnerModel,
+        _model: &LearnerModel,
     ) -> String {
         match &task.task_type {
-            abcdeez_core::TaskType::Successor { .. } => {
+            TaskType::Successor { .. } => {
                 "Think about what comes next in the sequence.".to_string()
             }
-            abcdeez_core::TaskType::Predecessor { .. } => {
+            TaskType::Predecessor { .. } => {
                 "Consider what comes before in the sequence.".to_string()
             }
-            abcdeez_core::TaskType::PairwiseOrder { .. } => {
+            TaskType::PairwiseOrder { .. } => {
                 "Which one comes first in order?".to_string()
             }
             _ => "Take your time and think step by step.".to_string(),
@@ -370,24 +386,24 @@ impl AdaptationService {
     fn generate_mild_hint(
         &self,
         task: &Task,
-        _model: &abcdeez_core::LearnerModel,
+        _model: &LearnerModel,
     ) -> String {
         match &task.task_type {
-            abcdeez_core::TaskType::Successor { .. } => {
+            TaskType::Successor { .. } => {
                 format!(
                     "If the sequence is ...{}, what comes after {}?",
                     task.prompt.chars().take(3).collect::<String>(),
                     task.prompt.chars().last().unwrap_or('?')
                 )
             }
-            abcdeez_core::TaskType::Predecessor { .. } => {
+            TaskType::Predecessor { .. } => {
                 format!(
                     "If the sequence is {}..., what comes before {}?",
                     task.prompt.chars().take(3).collect::<String>(),
                     task.prompt.chars().next().unwrap_or('?')
                 )
             }
-            abcdeez_core::TaskType::PairwiseOrder { .. } => {
+            TaskType::PairwiseOrder { .. } => {
                 "Try saying both options out loud to hear which comes first.".to_string()
             }
             _ => "Break the problem into smaller parts.".to_string(),
@@ -397,7 +413,7 @@ impl AdaptationService {
     fn generate_strong_hint(
         &self,
         task: &Task,
-        _model: &abcdeez_core::LearnerModel,
+        _model: &LearnerModel,
     ) -> String {
         // Provide a very direct hint that almost gives away the answer
         if !task.options.is_empty() {

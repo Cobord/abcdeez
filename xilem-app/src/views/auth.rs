@@ -3,7 +3,7 @@
 use xilem::core::one_of::Either;
 use xilem::view::*;
 use xilem::WidgetView;
-use xilem::view::Style;
+use xilem::style::{Style, Background};
 use xilem::FontWeight;
 use xilem::Color;
 use xilem::TextAlign;
@@ -46,7 +46,7 @@ fn login_view(state: &mut AppState) -> impl WidgetView<AppState> {
                 )
                 .disabled(is_loading)
                 .padding(12.0)
-                .background(state.theme.surface_color())
+                .background(Background::Color(state.theme.surface_color()))
                 .corner_radius(8.0),
 
                 FlexSpacer::Fixed(20.0),
@@ -64,7 +64,7 @@ fn login_view(state: &mut AppState) -> impl WidgetView<AppState> {
                 )
                 .disabled(is_loading)
                 .padding(12.0)
-                .background(state.theme.surface_color())
+                .background(Background::Color(state.theme.surface_color()))
                 .corner_radius(8.0),
 
                 FlexSpacer::Fixed(30.0),
@@ -98,7 +98,7 @@ fn login_view(state: &mut AppState) -> impl WidgetView<AppState> {
                             state.set_loading(LoadingKey::Login, false);
                             state.navigate(Screen::Dashboard);
                         })
-                        .background(state.theme.primary_color())
+                        .background(Background::Color(state.theme.primary_color()))
                         .padding(15.0)
                         .corner_radius(8.0)
                     )
@@ -119,7 +119,7 @@ fn login_view(state: &mut AppState) -> impl WidgetView<AppState> {
                         // TODO: Implement Apple Sign In
                     })
                     .padding(12.0)
-                    .background(Color::BLACK)
+                    .background(Background::Color(Color::BLACK))
                     .corner_radius(8.0)
                     .flex(1.0),
 
@@ -129,7 +129,7 @@ fn login_view(state: &mut AppState) -> impl WidgetView<AppState> {
                         // TODO: Implement GitHub OAuth
                     })
                     .padding(12.0)
-                    .background(Color::from_rgb8(36, 41, 47))
+                    .background(Background::Color(Color::from_rgb8(36, 41, 47)))
                     .corner_radius(8.0)
                     .flex(1.0),
                 ))
@@ -198,7 +198,7 @@ fn signup_view(state: &mut AppState) -> impl WidgetView<AppState> {
                 )
                 .disabled(is_loading)
                 .padding(12.0)
-                .background(state.theme.surface_color())
+                .background(Background::Color(state.theme.surface_color()))
                 .corner_radius(8.0),
 
                 FlexSpacer::Fixed(20.0),
@@ -216,7 +216,7 @@ fn signup_view(state: &mut AppState) -> impl WidgetView<AppState> {
                 )
                 .disabled(is_loading)
                 .padding(12.0)
-                .background(state.theme.surface_color())
+                .background(Background::Color(state.theme.surface_color()))
                 .corner_radius(8.0),
 
                 FlexSpacer::Fixed(20.0),
@@ -234,7 +234,7 @@ fn signup_view(state: &mut AppState) -> impl WidgetView<AppState> {
                 )
                 .disabled(is_loading)
                 .padding(12.0)
-                .background(state.theme.surface_color())
+                .background(Background::Color(state.theme.surface_color()))
                 .corner_radius(8.0),
 
                 FlexSpacer::Fixed(30.0),

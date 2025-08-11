@@ -18,8 +18,8 @@ use crate::{
 };
 use axum::http::HeaderValue;
 use abcdeez_core::{
-    statistics::{DetailedStatistics, ExGaussianModel, StrategyType},
-    Topology,
+    core::Topology,
+    statistics::core::{DetailedStatistics, ExGaussianModel, StrategyType},
 };
 
 // Simple per-endpoint DP cost plan (epsilon fraction per request)
@@ -66,7 +66,7 @@ pub struct CompareRequest {
 pub async fn population(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
-    Query(params): Query<PopulationQuery>,
+    Query(_params): Query<PopulationQuery>,
 ) -> AppResult<axum::response::Response> {
     let analytics_service = AnalyticsService::new_with_config(
         Arc::new(state.db_pool.clone()),
@@ -693,7 +693,7 @@ pub async fn response_time_analysis(
             return Err(AppError::RateLimitExceeded);
         }
     }
-    let learner_service =
+    let _learner_service =
         LearnerService::new(Arc::new(state.db_pool.clone()), state.redis_conn.clone());
 
     // Get learner IDs to analyze
@@ -1042,7 +1042,7 @@ pub async fn learner_performance_analysis(
 pub async fn population_strategy_analysis(
     State(state): State<Arc<AppState>>,
     claims: Extension<Claims>,
-    Query(query): Query<PopulationQuery>,
+    Query(_query): Query<PopulationQuery>,
 ) -> AppResult<axum::response::Response> {
     // Pre-spend per-user budget
     {

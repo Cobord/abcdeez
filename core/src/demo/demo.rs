@@ -1,7 +1,7 @@
+use crate::core::topology::Topology;
 use crate::learning::adaptive::AdaptiveScheduler;
 use crate::learning::learner::{LearnerMetrics, LearnerModel};
-use crate::tasks::{TaskSession, TaskType};
-use crate::core::topology::Topology;
+use crate::tasks::core::{TaskSession, TaskType};
 
 pub fn run_demo() {
     println!("\n═══════════════════════════════════════════════════");
@@ -118,7 +118,7 @@ pub fn demonstrate_dag_tasks() {
     println!("═══════════════════════════════════════════════════\n");
 
     let dag = crate::core::topology::Topology::example_dag();
-    let mut generator = crate::tasks::TaskGenerator::new(dag.clone());
+    let mut generator = crate::tasks::core::TaskGenerator::new(dag.clone());
 
     println!("Example DAG: Software Deployment Pipeline");
     println!("──────────────────────────────────────────────────");
@@ -129,7 +129,7 @@ pub fn demonstrate_dag_tasks() {
 
     println!("1. Comparability Task:");
     println!("──────────────────────────────────────────────────");
-    let task = generator.generate_task(Some(crate::tasks::TaskType::Comparability {
+    let task = generator.generate_task(Some(crate::tasks::core::TaskType::Comparability {
         a: "Database Setup".to_string(),
         b: "Frontend".to_string(),
     }));
@@ -138,19 +138,19 @@ pub fn demonstrate_dag_tasks() {
 
     println!("2. Minimal Elements (Entry Points):");
     println!("──────────────────────────────────────────────────");
-    let task = generator.generate_task(Some(crate::tasks::TaskType::MinimalElements));
+    let task = generator.generate_task(Some(crate::tasks::core::TaskType::MinimalElements));
     println!("   {}", task.prompt);
     println!("   Answer: {}\n", task.correct_answer);
 
     println!("3. Maximal Elements (Final Tasks):");
     println!("──────────────────────────────────────────────────");
-    let task = generator.generate_task(Some(crate::tasks::TaskType::MaximalElements));
+    let task = generator.generate_task(Some(crate::tasks::core::TaskType::MaximalElements));
     println!("   {}", task.prompt);
     println!("   Answer: {}\n", task.correct_answer);
 
     println!("4. Topological Sort (Subset):");
     println!("──────────────────────────────────────────────────");
-    let task = generator.generate_task(Some(crate::tasks::TaskType::TopologicalSort {
+    let task = generator.generate_task(Some(crate::tasks::core::TaskType::TopologicalSort {
         items: vec![
             "Database Setup".to_string(),
             "API Server".to_string(),
@@ -162,7 +162,7 @@ pub fn demonstrate_dag_tasks() {
 
     println!("5. Shortest Path:");
     println!("──────────────────────────────────────────────────");
-    let task = generator.generate_task(Some(crate::tasks::TaskType::ShortestPath {
+    let task = generator.generate_task(Some(crate::tasks::core::TaskType::ShortestPath {
         from: "Database Setup".to_string(),
         to: "Deploy".to_string(),
     }));
@@ -187,25 +187,25 @@ pub fn demonstrate_eig() {
     println!("\nGenerating candidate tasks and ranking by EIG...\n");
 
     // Generate various task types
-    let mut task_gen = crate::tasks::TaskGenerator::new(topology.clone());
+    let mut task_gen = crate::tasks::core::TaskGenerator::new(topology.clone());
     let candidates = vec![
-        task_gen.generate_task(Some(crate::tasks::TaskType::PairwiseOrder {
+        task_gen.generate_task(Some(crate::tasks::core::TaskType::PairwiseOrder {
             a: "M".to_string(),
             b: "N".to_string(),
         })),
-        task_gen.generate_task(Some(crate::tasks::TaskType::PairwiseOrder {
+        task_gen.generate_task(Some(crate::tasks::core::TaskType::PairwiseOrder {
             a: "A".to_string(),
             b: "Z".to_string(),
         })),
-        task_gen.generate_task(Some(crate::tasks::TaskType::Successor {
+        task_gen.generate_task(Some(crate::tasks::core::TaskType::Successor {
             item: "G".to_string(),
         })),
-        task_gen.generate_task(Some(crate::tasks::TaskType::Segment {
+        task_gen.generate_task(Some(crate::tasks::core::TaskType::Segment {
             start: "F".to_string(),
             count: 4,
             reverse: false,
         })),
-        task_gen.generate_task(Some(crate::tasks::TaskType::KJump {
+        task_gen.generate_task(Some(crate::tasks::core::TaskType::KJump {
             start: "L".to_string(),
             k: 3,
         })),
@@ -280,7 +280,7 @@ pub fn demonstrate_statistical_analysis() {
     println!("═══════════════════════════════════════════════════\n");
 
     let topology = crate::core::topology::Topology::alphabet();
-    let mut session = crate::tasks::TaskSession::new(topology.clone());
+    let mut session = crate::tasks::core::TaskSession::new(topology.clone());
     let mut responses = Vec::new();
 
     println!("Simulating 50 training trials...\n");
@@ -297,7 +297,7 @@ pub fn demonstrate_statistical_analysis() {
                 "Wrong".to_string()
             };
 
-            let response = crate::tasks::TaskResponse {
+            let response = crate::tasks::core::TaskResponse {
                 task: task.clone(),
                 user_answer: answer,
                 correct,
@@ -308,7 +308,7 @@ pub fn demonstrate_statistical_analysis() {
         }
     }
 
-    let analyzer = crate::statistics::SessionAnalyzer::new(responses);
+    let analyzer = crate::statistics::core::SessionAnalyzer::new(responses);
     let analysis = analyzer.generate_full_analysis();
 
     println!("Performance Analysis Results:");
@@ -387,7 +387,7 @@ pub fn demonstrate_statistical_analysis() {
         .collect();
 
     if !all_rts.is_empty() {
-        let ex_gaussian = crate::statistics::ExGaussianModel::fit(&all_rts);
+        let ex_gaussian = crate::statistics::core::ExGaussianModel::fit(&all_rts);
         println!("   μ (Gaussian mean): {:.0}ms", ex_gaussian.params.mu);
         println!("   σ (Gaussian SD): {:.0}ms", ex_gaussian.params.sigma);
         println!("   τ (Exponential rate): {:.0}ms", ex_gaussian.params.tau);
@@ -402,7 +402,7 @@ pub fn demonstrate_task_types() {
     println!("═══════════════════════════════════════════════════\n");
 
     let topology = Topology::alphabet();
-    let mut generator = crate::tasks::TaskGenerator::new(topology.clone());
+    let mut generator = crate::tasks::core::TaskGenerator::new(topology.clone());
 
     println!("1. Pairwise Order Task:");
     println!("──────────────────────────────────────────────────");
@@ -489,7 +489,7 @@ pub fn demonstrate_task_types() {
     println!("═══════════════════════════════════════════════════\n");
 
     let cyclic_topology = Topology::days_of_week();
-    let mut cyclic_generator = crate::tasks::TaskGenerator::new(cyclic_topology);
+    let mut cyclic_generator = crate::tasks::core::TaskGenerator::new(cyclic_topology);
 
     println!("Successor with Wraparound:");
     println!("──────────────────────────────────────────────────");
@@ -634,8 +634,8 @@ pub fn demonstrate_extended_tasks() {
 
     let transfer = crate::tasks::extended::TransferLearning::new(source.clone(), target.clone());
 
-    let source_task = crate::tasks::Task {
-        task_type: crate::tasks::TaskType::Successor {
+    let source_task = crate::tasks::core::Task {
+        task_type: crate::tasks::core::TaskType::Successor {
             item: "2".to_string(),
         },
         prompt: "What comes after '2'?".to_string(),

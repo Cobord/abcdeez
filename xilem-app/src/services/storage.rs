@@ -1,5 +1,6 @@
 // Local storage service using SQLite for offline data persistence
 
+use abcdeez_core::learning::learner::LearnerModel;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -9,7 +10,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::models::{PendingResponse, Response, Session, User};
+use crate::models::{PendingResponse, Session, User};
 
 #[derive(Clone)]
 pub struct StorageService {
@@ -296,7 +297,7 @@ impl StorageService {
     }
 
     // Learner model operations
-    pub async fn save_learner_model(&self, learner_id: &Uuid, model: &abcdeez_core::learning::LearnerModel) -> Result<()> {
+    pub async fn save_learner_model(&self, learner_id: &Uuid, model: &LearnerModel) -> Result<()> {
         let conn = self.conn.lock().await;
         let model_json = serde_json::to_string(model)?;
         
@@ -313,7 +314,7 @@ impl StorageService {
         Ok(())
     }
 
-    pub async fn get_learner_model(&self, learner_id: &Uuid) -> Result<Option<abcdeez_core::learning::LearnerModel>> {
+    pub async fn get_learner_model(&self, learner_id: &Uuid) -> Result<Option<LearnerModel>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn.prepare(
             "SELECT model_data FROM learner_models WHERE learner_id = ?1"
