@@ -54,6 +54,7 @@ pub enum AppError {
     AuthenticationError(String),
     RateLimitExceeded,
     InvalidUuid(uuid::Error),
+    ServiceUnavailable(String),
 
     // Core library errors
     CoreError(abcdeez_core::Error),
@@ -113,6 +114,7 @@ impl fmt::Display for AppError {
             AppError::InvalidUuid(err) => {
                 write!(f, "Invalid UUID: {}", err)
             }
+            AppError::ServiceUnavailable(msg) => write!(f, "Service unavailable: {}", msg),
         }
     }
 }
@@ -192,6 +194,9 @@ impl IntoResponse for AppError {
             ),
             AppError::InvalidUuid(err) => {
                 (StatusCode::BAD_REQUEST, format!("Invalid UUID: {}", err))
+            }
+            AppError::ServiceUnavailable(msg) => {
+                (StatusCode::SERVICE_UNAVAILABLE, msg)
             }
         };
 

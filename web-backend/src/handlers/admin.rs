@@ -615,7 +615,7 @@ pub async fn audit_report(
     }
     if let Some(ref user_id) = params.user_id {
         security_query.push_str(" AND user_id = ?");
-        bind_values.push(user_id.clone());
+        bind_values.push(user_id.to_string());
     }
     
     // Build the query safely with bind parameters

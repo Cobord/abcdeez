@@ -1,10 +1,10 @@
 use wasm_bindgen::prelude::*;
-use web_sys::{Document, Element, HtmlButtonElement, HtmlDivElement, HtmlElement, HtmlInputElement, window};
+use web_sys::{Document, Element, HtmlElement, window};
 use abcdeez_core::{
-    adaptive::AdaptiveScheduler,
-    learner::LearnerModel,
-    tasks::{AlphabetTask, TaskGenerator},
-    topology::Topology,
+    learning::adaptive::AdaptiveScheduler,
+    learning::learner::LearnerModel,
+    tasks::core::{Task, TaskGenerator},
+    core::topology::Topology,
 };
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "wee_alloc")]
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
 
 #[wasm_bindgen]
 extern "C" {
@@ -51,6 +52,8 @@ pub struct GraphLearningApp {
     state: AppState,
     scheduler: Option<AdaptiveScheduler>,
     topology: Option<Topology>,
+    task_generator: Option<TaskGenerator>,
+    current_task: Option<Task>,
     document: Document,
 }
 
@@ -67,6 +70,8 @@ impl GraphLearningApp {
             state: AppState::default(),
             scheduler: None,
             topology: None,
+            task_generator: None,
+            current_task: None,
             document,
         };
         
@@ -253,9 +258,10 @@ impl GraphLearningApp {
         self.state.selected_domain = Some(domain.to_string());
         
         // Initialize topology and scheduler
-        let topology = Topology::linear(26);
-        let learner_model = LearnerModel::new(&topology);
+        let topology = Topology::alphabet();
+        let learner_model = LearnerModel::new("web_user".to_string(), &topology);
         self.scheduler = Some(AdaptiveScheduler::new(learner_model, topology.clone()));
+        self.task_generator = Some(TaskGenerator::new(topology.clone()));
         self.topology = Some(topology);
         
         self.generate_next_task();
@@ -268,16 +274,18 @@ impl GraphLearningApp {
     }
     
     fn generate_next_task(&mut self) {
-        if let Some(_scheduler) = &mut self.scheduler {
-            let task = AlphabetTask::new_random();
-            self.state.current_task = Some(task.stimulus.to_string());
-            self.state.current_target = Some(task.target);
+        if let Some(generator) = &mut self.task_generator {
+            let task = generator.generate_task(None);
+            self.state.current_task = Some(task.prompt.clone());
+            self.state.current_target = Some(task.correct_answer.chars().next().unwrap_or('A'));
+            self.current_task = Some(task);
         }
     }
     
     pub fn submit_response(&mut self, response: char) -> Result<(), JsValue> {
-        if let Some(target) = self.state.current_target {
-            let correct = target == response;
+        if let Some(task) = &self.current_task {
+            let response_str = response.to_string();
+            let correct = task.correct_answer == response_str;
             
             self.state.total_trials += 1;
             if correct {
@@ -286,12 +294,7 @@ impl GraphLearningApp {
             
             // Update scheduler with response
             if let Some(scheduler) = &mut self.scheduler {
-                if let Some(task_str) = &self.state.current_task {
-                    if let Some(stimulus) = task_str.chars().next() {
-                        let stimulus_index = (stimulus as usize).saturating_sub('A' as usize);
-                        scheduler.update_with_response(stimulus_index, correct, 1.5);
-                    }
-                }
+                scheduler.update_after_response(task, correct, 1.5);
             }
             
             self.generate_next_task();

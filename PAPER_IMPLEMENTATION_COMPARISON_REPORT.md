@@ -6,269 +6,315 @@ This report systematically verifies how the web-backend implementation at `/User
 
 **Overall Assessment**: The web-backend provides a solid foundation with many paper requirements implemented, but several critical components for graph-coded learning are missing or incomplete. **Readiness Assessment**: ~70% ready for basic experiments, ~40% ready for full paper validation.
 
-## 1. Section 3.2: Probabilistic Learner Model
+---
 
-### ✅ PROPERLY IMPLEMENTED
+## 1. Probabilistic Model Components (Section 3)
 
-**Latent Node Embeddings (z_v)**
-- **Location**: `/Users/ember/dev/abcdeez/core/src/learning/learner.rs` lines 6-10, 85-89
-- **Implementation**: `LatentNodeEmbedding` struct with `position` and `uncertainty` fields
-- **Paper compliance**: ✅ FULL - Supports both linear (z_v ∈ ℝ) and cyclic orders (z_v ∈ [0, 2π))
-- **Quality**: Well-implemented with proper initialization and updating mechanisms
+### ✅ **Correctly Implemented**
 
-**Operation Proficiencies (θ_o)**  
-- **Location**: `/Users/ember/dev/abcdeez/core/src/learning/learner.rs` lines 35-40, 101-123
-- **Implementation**: `OperationProficiency` struct with IRT-like theta parameters
-- **Paper compliance**: ✅ FULL - Covers all specified operations (Successor, Predecessor, PairwiseOrder, KJump, Segment, Index)
-- **Quality**: Sophisticated adaptive learning rates with practice decay
+**Latent Node Embeddings**
+- **File**: `web-backend/src/services/learner_service.rs` (lines 12-20)
+- **Implementation**: Core `LearnerModel` includes `node_embeddings` with position and uncertainty tracking
+- **Support**: Both linear and cyclic positions supported through `Topology` class
+- **Database**: Persistent storage in `learners` table with JSON serialization
 
-**Memory Strengths (s_v(t))**
-- **Location**: `/Users/ember/dev/abcdeez/core/src/learning/learner.rs` lines 43-47, 213-241
-- **Implementation**: `MemoryStrength` with time-based decay modeling
-- **Paper compliance**: ✅ FULL - Implements spaced repetition with forgetting curves
-- **Quality**: Advanced with exponential decay and primacy/recency effects
+**Memory Strengths with Decay**
+- **File**: `web-backend/src/services/learner_service.rs` (lines 150-151)
+- **Implementation**: `update_memory_strength()` called with response correctness
+- **Database**: Stored in learner model JSON, includes decay parameters
 
-**Chunk Boundaries (B)**
-- **Location**: `/Users/ember/dev/abcdeez/core/src/learning/learner.rs` lines 49-53, 125-145
-- **Implementation**: `ChunkBoundary` struct for linear sequences
-- **Paper compliance**: ✅ PARTIAL - Only implemented for linear topologies
-- **Quality**: Basic but functional
+**Bayesian Model Integration**
+- **File**: `web-backend/src/services/learner_service.rs` (lines 195-232)
+- **Implementation**: Full `BayesianLearnerModel` with persistence
+- **Database**: Dedicated `bayesian_models` table (migration 005)
+- **Features**: Model versioning, caching, update tracking
 
-### ❌ MISSING OR INCOMPLETE
+### ⚠️ **Partially Implemented**
 
-**Confusability Kernel (K_ij)**
-- **Current**: Basic confusion matrix (`confusability_matrix: HashMap<(String, String), f64>`)
-- **Paper specification**: Should be parameterized as `w_1 exp(-||z_i - z_j||²/ρ²)` with graph distance decay
-- **Gap**: Missing the sophisticated distance-based kernel formulation
+**Operation Proficiencies Tracking**
+- **File**: `web-backend/src/services/learner_service.rs` (lines 153-156)
+- **Implementation**: Basic `update_operation_proficiency()` exists
+- **Gap**: Missing IRT-like theta parameters with proper sigmoid mapping
+- **Current**: Simple correctness tracking rather than sophisticated proficiency modeling
 
-**Hierarchical/Population Modeling**
-- **Current**: Individual learner models only
-- **Paper specification**: Partial pooling across users within Bayesian framework
-- **Gap**: No population-level parameter estimation
+### ❌ **Missing/Incomplete**
 
-## 2. Section 3.3: Response Model (Accuracy and RT Layers)
+**Confusability Kernel Implementation**
+- **Expected**: `K_{ij}` matrix with graph distance decay function
+- **Current**: No systematic confusability modeling
+- **Impact**: Cannot capture locality of errors or similarity-based confusions
 
-### ✅ PROPERLY IMPLEMENTED
+**Chunk Boundary Detection**
+- **Expected**: Latent boundary inference with crossing penalties
+- **Current**: Basic `chunk_boundaries` in model but no detection algorithm
+- **Impact**: Missing key component for sequence segmentation analysis
 
-**Accuracy Model - Operation-based IRT**
-- **Location**: `/Users/ember/dev/abcdeez/core/src/learning/learner.rs` lines 339-346
-- **Implementation**: `sigmoid(theta - difficulty)` approach
-- **Paper compliance**: ✅ GOOD - Matches IRT formulation, though simplified
+---
 
-### ❌ MISSING OR INCOMPLETE
+## 2. Response Model (Section 3.3)
 
-**Pairwise Order - Bradley-Terry Model**
-- **Current**: Simple boolean comparison in topology
-- **Paper specification**: `P(u ≺ v) = σ(β_op(z_v - z_u) + K_uv)` with confusability
-- **Gap**: No probabilistic ranking model with embedding differences
+### ✅ **Correctly Implemented**
 
-**Response Time (RT) Layer - Ex-Gaussian Model**
-- **Current**: Basic RT prediction in `/Users/ember/dev/abcdeez/core/src/learning/learner.rs` lines 348-365
-- **Paper specification**: `RT ~ ExG(μ, σ, τ)` with parameter linking: `μ = λ0 + λ1·distance(q) + λ2·1[reverse] + λ3·1[boundary] - λ4·sv(t)`
-- **Gap**: Missing full Ex-Gaussian modeling and parameter linking
+**Ex-Gaussian RT Model**
+- **File**: `web-backend/src/utils/statistics.rs` (lines 188-252)
+- **Implementation**: Complete Ex-Gaussian parameter fitting and PDF calculation
+- **Parameters**: Proper μ, σ, τ parameters with method-of-moments fitting
+- **Analysis**: `analyze_response_times()` function with bootstrapping
+
+**Statistical Infrastructure**
+- **File**: `web-backend/src/utils/statistics.rs` (lines 254-375)
+- **Implementation**: T-tests, ANOVA, confidence intervals
+- **Features**: Welch's t-test, post-hoc comparisons, effect size calculation
+
+### ⚠️ **Partially Implemented**
+
+**IRT-like Accuracy Model**
+- **File**: `web-backend/src/services/adaptation_service.rs` (lines 383-411)
+- **Implementation**: Basic difficulty adjustment exists
+- **Gap**: Missing proper IRT parameterization (α, β, δ parameters)
+- **Current**: Simplified sigmoid without full item characteristic curves
+
+### ❌ **Missing/Incomplete**
+
+**Luce/Bradley-Terry Model**
+- **Expected**: Pairwise comparison probabilities for ordering tasks
+- **Current**: No explicit pairwise comparison modeling
+- **Impact**: Cannot properly model ordering confidence
 
 **Strategy Mixture Models**
-- **Current**: Basic strategy mixture in `/Users/ember/dev/abcdeez/core/src/learning/strategy_mixture.rs`
-- **Paper specification**: `RT ~ π·ExG_serial_scan + (1-π)·ExG_direct_index`
-- **Gap**: No Ex-Gaussian mixture components for cognitive strategies
+- **Expected**: Mixture of serial scan vs. direct index strategies
+- **Current**: Basic strategy detection in analytics but no mixture modeling
+- **Impact**: Cannot track strategy shifts during learning
 
-## 3. Section 3.4: Adaptive Item Selection with EIG
+---
 
-### ✅ PROPERLY IMPLEMENTED
+## 3. Adaptive Item Selection (Section 3.4)
 
-**Expected Information Gain (EIG)**
-- **Location**: `/Users/ember/dev/abcdeez/core/src/learning/bayesian.rs` lines 258-269, 299-349
-- **Implementation**: Monte Carlo EIG with adaptive sampling convergence
-- **Paper compliance**: ✅ EXCELLENT - Implements `E[KL(p(θ|D_t) || p(θ|D_t, Response to q))]`
-- **Quality**: Sophisticated with convergence checking and bounded EIG
+### ✅ **Correctly Implemented**
 
-**Adaptive Scheduler**
-- **Location**: `/Users/ember/dev/abcdeez/core/src/learning/adaptive.rs`
-- **Implementation**: Full adaptive scheduler with epsilon-greedy exploration
-- **Paper compliance**: ✅ EXCELLENT - Covers target difficulty zones (70-80% success)
-- **Quality**: Well-engineered with proper task candidate generation
+**Expected Information Gain Framework**
+- **File**: `web-backend/src/services/adaptation_service.rs` (lines 69-108)
+- **Implementation**: `calculate_eig()` with Bayesian model integration
+- **Features**: Monte Carlo simulation, entropy calculation, uncertainty reduction
 
-### 🔶 PARTIALLY IMPLEMENTED
+**Difficulty Targeting**
+- **File**: `web-backend/src/services/adaptation_service.rs` (lines 186-213)
+- **Implementation**: Target 75% success rate with adaptive adjustment
+- **Features**: Performance-based difficulty modulation
 
-**Task Ranking and Selection**
-- **Current**: EIG-based ranking with difficulty filtering
-- **Enhancement needed**: Better integration of coverage/exploration beyond epsilon-greedy
+### ⚠️ **Partially Implemented**
 
-## 4. Section 4: Complete Task Battery for Graph Traversal
+**KL Divergence Calculation**
+- **File**: `web-backend/src/services/adaptation_service.rs` (lines 312-333)
+- **Implementation**: Basic entropy calculation exists
+- **Gap**: Not true KL divergence between prior and posterior distributions
+- **Current**: Simplified uncertainty-based approximation
 
-### ✅ PROPERLY IMPLEMENTED
+**Coverage and Exploration**
+- **File**: `web-backend/src/handlers/task.rs` (lines 57-67)
+- **Implementation**: Basic adaptive vs. random task selection
+- **Gap**: No systematic ε-greedy or exploration bonus
+- **Current**: Binary adaptive/non-adaptive selection
 
-**Core Operations for Ordered Sequences**
-- **Location**: `/Users/ember/dev/abcdeez/core/src/tasks/core.rs`
-- **Implementation**: Comprehensive task types covering most paper requirements
-- **Paper compliance**: ✅ EXCELLENT
+### ❌ **Missing/Incomplete**
 
-Specific task types implemented:
-- ✅ Pairwise Order Queries (`PairwiseOrder`)
-- ✅ Successor/Predecessor Prompts (`Successor`, `Predecessor`)  
-- ✅ K-Jump Navigation (`KJump`)
-- ✅ Segment Recital (forward/reverse) (`Segment`)
-- ✅ Missing Item Completion (`MissingItem`)
-- ✅ Index Mapping (`Index`)
+**Proper EIG Implementation**
+- **Expected**: `E[KL(p(θ|D) || p(θ|D,response))]` calculation
+- **Current**: Heuristic approximation rather than true information-theoretic EIG
+- **Impact**: Suboptimal task selection for learning efficiency
 
-**Cyclic Structures**
-- ✅ Directional comparison with wraparound
-- ✅ Successor/Predecessor with wraparound
-- ✅ Shortest distance in cycles
+---
 
-**Partial Orders and DAGs**
-- ✅ Comparability Queries (`Comparability`)
-- ✅ Topological Sort (`TopologicalSort`)  
-- ✅ Minimal/Maximal Element Identification
+## 4. Task Battery (Section 4)
 
-**General Graph Navigation**
-- ✅ Shortest Path Finding (`ShortestPath`)
-- ✅ Distance calculation
+### ✅ **Correctly Implemented**
 
-### ❌ MISSING
+**Core Operations Support**
+- **File**: `web-backend/src/handlers/task.rs` (lines 450-486)
+- **Implementation**: All major task types supported through `TaskType` enum
+- **Types**: Successor, Predecessor, PairwiseOrder, KJump, Segment, Index
 
-**Boundary Bridging Tasks**
-- **Paper requirement**: Tasks spanning chunk boundaries with explicit "seam stitching"
-- **Current**: Basic segment tasks, no explicit boundary-crossing focus
+**Topology Support**
+- **File**: `web-backend/src/handlers/task.rs` (lines 450-486)
+- **Implementation**: Linear, cyclic, partial order, general graph topologies
+- **Features**: Runtime topology creation from string specifications
 
-**Landmark-based Navigation**
-- **Paper requirement**: "To get from A to C, is it useful to go via B?"
-- **Current**: Not implemented
+**Task Generation**
+- **File**: `web-backend/src/handlers/task.rs` (lines 54-73)
+- **Implementation**: Adaptive task generator with difficulty targeting
+- **Features**: Bulk generation, difficulty distribution analysis
 
-**Macro Discovery and Use**
-- **Paper requirement**: Common sub-sequence identification and application
-- **Current**: Not implemented
+### ⚠️ **Partially Implemented**
 
-## 5. Section 5: Metrics for Graph-Coded Mastery
+**Cyclic Structure Tasks**
+- **File**: `web-backend/src/handlers/task.rs` (lines 457-480)
+- **Implementation**: Basic cyclic topology support
+- **Gap**: No explicit wraparound testing or shortest distance queries
+- **Current**: Structural support exists but specialized cyclic tasks missing
 
-### ✅ PROPERLY IMPLEMENTED
+**Multi-Relation Tasks**
+- **Expected**: Combined criteria filtering, projection switching
+- **Current**: Single-relation tasks only
+- **Impact**: Cannot test complex relational reasoning
 
-**Bidirectionality Index**
-- **Location**: `/Users/ember/dev/abcdeez/core/src/learning/learner.rs` lines 367-379
-- **Implementation**: `|θ_forward - θ_backward|`
-- **Paper compliance**: ✅ GOOD - Measures RT asymmetry
+### ❌ **Missing/Incomplete**
 
-**Symbolic Distance Slope**
-- **Location**: `/Users/ember/dev/abcdeez/core/src/learning/learner.rs` lines 381-401
-- **Implementation**: Linear regression slope of RT vs distance
-- **Paper compliance**: ✅ GOOD - Target: slope → 0
+**Comprehensive Task Types**
+- **Missing**: Boundary bridging, missing item completion, shortest distance
+- **Missing**: Topological sort tasks, linear extension generation
+- **Missing**: Landmark-based navigation, macro discovery tasks
+- **Impact**: Limited assessment of graph-coded mastery
 
-**Chunk Boundary Penalty**
-- **Location**: `/Users/ember/dev/abcdeez/core/src/learning/learner.rs` lines 403-409
-- **Implementation**: Average boundary strength
-- **Paper compliance**: ✅ PARTIAL - Basic implementation
+---
 
-### ❌ MISSING
+## 5. Metrics (Section 5)
 
-**Wrap Penalty**
-- **Paper requirement**: RT/error rate increase for cyclic wraparound tasks
-- **Current**: Not explicitly measured
+### ✅ **Correctly Implemented**
 
-**Poset Fidelity**
-- **Paper requirement**: Proportion of correct incomparability judgments + entropy over linear extensions
-- **Current**: Not implemented
+**Statistical Analysis Infrastructure**
+- **File**: `web-backend/src/services/analytics_service.rs` (lines 594-671)
+- **Implementation**: Comprehensive response time analysis with Ex-Gaussian modeling
+- **Features**: Outlier detection, confidence intervals, strategy classification
 
-**Locality of Errors**
-- **Paper requirement**: Error probability concentration within graph distance 1-2
-- **Current**: Not measured
+**Performance Tracking**
+- **File**: `web-backend/src/handlers/analytics.rs` (lines 822-1039)
+- **Implementation**: Detailed learner performance analysis
+- **Features**: Learning curves, task-type performance, trajectory analysis
 
-**Strategy Shift Index (πt)**
-- **Paper requirement**: Track mixture component shifts over training
-- **Current**: No explicit tracking of strategy transitions
+**Population Analytics**
+- **File**: `web-backend/src/services/analytics_service.rs` (lines 94-215)
+- **Implementation**: Population-level statistics with privacy preservation
+- **Features**: Active learner tracking, difficulty distribution, strategy distribution
 
-**Transfer Index**
-- **Paper requirement**: Learning rate on isomorphic domains
-- **Current**: Not implemented
+### ⚠️ **Partially Implemented**
 
-## 6. Section 6: Experimental Design Components
+**Response Time Analysis**
+- **File**: `web-backend/src/handlers/analytics.rs` (lines 1280-1295)
+- **Implementation**: Basic strategy detection based on RT-distance correlation
+- **Gap**: Not true symbolic distance slope calculation
+- **Current**: Simplified correlation-based strategy inference
 
-### ✅ PROPERLY IMPLEMENTED
+### ❌ **Missing/Incomplete**
 
-**Experimental Design Framework**
-- **Location**: `/Users/ember/dev/abcdeez/core/src/experiments/design.rs`
-- **Implementation**: Comprehensive experimental design system
-- **Paper compliance**: ✅ EXCELLENT
+**Core Paper Metrics**
+- **Missing**: Bidirectionality Index (ΔRT_rev-fwd)
+- **Missing**: Symbolic Distance Slope (RT vs. graph distance)
+- **Missing**: Wrap Penalty for cyclic orders
+- **Missing**: Poset Fidelity (incomparability judgments)
+- **Missing**: Locality of Errors metric
+- **Missing**: Strategy Shift Index (π_t tracking)
+- **Missing**: Transfer Index
+- **Missing**: Chunk Boundary Penalty (δ_boundary)
 
-Specific components:
-- ✅ Between-subjects randomization (Simple, Block, Stratified, Adaptive)
-- ✅ Within-subjects counterbalancing (Complete, Latin Square, Balanced, Williams)
-- ✅ Mixed factorial designs
-- ✅ Statistical validation and power analysis hooks
+**Impact**: Cannot measure graph-coded mastery as defined in the paper
 
-**Participant Assignment**
-- ✅ Systematic assignment with audit trails
-- ✅ Randomization record keeping
+---
 
-### 🔶 PARTIALLY IMPLEMENTED
+## 6. Experimental Design Support (Section 6)
 
-**Power Analysis**
-- **Current**: Basic validation framework in place
-- **Enhancement needed**: Full statistical power calculations for paper's specific hypotheses
+### ✅ **Correctly Implemented**
 
-**Behavioral Measurement Integration**
-- **Current**: Data export capabilities exist
-- **Enhancement needed**: Direct integration with paper's specific metrics (H1-H4)
+**Experiment Management**
+- **File**: `web-backend/src/handlers/experiment.rs` (lines 16-257)
+- **Implementation**: Full experiment lifecycle management
+- **Features**: Creation, participation tracking, results aggregation, data export
+- **Database**: Dedicated experiments and experiment_participants tables
 
-## 7. Critical Missing Components
+**Pre-registration System**
+- **File**: `web-backend/src/handlers/preregistration.rs` (lines 24-503)
+- **Implementation**: Complete pre-registration workflow with transparency
+- **Features**: Hypothesis tracking, analysis validation, deviation recording, SHA256 hashing
+- **Compliance**: Scientific reproducibility and p-hacking prevention
 
-### High Priority
+**Data Export**
+- **File**: `web-backend/src/services/learner_service.rs` (lines 410-469)
+- **Implementation**: Comprehensive learner data export
+- **Features**: Performance trajectories, error analysis, model snapshots
 
-1. **Bradley-Terry Pairwise Model**: Core accuracy model for comparisons missing
-2. **Full Ex-Gaussian RT Model**: Response time modeling incomplete  
-3. **Strategy Mixture RT Components**: No Ex-Gaussian mixture for cognitive strategies
-4. **Transfer Tasks**: No isomorphic domain testing capability
-5. **Poset Fidelity Metrics**: Missing key DAG/partial order measurements
+### ⚠️ **Partially Implemented**
 
-### Medium Priority
+**Yoking Support**
+- **Expected**: Yoked control groups receiving matched task sequences
+- **Current**: Basic experiment participation tracking
+- **Gap**: No explicit yoking mechanism implemented
 
-1. **Distance-based Confusability Kernel**: Current confusion matrix too simplistic
-2. **Hierarchical Bayesian Framework**: No population-level modeling
-3. **Boundary-Bridging Task Focus**: Need explicit chunk-spanning task emphasis
-4. **Wrap Penalty Measurement**: Cyclic structure metrics incomplete
+**Multiple Experimental Groups**
+- **File**: `web-backend/src/models/experiment.rs` (lines 19-25)
+- **Implementation**: Basic condition assignment in participant table
+- **Gap**: No sophisticated randomization or balance checking
 
-### Low Priority
+### ❌ **Missing/Incomplete**
 
-1. **Landmark Navigation Tasks**: Nice-to-have navigation features
-2. **Macro Discovery**: Advanced pattern recognition features
-3. **Enhanced Visualization**: Better progress reporting
+**Retention Testing**
+- **Expected**: Scheduled post-training assessments
+- **Current**: No automated retention scheduling
+- **Impact**: Cannot measure long-term learning effects
 
-## 8. Extra Features (Not in Paper)
+---
 
-The implementation includes several sophisticated features not specified in the paper:
+## 7. Critical Gaps Analysis
 
-1. **Advanced Data Export**: R and Python analysis integration (`/Users/ember/dev/abcdeez/core/src/data/export.rs`)
-2. **Performance Prediction Models**: Multiple predictor types (`/Users/ember/dev/abcdeez/core/src/statistics/prediction.rs`)
-3. **Audio Recording Integration**: Multimodal data collection capabilities
-4. **Real-time Monitoring**: Performance tracking and health monitoring
-5. **Web Backend**: Full API server with authentication and federation
+### **High Priority (Blocks Paper Goals)**
 
-## 9. Recommendations for Full Paper Compliance
+1. **Graph-Coded Mastery Metrics**: The core metrics defining graph-coded mastery (bidirectionality index, symbolic distance slope, etc.) are completely missing.
 
-### Immediate Actions (High Impact)
+2. **Confusability Modeling**: No systematic modeling of item confusions based on graph distance or similarity.
 
-1. **Implement Bradley-Terry Model** in accuracy prediction
-2. **Add Full Ex-Gaussian RT Model** with proper parameter linking
-3. **Create Transfer Testing Framework** with isomorphic domains
-4. **Implement Missing Metrics** (Poset Fidelity, Wrap Penalty, Strategy Shift)
+3. **Strategy Mixture Models**: Cannot track the shift from serial scanning to direct indexing that is central to the paper's hypotheses.
 
-### Medium-term Improvements
+4. **Proper EIG Calculation**: Current implementation uses heuristics rather than true information-theoretic expected information gain.
 
-1. **Enhance Confusability Modeling** with distance-based kernels
-2. **Add Hierarchical Bayesian Layers** for population effects
-3. **Expand Boundary-Bridging Tasks** with explicit chunk focus
+### **Medium Priority (Limits Effectiveness)**
 
-### Long-term Enhancements  
+1. **Comprehensive Task Battery**: Missing many task types that would probe different aspects of graph knowledge.
 
-1. **Full Neuroscience Integration** (fNIRS, eye-tracking as mentioned in paper)
-2. **Real-world Domain Applications** beyond synthetic alphabets
-3. **Collaborative Learning Extensions** (mentioned in future work)
+2. **Chunk Boundary Detection**: No algorithm for inferring latent segmentation boundaries.
 
-## 10. Conclusion
+3. **Advanced Experimental Controls**: Limited yoking and retention testing capabilities.
 
-The current implementation demonstrates a deep understanding of the paper's theoretical framework and provides a solid foundation for adaptive graph-based learning. The Bayesian EIG implementation is particularly sophisticated and the task battery is comprehensive. However, key components like the Bradley-Terry pairwise model and full Ex-Gaussian RT modeling need implementation to achieve full paper compliance.
+### **Low Priority (Enhancement)**
 
-**Estimated implementation effort to reach 95% compliance**: 2-3 months of focused development, primarily on statistical modeling components and metric calculations.
+1. **Multi-relation Tasks**: Would enhance assessment complexity.
+2. **Real-time Strategy Detection**: Would improve adaptive responsiveness.
 
-**Current strengths**: Excellent adaptive scheduling, comprehensive task generation, solid Bayesian foundations, professional experimental design framework.
+---
 
-**Primary weaknesses**: Incomplete response models, missing transfer capabilities, simplified confusability modeling.
+## 8. Recommendations
+
+### **Immediate Actions**
+
+1. **Implement Core Metrics**: Add bidirectionality index, symbolic distance slope, and other paper-defined metrics to `analytics_service.rs`.
+
+2. **Enhance EIG Calculation**: Replace heuristic with proper KL divergence calculation between prior and posterior distributions.
+
+3. **Add Confusability Modeling**: Implement distance-based confusion matrix in the learner model.
+
+### **Short-term Enhancements**
+
+1. **Strategy Mixture Models**: Add mixture model infrastructure to track scanning vs. indexing strategies.
+
+2. **Expand Task Battery**: Implement missing task types for comprehensive assessment.
+
+3. **Improve Experimental Controls**: Add proper yoking and retention testing capabilities.
+
+### **Long-term Vision**
+
+1. **Real-time Adaptation**: Enhance the adaptive scheduler with more sophisticated information-theoretic criteria.
+
+2. **Advanced Analytics**: Add population-level learning analytics and strategy evolution tracking.
+
+---
+
+## 9. Conclusion
+
+The web-backend implementation provides a strong foundation with sophisticated Bayesian modeling, comprehensive analytics infrastructure, and robust experimental design support. However, several critical components for measuring and fostering graph-coded learning as defined in the paper are missing or incomplete.
+
+The most significant gaps are in the metrics system (missing all core paper metrics) and the theoretical implementation of strategy mixture models and proper information gain calculation. These gaps would need to be addressed to successfully run the experiments described in the paper and validate the hypotheses about graph-coded mental model acquisition.
+
+**Readiness Assessment**: ~70% ready for basic experiments, ~40% ready for full paper validation.
+
+---
+
+*Report Generated: 2025-08-11*  
+*Analysis Scope: Web-backend implementation vs. PAPER.md requirements*  
+*Files Analyzed: 15+ core implementation files*

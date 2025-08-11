@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
-use tokio::time::{interval, timeout};
+use sqlx::{Row, Acquire};
+use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::{
@@ -183,9 +183,9 @@ impl EnhancedBatchJobService {
                 self.mark_job_complete(&job.id).await?;
                 tracing::info!("Job {} completed successfully", job.id);
             }
-            Ok(Err(e)) | Err(_) => {
+            Ok(Err(_)) | Err(_) => {
                 // Job failed or timed out
-                let error_msg = match process_result {
+                let error_msg = match &process_result {
                     Err(_) => "Job execution timeout".to_string(),
                     Ok(Err(e)) => e.to_string(),
                     _ => "Unknown error".to_string(),
@@ -229,8 +229,8 @@ impl EnhancedBatchJobService {
                 retry_count, original_created_at, moved_to_dlq_at, last_error
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
-        .bind(dlq_id.as_bytes())
-        .bind(job.id.as_bytes())
+        .bind(crate::db::uuid_to_db(dlq_id))
+        .bind(crate::db::uuid_to_db(job.id))
         .bind(&job.job_type)
         .bind(serde_json::to_string(&job.payload).unwrap())
         .bind("Max retries exceeded")
@@ -247,7 +247,7 @@ impl EnhancedBatchJobService {
             "UPDATE batch_jobs SET status = 'dead_letter', updated_at = ? WHERE id = ?"
         )
         .bind(Utc::now())
-        .bind(job.id.as_bytes())
+        .bind(crate::db::uuid_to_db(job.id))
         .execute(&mut *tx)
         .await
         .map_err(AppError::DatabaseError)?;
@@ -287,7 +287,7 @@ impl EnhancedBatchJobService {
         )
         .bind(scheduled_at)
         .bind(Utc::now())
-        .bind(job_id.as_bytes())
+        .bind(crate::db::uuid_to_db(*job_id))
         .execute(&mut *conn)
         .await
         .map_err(AppError::DatabaseError)?;
@@ -308,7 +308,7 @@ impl EnhancedBatchJobService {
         )
         .bind(Utc::now())
         .bind(Utc::now())
-        .bind(job_id.as_bytes())
+        .bind(crate::db::uuid_to_db(*job_id))
         .execute(&mut *conn)
         .await
         .map_err(AppError::DatabaseError)?;
@@ -329,7 +329,7 @@ impl EnhancedBatchJobService {
         )
         .bind(error)
         .bind(Utc::now())
-        .bind(job_id.as_bytes())
+        .bind(crate::db::uuid_to_db(*job_id))
         .execute(&mut *conn)
         .await
         .map_err(AppError::DatabaseError)?;

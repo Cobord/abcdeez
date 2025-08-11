@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use sqlx::Row;
+use sqlx::Acquire;
 use uuid::Uuid;
 
 use crate::{config::Config, db::DbPool, error::AppError};

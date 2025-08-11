@@ -1,8 +1,7 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use sqlx::{Pool, Postgres, Sqlite};
 use crate::error::{AppError, AppResult};
 use crate::db::DbPool;
 use tracing::{warn, error, info};
@@ -141,10 +140,10 @@ impl MonitoredDbPool {
     }
 
     /// Acquire a connection with timeout and circuit breaker protection
-    pub async fn acquire_with_timeout(&self, timeout: Duration) -> AppResult<sqlx::pool::PoolConnection<sqlx::Postgres>> {
+    pub async fn acquire_with_timeout(&self, timeout: Duration) -> AppResult<sqlx::pool::PoolConnection<sqlx::Sqlite>> {
         // Check circuit breaker
         if !self.circuit_breaker.can_proceed().await {
-            metrics::increment_counter!("db.circuit_breaker.rejected");
+            metrics::increment_counter("db.circuit_breaker.rejected");
             return Err(AppError::ServiceUnavailable("Database circuit breaker is open".into()));
         }
 
@@ -163,25 +162,25 @@ impl MonitoredDbPool {
                 if elapsed > self.slow_query_threshold {
                     self.slow_queries.fetch_add(1, Ordering::SeqCst);
                     warn!("Slow database connection acquisition: {:?}", elapsed);
-                    metrics::increment_counter!("db.slow_connection_acquisition");
+                    metrics::increment_counter("db.slow_connection_acquisition");
                 }
                 
                 self.circuit_breaker.record_success().await;
-                metrics::histogram!("db.connection.acquisition_time", elapsed.as_millis() as f64);
+                metrics::histogram("db.connection.acquisition_time", elapsed.as_millis() as f64);
                 Ok(conn)
             },
             Ok(Err(e)) => {
                 self.failed_requests.fetch_add(1, Ordering::SeqCst);
                 self.circuit_breaker.record_failure().await;
                 error!("Failed to acquire database connection: {}", e);
-                metrics::increment_counter!("db.connection.acquisition_error");
+                metrics::increment_counter("db.connection.acquisition_error");
                 Err(AppError::DatabaseError(e))
             },
             Err(_) => {
                 self.failed_requests.fetch_add(1, Ordering::SeqCst);
                 self.circuit_breaker.record_failure().await;
                 error!("Database connection acquisition timeout after {:?}", timeout);
-                metrics::increment_counter!("db.connection.timeout");
+                metrics::increment_counter("db.connection.timeout");
                 Err(AppError::ServiceUnavailable("Database connection timeout".into()))
             }
         };
@@ -190,8 +189,8 @@ impl MonitoredDbPool {
         self.active_connections.fetch_sub(1, Ordering::SeqCst);
         
         // Record metrics
-        metrics::gauge!("db.active_connections", self.active_connections.load(Ordering::SeqCst) as f64);
-        metrics::gauge!("db.pool.size", self.pool.size() as f64);
+        metrics::gauge("db.active_connections", self.active_connections.load(Ordering::SeqCst) as f64);
+        metrics::gauge("db.pool.size", self.pool.size() as f64);
         
         result
     }
