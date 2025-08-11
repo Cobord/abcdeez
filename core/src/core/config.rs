@@ -55,6 +55,45 @@ pub struct LearnerConfig {
 }
 
 impl LearnerConfig {
+    /// Validate configuration parameters
+    pub fn validate(&self) -> Result<(), String> {
+        // Check that all probabilities/rates are in valid ranges
+        if self.initial_uncertainty <= 0.0 {
+            return Err("initial_uncertainty must be positive".to_string());
+        }
+        if self.initial_memory_strength < 0.0 || self.initial_memory_strength > 1.0 {
+            return Err("initial_memory_strength must be in [0, 1]".to_string());
+        }
+        if self.learning_rate_base <= 0.0 || self.learning_rate_base > 1.0 {
+            return Err("learning_rate_base must be in (0, 1]".to_string());
+        }
+        if self.learning_rate_decay < 0.0 || self.learning_rate_decay > 1.0 {
+            return Err("learning_rate_decay must be in [0, 1]".to_string());
+        }
+        if self.position_update_weight < 0.0 || self.position_update_weight > 1.0 {
+            return Err("position_update_weight must be in [0, 1]".to_string());
+        }
+        if self.min_uncertainty <= 0.0 {
+            return Err("min_uncertainty must be positive".to_string());
+        }
+        if self.theta_bounds.0 >= self.theta_bounds.1 {
+            return Err("theta_bounds must have lower < upper".to_string());
+        }
+        if self.memory_update_correct < 0.0 || self.memory_update_correct > 1.0 {
+            return Err("memory_update_correct must be in [0, 1]".to_string());
+        }
+        if self.memory_update_incorrect > 0.0 || self.memory_update_incorrect < -1.0 {
+            return Err("memory_update_incorrect must be in [-1, 0]".to_string());
+        }
+        if self.memory_decay_rate < 0.0 || self.memory_decay_rate > 1.0 {
+            return Err("memory_decay_rate must be in [0, 1]".to_string());
+        }
+        if self.edge_emphasis < 0.0 || self.edge_emphasis > 1.0 {
+            return Err("edge_emphasis must be in [0, 1]".to_string());
+        }
+        Ok(())
+    }
+
     /// Standard adult learner configuration
     pub fn adult() -> Self {
         Self {
@@ -185,6 +224,43 @@ pub struct ScoringWeights {
 }
 
 impl AdaptiveSchedulingConfig {
+    /// Validate configuration parameters
+    pub fn validate(&self) -> Result<(), String> {
+        if self.initial_epsilon < 0.0 || self.initial_epsilon > 1.0 {
+            return Err("initial_epsilon must be in [0, 1]".to_string());
+        }
+        if self.epsilon_decay < 0.0 || self.epsilon_decay > 1.0 {
+            return Err("epsilon_decay must be in [0, 1]".to_string());
+        }
+        if self.min_epsilon < 0.0 || self.min_epsilon > 1.0 {
+            return Err("min_epsilon must be in [0, 1]".to_string());
+        }
+        if self.min_epsilon > self.initial_epsilon {
+            return Err("min_epsilon must be <= initial_epsilon".to_string());
+        }
+        if self.target_success_rate < 0.0 || self.target_success_rate > 1.0 {
+            return Err("target_success_rate must be in [0, 1]".to_string());
+        }
+        if self.success_tolerance < 0.0 || self.success_tolerance > 1.0 {
+            return Err("success_tolerance must be in [0, 1]".to_string());
+        }
+        
+        // Validate scoring weights
+        let weights = &self.scoring_weights;
+        if weights.difficulty < 0.0 || weights.uncertainty < 0.0 || 
+           weights.practice_need < 0.0 || weights.weak_link < 0.0 {
+            return Err("All scoring weights must be non-negative".to_string());
+        }
+        
+        let weight_sum = weights.difficulty + weights.uncertainty + 
+                         weights.practice_need + weights.weak_link;
+        if (weight_sum - 1.0).abs() > 0.001 {
+            return Err(format!("Scoring weights must sum to 1.0, got {}", weight_sum));
+        }
+        
+        Ok(())
+    }
+
     /// Standard configuration
     pub fn standard() -> Self {
         Self {

@@ -3,6 +3,7 @@ pub mod validation;
 pub mod mixed_effects;
 pub mod power_analysis;
 pub mod prediction;
+pub mod math_validation;
 
 pub use core::{
     CorrectionMethod, DetailedStatistics, ExGaussianModel, ExGaussianParameters,

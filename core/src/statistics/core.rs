@@ -81,8 +81,29 @@ impl DetailedStatistics {
         let variance = data.variance();
         let std_dev = variance.sqrt();
 
-        let q1 = sorted[sorted.len() / 4];
-        let q3 = sorted[3 * sorted.len() / 4];
+        // Calculate quartiles using linear interpolation (method 7 from Hyndman & Fan)
+        let n = sorted.len() as f64;
+        
+        // Q1 position (25th percentile)
+        let q1_pos = 0.25 * (n - 1.0);
+        let q1_lower = q1_pos.floor() as usize;
+        let q1_upper = q1_lower + 1;
+        let q1 = if q1_upper < sorted.len() {
+            sorted[q1_lower] + (q1_pos - q1_lower as f64) * (sorted[q1_upper] - sorted[q1_lower])
+        } else {
+            sorted[q1_lower]
+        };
+        
+        // Q3 position (75th percentile)
+        let q3_pos = 0.75 * (n - 1.0);
+        let q3_lower = q3_pos.floor() as usize;
+        let q3_upper = q3_lower + 1;
+        let q3 = if q3_upper < sorted.len() {
+            sorted[q3_lower] + (q3_pos - q3_lower as f64) * (sorted[q3_upper] - sorted[q3_lower])
+        } else {
+            sorted[q3_lower]
+        };
+        
         let iqr = q3 - q1;
 
         let skewness = if std_dev > 0.0 {
@@ -159,23 +180,30 @@ impl ExGaussianModel {
         let _normal = Normal::new(0.0, 1.0).unwrap();
 
         // Calculate the argument for the exponential term
+        // exp_arg = (λ/2) * (2μ + λσ² - 2x)
         let exp_arg =
             (lambda / 2.0) * (2.0 * self.params.mu + lambda * self.params.sigma.powi(2) - 2.0 * x);
-
-        // Compute in log-domain for stability
-        let log_exp = exp_arg;
 
         // Calculate the argument for the complementary error function
         let erfc_arg = (self.params.mu + lambda * self.params.sigma.powi(2) - x)
             / (self.params.sigma * std::f64::consts::SQRT_2);
 
-        // Use statrs to compute erfc, clamp final result only
+        // Use statrs to compute erfc
         let erfc_val = statrs::function::erf::erfc(erfc_arg);
 
-        // Calculate the result with additional stability checks
+        // Calculate the result with stability checks
         // The formula is: (λ/2) * exp(exp_arg) * erfc_val
-        // where exp_arg = (λ/2) * (2μ + λσ² - 2x)
-        let result = (lambda / 2.0) * log_exp.exp() * erfc_val;
+        // For numerical stability, check if exp_arg is too large or too small
+        let exp_term = if exp_arg > 700.0 {
+            // Would overflow, return 0 as PDF should decay to 0 for extreme values
+            return 0.0;
+        } else if exp_arg < -700.0 {
+            0.0  // exp(-700) is effectively 0
+        } else {
+            exp_arg.exp()
+        };
+        
+        let result = (lambda / 2.0) * exp_term * erfc_val;
         if result.is_sign_negative() {
             return 0.0;
         }
@@ -609,6 +637,10 @@ pub struct NormalityTests;
 
 impl NormalityTests {
     /// Shapiro-Wilk test for normality (best for n < 50)
+    /// 
+    /// WARNING: This is a simplified approximation of the Shapiro-Wilk test.
+    /// For research-critical applications, consider using established statistical
+    /// libraries with proper coefficient tables.
     pub fn shapiro_wilk(data: &[f64]) -> f64 {
         let n = data.len();
         if n < 3 || n > 5000 {

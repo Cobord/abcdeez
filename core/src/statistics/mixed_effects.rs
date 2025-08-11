@@ -5,6 +5,19 @@ use std::collections::HashMap;
 
 /// Mixed-Effects Modeling for Repeated Measures Analysis
 /// Handles hierarchical data structures with both fixed and random effects
+/// 
+/// WARNING: This is a SIMPLIFIED PLACEHOLDER implementation that does NOT
+/// properly implement mixed-effects models. The current implementation:
+/// - Does not solve the mixed model equations
+/// - Uses crude approximations instead of proper REML/ML estimation
+/// - Will NOT produce valid statistical inferences
+/// 
+/// For research use, please use established packages like:
+/// - R: lme4, nlme
+/// - Python: statsmodels.mixedlm, pymer4
+/// - Julia: MixedModels.jl
+/// 
+/// This implementation should only be used for demonstration purposes.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MixedEffectsModel {
