@@ -25,3 +25,6 @@ pub mod stress_tests;
 
 #[cfg(test)]
 pub mod statistical_correctness_tests;
+
+#[cfg(test)]
+pub mod model_validation_tests;
