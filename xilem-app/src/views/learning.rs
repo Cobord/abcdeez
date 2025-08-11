@@ -2,7 +2,7 @@
 
 use crate::state::{AppState, LoadingKey, Screen, SessionState};
 use crate::models::{Task, ResponseMetrics};
-use crate::components::{Components, AppComponents, AppColor, AppScreen, ComponentOutput};
+use crate::components::{Components, AppComponents, AppColor, ComponentOutput};
 
 pub fn learning_view(state: &mut AppState) -> ComponentOutput {
     let header = learning_header(state);
@@ -46,7 +46,7 @@ fn learning_header(state: &AppState) -> ComponentOutput {
     Components::settings_section(
         "",
         vec![
-            Components::nav_button("← Exit", AppScreen::Dashboard, false, |state| {
+            Components::nav_button("← Exit", Screen::Dashboard, false, |state| {
                 state.navigate(Screen::Dashboard);
             }),
             progress,

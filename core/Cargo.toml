@@ -24,7 +24,7 @@ name = "abcdeez-cli"
 path = "src/main.rs"
 
 [dependencies]
-serde = { workspace = true }
+serde = { workspace = true, features = ["std"] }
 serde_json = { workspace = true }
 serde_yaml = "0.9"
 rand = { workspace = true }

@@ -4,9 +4,9 @@ use xilem_web::AnyDomView;
 use xilem_web::elements::html as el;
 use xilem_web::interfaces::Element;
 use wasm_bindgen::JsCast;
-use crate::state::AppState;
+use crate::state::{AppState, Screen};
 use crate::models::Task;
-use super::{AppComponents, Component, AppColor, AppScreen, AppTheme};
+use super::{AppComponents, Component, AppColor, AppTheme};
 
 // Type alias for type-erased web views
 type WebDomView = Box<AnyDomView<AppState>>;
@@ -76,21 +76,21 @@ impl AppComponents for WebComponents {
         ))
     }
     
-    fn bottom_nav_bar(current_screen: AppScreen, on_navigate: impl Fn(&mut AppState, AppScreen) + Send + Sync + 'static) -> Self::Output {
+    fn bottom_nav_bar(current_screen: Screen, on_navigate: impl Fn(&mut AppState, Screen) + Send + Sync + 'static) -> Self::Output {
         let on_nav = std::sync::Arc::new(on_navigate);
         
         WebComponent(Box::new(
             el::nav((
-                Self::create_nav_btn("Dashboard", AppScreen::Dashboard, current_screen, on_nav.clone()),
-                Self::create_nav_btn("Learn", AppScreen::Learning, current_screen, on_nav.clone()),
-                Self::create_nav_btn("Progress", AppScreen::Progress, current_screen, on_nav.clone()),
-                Self::create_nav_btn("Profile", AppScreen::Profile, current_screen, on_nav.clone()),
+                Self::create_nav_btn("Dashboard", Screen::Dashboard, current_screen, on_nav.clone()),
+                Self::create_nav_btn("Learn", Screen::Learning, current_screen, on_nav.clone()),
+                Self::create_nav_btn("Progress", Screen::Progress, current_screen, on_nav.clone()),
+                Self::create_nav_btn("Profile", Screen::Profile, current_screen, on_nav.clone()),
             ))
             .attr("class", "bottom-nav")
         ))
     }
     
-    fn nav_button(label: &str, screen: AppScreen, is_active: bool, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
+    fn nav_button(label: &str, screen: Screen, is_active: bool, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
         let class = if is_active { "nav-btn active" } else { "nav-btn" };
         WebComponent(Box::new(
             el::button(label.to_string())
@@ -327,7 +327,8 @@ impl AppComponents for WebComponents {
     fn setting_row(label: &str, control: Self::Output) -> Self::Output {
         WebComponent(Box::new(
             el::div((
-                el::label(label.to_string()),
+                el::label(label.to_string())
+                    .attr("style", format!("color: {}", color_to_css(AppColor::Text))),
                 control.0,
             ))
             .attr("class", "setting-row")
@@ -439,7 +440,7 @@ impl AppComponents for WebComponents {
     fn card<V>(title: &str, content: V) -> Self::Output where V: Component<Output = Self::Output> {
         WebComponent(Box::new(
             el::div((
-                el::h3(title.to_string()),
+                el::h3(title.to_string()).attr("style", format!("color: {}", color_to_css(AppColor::Text))),
                 content.build().0,
             ))
             .attr("class", "card")
@@ -770,9 +771,9 @@ impl AppComponents for WebComponents {
 impl WebComponents {
     fn create_nav_btn(
         label: &str, 
-        screen: AppScreen, 
-        current: AppScreen,
-        on_nav: std::sync::Arc<dyn Fn(&mut AppState, AppScreen) + Send + Sync>
+        screen: Screen, 
+        current: Screen,
+        on_nav: std::sync::Arc<dyn Fn(&mut AppState, Screen) + Send + Sync>
     ) -> WebDomView {
         let is_active = screen == current;
         let class = if is_active { "nav-btn active" } else { "nav-btn" };

@@ -340,6 +340,7 @@ impl LittleCrab {
 }
 
 /// Easter egg manager for handling triggers
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EasterEggManager {
     pub crab: LittleCrab,
     konami_buffer: Vec<KonamiKey>,
@@ -348,7 +349,7 @@ pub struct EasterEggManager {
     secret_word_buffer: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 enum KonamiKey {
     Up, Down, Left, Right, B, A
 }

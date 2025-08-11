@@ -32,7 +32,7 @@ pub struct PendingResponse {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseMetrics {
     pub correct: bool,
     pub response_time_ms: u128,

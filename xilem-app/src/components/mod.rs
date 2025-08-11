@@ -3,7 +3,7 @@
 
 mod builders;
 
-use crate::state::AppState;
+use crate::state::{AppState, Screen};
 use crate::models::Task;
 
 // Re-export builders for convenience
@@ -26,8 +26,8 @@ pub trait AppComponents {
     
     // Navigation components
     fn header_bar(title: &str, on_settings: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
-    fn bottom_nav_bar(current_screen: AppScreen, on_navigate: impl Fn(&mut AppState, AppScreen) + Send + Sync + 'static) -> Self::Output;
-    fn nav_button(label: &str, screen: AppScreen, is_active: bool, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
+    fn bottom_nav_bar(current_screen: Screen, on_navigate: impl Fn(&mut AppState, Screen) + Send + Sync + 'static) -> Self::Output;
+    fn nav_button(label: &str, screen: Screen, is_active: bool, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
     
     // Learning components
     fn task_presenter(task: &Task, on_answer: impl Fn(&mut AppState, String) + Send + Sync + 'static) -> Self::Output;
@@ -136,17 +136,7 @@ pub enum AppColor {
     TextMuted,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AppScreen {
-    Login,
-    Signup,
-    Dashboard,
-    Learning,
-    Progress,
-    Settings,
-    Profile,
-    Leaderboard,
-}
+// Removed AppScreen in favor of using the app-wide `state::Screen`
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AppTheme {

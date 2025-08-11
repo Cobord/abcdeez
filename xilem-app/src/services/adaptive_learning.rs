@@ -8,7 +8,8 @@ use abcdeez_core::{
 };
 // Intervention system removed from core
 use anyhow::Result;
-use std::time::Instant;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::models::{self, TaskResponse};
@@ -16,8 +17,8 @@ use crate::models::{self, TaskResponse};
 pub struct AdaptiveLearningService {
     scheduler: AdaptiveScheduler,
     topology: Topology,
-    session_start: Instant,
-    task_start: Option<Instant>,
+    session_start: DateTime<Utc>,
+    task_start: Option<DateTime<Utc>>,
     current_task: Option<Task>,
     learner_id: Uuid,
 }
@@ -36,7 +37,7 @@ impl AdaptiveLearningService {
         Self {
             scheduler,
             topology,
-            session_start: Instant::now(),
+            session_start: Utc::now(),
             task_start: None,
             current_task: None,
             learner_id,
@@ -57,7 +58,7 @@ impl AdaptiveLearningService {
         Self {
             scheduler,
             topology,
-            session_start: Instant::now(),
+            session_start: Utc::now(),
             task_start: None,
             current_task: None,
             learner_id,
@@ -72,7 +73,7 @@ impl AdaptiveLearningService {
         self.current_task = Some(core_task.clone());
         
         // Start timing for this task
-        self.task_start = Some(Instant::now());
+        self.task_start = Some(Utc::now());
         
         // Convert to app model
         Ok(self.convert_task(core_task))
@@ -81,7 +82,9 @@ impl AdaptiveLearningService {
     pub fn submit_response(&mut self, response: TaskResponse, task: &Task) -> Result<()> {
         // Calculate response time
         let response_time_ms = if let Some(start) = self.task_start {
-            start.elapsed().as_millis() as u128
+            let now = Utc::now();
+            let delta = now.signed_duration_since(start);
+            delta.num_milliseconds().max(0) as u128
         } else {
             0
         };
@@ -181,6 +184,49 @@ impl AdaptiveLearningService {
             }
         }
         None
+    }
+}
+
+// Serializable snapshot of the adaptive service for persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AdaptiveLearningServiceSnapshot {
+    learner_model: LearnerModel,
+    topology: Topology,
+    session_start: DateTime<Utc>,
+    task_start: Option<DateTime<Utc>>,
+    current_task: Option<Task>,
+    learner_id: Uuid,
+}
+
+impl Serialize for AdaptiveLearningService {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let snapshot = AdaptiveLearningServiceSnapshot {
+            learner_model: self.scheduler.get_learner_model().clone(),
+            topology: self.topology.clone(),
+            session_start: self.session_start,
+            task_start: self.task_start,
+            current_task: self.current_task.clone(),
+            learner_id: self.learner_id,
+        };
+        snapshot.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for AdaptiveLearningService {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = AdaptiveLearningServiceSnapshot::deserialize(deserializer)?;
+        let mut svc = AdaptiveLearningService::from_existing_model(s.learner_model, s.topology);
+        svc.session_start = s.session_start;
+        svc.task_start = s.task_start;
+        svc.current_task = s.current_task;
+        svc.learner_id = s.learner_id;
+        Ok(svc)
     }
 }
 

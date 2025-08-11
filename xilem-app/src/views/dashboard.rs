@@ -1,7 +1,7 @@
 // Dashboard view using high-level cross-platform components
 
 use crate::state::{AppState, Screen};
-use crate::components::{Components, AppComponents, AppColor, AppScreen, ComponentOutput};
+use crate::components::{Components, AppComponents, AppColor, ComponentOutput};
 
 pub fn dashboard_view(state: &mut AppState) -> ComponentOutput {
     // Build the dashboard using high-level components
@@ -47,9 +47,9 @@ pub fn dashboard_view(state: &mut AppState) -> ComponentOutput {
     );
     
     let bottom_nav = Components::bottom_nav_bar(
-        AppScreen::Dashboard,
+        Screen::Dashboard,
         |state, screen| {
-            state.navigate(map_app_screen_to_screen(screen));
+            state.navigate(screen);
         }
     );
     
@@ -66,15 +66,4 @@ pub fn dashboard_view(state: &mut AppState) -> ComponentOutput {
     )
 }
 
-fn map_app_screen_to_screen(app_screen: AppScreen) -> Screen {
-    match app_screen {
-        AppScreen::Login => Screen::Login,
-        AppScreen::Signup => Screen::Signup,
-        AppScreen::Dashboard => Screen::Dashboard,
-        AppScreen::Learning => Screen::Learning,
-        AppScreen::Progress => Screen::Progress,
-        AppScreen::Settings => Screen::Settings,
-        AppScreen::Profile => Screen::Profile,
-        AppScreen::Leaderboard => Screen::Leaderboard,
-    }
-}
+// mapping no longer needed; `components` now uses `state::Screen` directly

@@ -29,7 +29,7 @@ fn profile_section(state: &AppState) -> ComponentOutput {
     
     let edit_button = Components::nav_button(
         "Edit Profile",
-        crate::components::AppScreen::Profile,
+        crate::state::Screen::Profile,
         false,
         |state| {
             state.navigate(Screen::Profile);
@@ -57,14 +57,14 @@ fn preferences_section(state: &AppState) -> ComponentOutput {
     // For now, use placeholder buttons
     let notifications_row = Components::setting_row(
         "Notifications",
-        Components::nav_button("Enable", crate::components::AppScreen::Settings, false, |_state| {
+        Components::nav_button("Enable", crate::state::Screen::Settings, false, |_state| {
             // TODO: Update notification preference
         })
     );
     
     let sound_row = Components::setting_row(
         "Sound Effects",
-        Components::nav_button("Enable", crate::components::AppScreen::Settings, true, |_state| {
+        Components::nav_button("Enable", crate::state::Screen::Settings, true, |_state| {
             // TODO: Update sound preference
         })
     );
@@ -78,7 +78,7 @@ fn preferences_section(state: &AppState) -> ComponentOutput {
 fn account_section(_state: &AppState) -> ComponentOutput {
     let export_button = Components::nav_button(
         "Export Data",
-        crate::components::AppScreen::Settings,
+        crate::state::Screen::Settings,
         false,
         |_state| {
             // TODO: Export user data
@@ -87,7 +87,7 @@ fn account_section(_state: &AppState) -> ComponentOutput {
     
     let privacy_button = Components::nav_button(
         "Privacy Settings",
-        crate::components::AppScreen::Settings,
+        crate::state::Screen::Settings,
         false,
         |_state| {
             // TODO: Navigate to privacy settings
@@ -96,7 +96,7 @@ fn account_section(_state: &AppState) -> ComponentOutput {
     
     let signout_button = Components::nav_button(
         "Sign Out",
-        crate::components::AppScreen::Login,
+        crate::state::Screen::Login,
         false,
         |state| {
             state.user = None;

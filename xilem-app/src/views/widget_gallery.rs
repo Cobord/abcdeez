@@ -1,4 +1,4 @@
-use crate::components::{Component, ComponentOutput, Components, AppComponents, AppColor, AppScreen, AppTheme};
+use crate::components::{Component, ComponentOutput, Components, AppComponents, AppColor, AppTheme};
 use crate::state::{AppState, Screen};
 use crate::viz::{sparkline, progress_ring_chart};
 use crate::models::Response;
@@ -119,15 +119,15 @@ fn navigation_components_section() -> ComponentOutput {
             
             Components::simple_label("Bottom Navigation:".to_string()),
             Components::bottom_nav_bar(
-                AppScreen::Dashboard,
+                Screen::Dashboard,
                 |_state, screen| println!("Navigate to: {:?}", screen)
             ),
             
             Components::simple_label("Navigation Buttons:".to_string()),
             Components::simple_flex_row(vec![
-                Components::nav_button("Home", AppScreen::Dashboard, true, |_| {}),
-                Components::nav_button("Learn", AppScreen::Learning, false, |_| {}),
-                Components::nav_button("Profile", AppScreen::Profile, false, |_| {}),
+                Components::nav_button("Home", Screen::Dashboard, true, |_| {}),
+                Components::nav_button("Learn", Screen::Learning, false, |_| {}),
+                Components::nav_button("Profile", Screen::Profile, false, |_| {}),
             ]),
         ])
     )

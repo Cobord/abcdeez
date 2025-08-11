@@ -1,11 +1,12 @@
 // Session state management
 
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::models::{PendingResponse, ResponseMetrics, Task};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionState {
     pub session_id: Uuid,
     pub learner_id: Uuid,
@@ -19,7 +20,7 @@ pub struct SessionState {
     pub performance_buffer: Vec<ResponseMetrics>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StruggleState {
     pub consecutive_errors: u32,
     pub response_time_ms: u128,

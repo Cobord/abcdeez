@@ -3,9 +3,9 @@
 use xilem::style::Style;
 use xilem::view::*;
 use xilem::{AnyWidgetView, Color};
-use crate::state::AppState;
+use crate::state::{AppState, Screen};
 use crate::models::Task;
-use super::{AppComponents, Component, AppColor, AppScreen, AppTheme};
+use super::{AppComponents, Component, AppColor, AppTheme};
 
 // Native component wrapper
 pub struct NativeComponent(pub Box<AnyWidgetView<AppState>>);
@@ -29,7 +29,7 @@ impl AppComponents for NativeComponents {
                 flex((
                     label(title)
                         .text_size(12.0)
-                        .color(Color::from_rgb8(128, 128, 128)),
+                        .color(map_color(AppColor::TextMuted)),
                     FlexSpacer::Fixed(5.0),
                     label(value)
                         .text_size(24.0)
@@ -55,7 +55,7 @@ impl AppComponents for NativeComponents {
                     FlexSpacer::Fixed(10.0),
                     label(message)
                         .text_size(16.0)
-                        .color(Color::from_rgb8(128, 128, 128)),
+                        .color(map_color(AppColor::TextMuted)),
                     FlexSpacer::Fixed(20.0),
                     button(label("Start Learning").color(Color::WHITE), on_start)
                         .background_color(map_color(AppColor::Primary))
@@ -79,12 +79,13 @@ impl AppComponents for NativeComponents {
         
         NativeComponent(Box::new(
             flex_row((
-                label(title)
-                    .text_size(14.0)
-                    .flex(1.0),
-                label(time)
-                    .text_size(12.0)
-                    .color(Color::from_rgb8(128, 128, 128)),
+                    label(title)
+                        .text_size(14.0)
+                        .color(map_color(AppColor::Text))
+                        .flex(1.0),
+                    label(time)
+                        .text_size(12.0)
+                        .color(map_color(AppColor::TextMuted)),
             ))
             .padding(10.0)
             .background_color(bg_color)
@@ -109,7 +110,7 @@ impl AppComponents for NativeComponents {
         ))
     }
     
-    fn bottom_nav_bar(_current_screen: AppScreen, _on_navigate: impl Fn(&mut AppState, AppScreen) + Send + Sync + 'static) -> Self::Output {
+    fn bottom_nav_bar(_current_screen: Screen, _on_navigate: impl Fn(&mut AppState, Screen) + Send + Sync + 'static) -> Self::Output {
         // Simplified - would need to handle multiple nav items
         NativeComponent(Box::new(
             flex_row(())
@@ -119,7 +120,7 @@ impl AppComponents for NativeComponents {
         ))
     }
     
-    fn nav_button(label_text: &str, _screen: AppScreen, is_active: bool, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
+    fn nav_button(label_text: &str, _screen: Screen, is_active: bool, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
         let color = if is_active {
             map_color(AppColor::Primary)
         } else {
@@ -137,9 +138,10 @@ impl AppComponents for NativeComponents {
             flex((
                 label(task.prompt.as_str())
                     .text_size(24.0)
-                    .weight(xilem::FontWeight::MEDIUM),
+                    .weight(xilem::FontWeight::MEDIUM)
+                    .color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(40.0),
-                label("Task Visual Placeholder"),
+                label("Task Visual Placeholder").color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(40.0),
             ))
             .direction(Axis::Vertical)
@@ -158,7 +160,8 @@ impl AppComponents for NativeComponents {
         NativeComponent(Box::new(
             flex_row((
                 label(format!("Task {}/{}", current, total))
-                    .text_size(16.0),
+                    .text_size(16.0)
+                    .color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(20.0),
                 label(format!("Accuracy: {:.0}%", accuracy * 100.0))
                     .text_size(14.0)
@@ -187,7 +190,7 @@ impl AppComponents for NativeComponents {
         NativeComponent(Box::new(
             flex((
                 flex((
-                    label("Username").text_size(14.0),
+                    label("Username").text_size(14.0).color(map_color(AppColor::Text)),
                     FlexSpacer::Fixed(8.0),
                     text_input(username, on_username)
                         .padding(12.0)
@@ -196,7 +199,7 @@ impl AppComponents for NativeComponents {
                 ))
                 .direction(Axis::Vertical),
                 flex((
-                    label("Password").text_size(14.0),
+                    label("Password").text_size(14.0).color(map_color(AppColor::Text)),
                     FlexSpacer::Fixed(8.0),
                     text_input(password, on_password)
                         .padding(12.0)
@@ -204,7 +207,7 @@ impl AppComponents for NativeComponents {
                     FlexSpacer::Fixed(30.0),
                 ))
                 .direction(Axis::Vertical),
-                button(label("Login"), on_submit)
+                button(label("Login").color(Color::WHITE), on_submit)
                     .background_color(map_color(AppColor::Primary))
                     .padding(15.0)
                     .corner_radius(8.0),
@@ -219,7 +222,7 @@ impl AppComponents for NativeComponents {
             Box::new(label(title).text_size(18.0).weight(xilem::FontWeight::BOLD)) as Box<AnyWidgetView<AppState>>
         } else {
             Box::new(flex((
-                label(title).text_size(18.0).weight(xilem::FontWeight::BOLD),
+                    label(title).text_size(18.0).weight(xilem::FontWeight::BOLD).color(map_color(AppColor::Text)),
                 children.into_iter().next().unwrap().build().0,
             ))
             .direction(Axis::Vertical)
@@ -322,7 +325,7 @@ impl AppComponents for NativeComponents {
             Box::new(
                 flex((
                     sized_box(spinner()).width(50.0).height(50.0),
-                    label(msg).text_size(16.0).color(Color::from_rgb8(128, 128, 128)),
+                    label(msg).text_size(16.0).color(map_color(AppColor::TextMuted)),
                 ))
                 .direction(Axis::Vertical)
                 .gap(20.0)
@@ -341,7 +344,7 @@ impl AppComponents for NativeComponents {
                 flex((
                     label(icon).text_size(48.0),
                     label(title).text_size(20.0).weight(xilem::FontWeight::MEDIUM),
-                    label(message).text_size(14.0).color(Color::from_rgb8(128, 128, 128)),
+                    label(message).text_size(14.0).color(map_color(AppColor::TextMuted)),
                     action.build().0,
                 ))
                 .direction(Axis::Vertical)
@@ -353,7 +356,7 @@ impl AppComponents for NativeComponents {
                 flex((
                     label(icon).text_size(48.0),
                     label(title).text_size(20.0).weight(xilem::FontWeight::MEDIUM),
-                    label(message).text_size(14.0).color(Color::from_rgb8(128, 128, 128)),
+                    label(message).text_size(14.0).color(map_color(AppColor::TextMuted)),
                 ))
                 .direction(Axis::Vertical)
                 .gap(15.0)
@@ -517,10 +520,10 @@ impl AppComponents for NativeComponents {
                     .background_color(map_color(AppColor::Primary).with_alpha(0.2))
                     .border(map_color(AppColor::Primary), 2.0)
                     .corner_radius(10.0),
-                label("→").text_size(20.0).color(map_color(AppColor::Primary)),
-                label(if path.is_empty() { "..." } else { "[path]" })
+                    label("→").text_size(20.0).color(map_color(AppColor::Primary)),
+                    label(if path.is_empty() { "..." } else { "[path]" })
                     .text_size(16.0)
-                    .color(Color::from_rgb8(128, 128, 128)),
+                    .color(map_color(AppColor::TextMuted)),
                 label("→").text_size(20.0).color(map_color(AppColor::Primary)),
                 sized_box(label(end).text_size(24.0))
                     .width(80.0)
@@ -536,7 +539,8 @@ impl AppComponents for NativeComponents {
     
     fn simple_label(text: String) -> Self::Output {
         NativeComponent(Box::new(
-            label(text)
+                label(text)
+                    .color(map_color(AppColor::Text))
         ))
     }
     
@@ -570,7 +574,8 @@ impl AppComponents for NativeComponents {
                 flex((
                     label(title)
                         .text_size(18.0)
-                        .weight(xilem::FontWeight::BOLD),
+                        .weight(xilem::FontWeight::BOLD)
+                        .color(map_color(AppColor::Text)),
                     FlexSpacer::Fixed(10.0),
                     content.build().0,
                 ))
@@ -586,7 +591,7 @@ impl AppComponents for NativeComponents {
         let percentage = (progress * 100.0) as u32;
         NativeComponent(Box::new(
             flex((
-                label(label_text).text_size(12.0),
+                label(label_text).text_size(12.0).color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(5.0),
                 sized_box(
                     flex(())
@@ -596,7 +601,7 @@ impl AppComponents for NativeComponents {
                 .background_color(Color::from_rgb8(229, 231, 235))
                 .corner_radius(4.0),
                 FlexSpacer::Fixed(5.0),
-                label(format!("{}%", percentage)).text_size(12.0),
+                label(format!("{}%", percentage)).text_size(12.0).color(map_color(AppColor::Text)),
             ))
             .direction(Axis::Vertical)
             .cross_axis_alignment(CrossAxisAlignment::Start)
@@ -608,7 +613,7 @@ impl AppComponents for NativeComponents {
             flex((
                 label(label_text)
                     .text_size(12.0)
-                    .color(Color::from_rgb8(128, 128, 128)),
+                    .color(map_color(AppColor::TextMuted)),
                 FlexSpacer::Fixed(5.0),
                 label(value)
                     .text_size(20.0)
@@ -623,8 +628,8 @@ impl AppComponents for NativeComponents {
         let check_mark = if checked { "☑" } else { "☐" };
         NativeComponent(Box::new(
             flex_row((
-                label(check_mark).text_size(16.0),
-                label(label_text).text_size(14.0),
+                label(check_mark).text_size(16.0).color(map_color(AppColor::Text)),
+                label(label_text).text_size(14.0).color(map_color(AppColor::Text)),
             ))
             .gap(8.0)
         ))
@@ -633,7 +638,7 @@ impl AppComponents for NativeComponents {
     fn labeled_input(label_text: &str, value: String, on_change: impl Fn(&mut AppState, String) + Send + Sync + 'static) -> Self::Output {
         NativeComponent(Box::new(
             flex((
-                label(label_text).text_size(12.0),
+                label(label_text).text_size(12.0).color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(5.0),
                 text_input(value, on_change)
                     .padding(8.0)
@@ -771,16 +776,17 @@ impl AppComponents for NativeComponents {
         NativeComponent(Box::new(
             sized_box(
                 flex((
-                    label(title)
-                        .text_size(18.0)
-                        .weight(xilem::FontWeight::BOLD),
+                label(title)
+                    .text_size(18.0)
+                    .weight(xilem::FontWeight::BOLD)
+                    .color(map_color(AppColor::Text)),
                     FlexSpacer::Fixed(10.0),
                     label(message).text_size(14.0),
                     FlexSpacer::Fixed(20.0),
                     flex_row((
                         button(label("Cancel"), on_cancel)
                             .padding(10.0),
-                        button(label("Confirm"), on_confirm)
+                        button(label("Confirm").color(Color::WHITE), on_confirm)
                             .padding(10.0)
                             .background_color(map_color(AppColor::Primary)),
                     ))
@@ -805,14 +811,16 @@ impl AppComponents for NativeComponents {
             flex((
                 label("Response Time Histogram")
                     .text_size(16.0)
-                    .weight(xilem::FontWeight::BOLD),
+                    .weight(xilem::FontWeight::BOLD)
+                    .color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(10.0),
                 label(format!("📊 Average: {}ms", avg))
-                    .text_size(14.0),
+                    .text_size(14.0)
+                    .color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(5.0),
                 label(format!("{} samples", response_times.len()))
                     .text_size(12.0)
-                    .color(Color::from_rgb8(128, 128, 128)),
+                    .color(map_color(AppColor::TextMuted)),
             ))
             .direction(Axis::Vertical)
         ))
@@ -826,10 +834,12 @@ impl AppComponents for NativeComponents {
             flex((
                 label("Learning Curve")
                     .text_size(16.0)
-                    .weight(xilem::FontWeight::BOLD),
+                    .weight(xilem::FontWeight::BOLD)
+                    .color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(10.0),
                 label(format!("📈 {}/{} correct", correct, total))
-                    .text_size(14.0),
+                    .text_size(14.0)
+                    .color(map_color(AppColor::Text)),
             ))
             .direction(Axis::Vertical)
         ))
@@ -842,7 +852,8 @@ impl AppComponents for NativeComponents {
             flex((
                 label("Error Analysis")
                     .text_size(16.0)
-                    .weight(xilem::FontWeight::BOLD),
+                    .weight(xilem::FontWeight::BOLD)
+                    .color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(10.0),
                 label(format!("❌ {} errors found", errors))
                     .text_size(14.0)
@@ -862,7 +873,8 @@ impl AppComponents for NativeComponents {
             Box::new(flex((
                 label("Strategy Analysis")
                     .text_size(16.0)
-                    .weight(xilem::FontWeight::BOLD),
+                    .weight(xilem::FontWeight::BOLD)
+                    .color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(10.0),
                 label("No strategies")
                     .text_size(12.0),
@@ -872,7 +884,8 @@ impl AppComponents for NativeComponents {
             Box::new(flex((
                 label("Strategy Analysis")
                     .text_size(16.0)
-                    .weight(xilem::FontWeight::BOLD),
+                    .weight(xilem::FontWeight::BOLD)
+                    .color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(10.0),
                 label(strategies_text[0].clone())
                     .text_size(12.0),
@@ -921,13 +934,14 @@ impl AppComponents for NativeComponents {
         NativeComponent(Box::new(
             sized_box(
                 flex((
-                    label(domain)
-                        .text_size(16.0)
-                        .weight(xilem::FontWeight::BOLD),
+                label(domain)
+                    .text_size(16.0)
+                    .weight(xilem::FontWeight::BOLD)
+                    .color(map_color(AppColor::Text)),
                     FlexSpacer::Fixed(5.0),
-                    label(description)
-                        .text_size(12.0)
-                        .color(Color::from_rgb8(128, 128, 128)),
+                label(description)
+                    .text_size(12.0)
+                    .color(map_color(AppColor::TextMuted)),
                 ))
                 .direction(Axis::Vertical)
                 .padding(15.0)
@@ -943,12 +957,13 @@ impl AppComponents for NativeComponents {
             flex((
                 label(format!("Session: {}", session_id))
                     .text_size(14.0)
-                    .weight(xilem::FontWeight::BOLD),
+                    .weight(xilem::FontWeight::BOLD)
+                    .color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(5.0),
                 flex_row((
-                    label(format!("Status: {}", status)).text_size(12.0),
-                    label(format!("Duration: {}", duration)).text_size(12.0),
-                    label(format!("Domain: {}", domain)).text_size(12.0),
+                    label(format!("Status: {}", status)).text_size(12.0).color(map_color(AppColor::Text)),
+                    label(format!("Duration: {}", duration)).text_size(12.0).color(map_color(AppColor::Text)),
+                    label(format!("Domain: {}", domain)).text_size(12.0).color(map_color(AppColor::Text)),
                 ))
                 .gap(15.0),
             ))
@@ -961,7 +976,8 @@ impl AppComponents for NativeComponents {
             Box::new(flex((
                 label(prompt)
                     .text_size(18.0)
-                    .weight(xilem::FontWeight::MEDIUM),
+                    .weight(xilem::FontWeight::MEDIUM)
+                    .color(map_color(AppColor::Text)),
                 FlexSpacer::Fixed(10.0),
                 label(format!("💡 Hint: {}", hint_text))
                     .text_size(12.0)
@@ -973,6 +989,7 @@ impl AppComponents for NativeComponents {
                 label(prompt)
                     .text_size(18.0)
                     .weight(xilem::FontWeight::MEDIUM)
+                    .color(map_color(AppColor::Text))
             ) as Box<AnyWidgetView<AppState>>
         };
         

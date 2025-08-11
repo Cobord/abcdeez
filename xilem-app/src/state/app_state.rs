@@ -10,9 +10,8 @@ use crate::services::AdaptiveLearningService;
 use crate::state::{SessionState, Theme, ThemeMode, UserState};
 use crate::utils::easter_egg::EasterEggManager;
 use crate::demo::DemoController;
-use crate::gamification::GamificationManager;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum LoadingKey {
     Login,
     Session,
@@ -82,7 +81,7 @@ impl Screen {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ConnectionStatus {
     Connected,
     Connecting,
@@ -90,13 +89,14 @@ pub enum ConnectionStatus {
     Error(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppError {
     pub message: String,
     pub timestamp: DateTime<Utc>,
     pub recoverable: bool,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct AppState {
     // User & Authentication
     pub user: Option<UserState>,
@@ -119,6 +119,7 @@ pub struct AppState {
     
     // iOS Auth Bridge
     #[cfg(target_os = "ios")]
+    #[serde(skip)]
     pub ios_auth_bridge: Option<crate::auth::ios::IOSAuthBridge>,
     
     // Easter egg tracking
@@ -158,6 +159,7 @@ pub struct AppState {
     
     // Fun features
     pub easter_egg_manager: EasterEggManager,
+    #[serde(skip)]
     pub demo_controller: Option<DemoController>,
 }
 
@@ -335,21 +337,21 @@ impl AppState {
     pub fn demo_start(&mut self) {
         println!("Starting Quick Tour demo");
         if let Some(ref mut demo) = self.demo_controller {
-            demo.start_scenario("quick_tour");
+            let _ = demo.start_scenario("quick_tour");
         }
     }
     
     pub fn demo_start_training(&mut self) {
         println!("Starting Training Demo");
         if let Some(ref mut demo) = self.demo_controller {
-            demo.start_scenario("training_demo");
+            let _ = demo.start_scenario("training_demo");
         }
     }
     
     pub fn demo_showcase(&mut self) {
         println!("Running Demo Showcase");
         if let Some(ref mut demo) = self.demo_controller {
-            demo.start_scenario("showcase");
+            let _ = demo.start_scenario("showcase");
             // Populate dashboard with demo data
             self.populate_demo_data();
         }
