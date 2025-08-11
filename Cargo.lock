@@ -60,7 +60,7 @@ dependencies = [
 
 [[package]]
 name = "abcdeez-core"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "anyhow",
  "axum 0.7.9",
@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "abcdeez-web"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "abcdeez-core",
  "console_error_panic_hook",
@@ -7094,7 +7094,7 @@ dependencies = [
 
 [[package]]
 name = "web-backend"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "abcdeez-core",
  "aes-gcm",
@@ -8065,7 +8065,7 @@ dependencies = [
 
 [[package]]
 name = "xilem_abcdeez_desktop"
-version = "0.1.0"
+version = "0.0.5"
 dependencies = [
  "abcdeez-app",
  "winit",
