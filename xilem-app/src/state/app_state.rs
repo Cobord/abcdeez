@@ -157,6 +157,7 @@ impl Default for AppState {
     }
 }
 
+#[cfg(feature = "xilem-native")]
 impl xilem::AppState for AppState {
     fn keep_running(&self) -> bool {
         !matches!(self.current_screen, Screen::Logout)
@@ -164,6 +165,10 @@ impl xilem::AppState for AppState {
 }
 
 impl AppState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
     pub fn navigate(&mut self, screen: Screen) {
         self.navigation_stack.push(self.current_screen.clone());
         self.current_screen = screen;

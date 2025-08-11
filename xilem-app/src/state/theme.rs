@@ -1,6 +1,27 @@
 // Theme and styling management
 
+#[cfg(feature = "xilem-native")]
 use xilem::Color;
+
+#[cfg(feature = "xilem-web")]
+#[derive(Debug, Clone, Copy)]
+pub struct Color {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+}
+
+#[cfg(feature = "xilem-web")]
+impl Color {
+    pub fn from_rgb8(r: u8, g: u8, b: u8) -> Self {
+        Color { r, g, b, a: 255 }
+    }
+    
+    pub fn from_rgba8(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Color { r, g, b, a }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ThemeMode {

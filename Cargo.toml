@@ -32,8 +32,8 @@ statrs = "0.18"
 # GUI
 winit = { version = "0.30.12", features = ["android-native-activity"] }
 
-# Async runtime
-tokio = { version = "1", features = ["full"] }
+# Async runtime (minimal features for WASM compatibility)
+tokio = { version = "1", features = ["sync", "macros", "rt", "time"] }
 
 # Logging
 tracing = "0.1"
@@ -47,3 +47,8 @@ thiserror = "2.0"
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+# Override dependencies for WASM compatibility
+[patch.crates-io]
+# When building for wasm32, we need tokio without networking features
+# This will be applied when target is wasm32-unknown-unknown

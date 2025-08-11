@@ -26,6 +26,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "console_error_panic_hook",
  "cpal",
  "dirs",
  "futures-util",
@@ -51,11 +52,16 @@ dependencies = [
  "toml 0.9.5",
  "tracing",
  "tracing-subscriber",
+ "tracing-wasm",
  "url",
  "uuid",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "winit",
  "xilem",
- "xilem_core",
+ "xilem_core 0.3.0 (git+https://github.com/linebender/xilem.git)",
+ "xilem_web",
 ]
 
 [[package]]
@@ -88,17 +94,22 @@ dependencies = [
 name = "abcdeez-web"
 version = "0.0.7"
 dependencies = [
+ "abcdeez-app",
  "abcdeez-core",
  "console_error_panic_hook",
  "getrandom 0.2.16",
  "js-sys",
  "serde",
  "serde_json",
+ "tokio",
+ "tracing-wasm",
  "uuid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
  "wee_alloc",
+ "xilem_core 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "xilem_web",
 ]
 
 [[package]]
@@ -1989,6 +2000,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
+name = "futures"
+version = "0.3.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
+]
+
+[[package]]
 name = "futures-channel"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2074,6 +2100,7 @@ version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
 dependencies = [
+ "futures-channel",
  "futures-core",
  "futures-io",
  "futures-macro",
@@ -4622,7 +4649,7 @@ dependencies = [
  "once_cell",
  "socket2 0.5.10",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6504,6 +6531,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-wasm"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4575c663a174420fa2d78f4108ff68f65bf2fbb7dd89f33749b6e826b3626e07"
+dependencies = [
+ "tracing",
+ "tracing-subscriber",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "tracing_android_trace"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8004,7 +8042,7 @@ dependencies = [
  "tracing",
  "vello",
  "winit",
- "xilem_core",
+ "xilem_core 0.3.0 (git+https://github.com/linebender/xilem.git)",
 ]
 
 [[package]]
@@ -8027,11 +8065,35 @@ dependencies = [
 [[package]]
 name = "xilem_core"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2c0cbbbc88ae752dd6fe271c780f41045c006b7c8c5ec673f0d7e52418d6750"
+dependencies = [
+ "kurbo",
+ "tracing",
+]
+
+[[package]]
+name = "xilem_core"
+version = "0.3.0"
 source = "git+https://github.com/linebender/xilem.git#1abde1bd97ef27c497e55e411422c582ab32f020"
 dependencies = [
  "anymore",
  "hashbrown 0.15.5",
  "tracing",
+]
+
+[[package]]
+name = "xilem_web"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce09b53d0cef15bced7e912994c3136d18aed951e8a7dc5b3a0a4b4595329a76"
+dependencies = [
+ "futures",
+ "peniko",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "xilem_core 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

@@ -14,6 +14,14 @@ crate-type = ["cdylib"]
 [dependencies]
 # Core library
 abcdeez-core = { path = "../../core" }
+abcdeez-app = { path = "../../xilem-app", default-features = false, features = ["web"] }
+
+# Xilem web
+xilem_web = "0.3.0"
+xilem_core = "0.3.0"
+
+# Override tokio for WASM compatibility (no networking or runtime features)
+tokio = { version = "1.0", default-features = false, features = ["sync", "macros"] }
 
 # Web platform
 wasm-bindgen = "0.2"
@@ -44,6 +52,7 @@ web-sys = { version = "0.3", features = [
     "ConnectionType"
 ] }
 console_error_panic_hook = "0.1"
+tracing-wasm = "0.2"
 wee_alloc = { version = "0.4", optional = true }
 
 # Serialization

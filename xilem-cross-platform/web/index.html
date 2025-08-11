@@ -2,30 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>ABCDEEZ Graph Learning System</title>
-    
-    <!-- PWA Meta Tags -->
-    <meta name="description" content="Adaptive learning system for cognitive skill acquisition with offline support">
-    <meta name="theme-color" content="#667eea">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="ABCDEEZ">
-    <meta name="msapplication-TileColor" content="#667eea">
-    <meta name="msapplication-tap-highlight" content="no">
-    
-    <!-- iOS Icon Support -->
-    <link rel="apple-touch-icon" href="./icons/icon-192x192.png">
-    <link rel="apple-touch-icon" sizes="152x152" href="./icons/icon-152x152.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180x180.png">
-    <link rel="apple-touch-icon" sizes="167x167" href="./icons/icon-167x167.png">
-    
-    <!-- Manifest -->
-    <link rel="manifest" href="./manifest.json">
-    
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="./icons/favicon-16x16.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ABCDEEZ Learning System</title>
     <style>
         * {
             margin: 0;
@@ -84,6 +62,12 @@
             background: #38a169;
         }
 
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
         .metrics {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -125,6 +109,10 @@
             transition: width 0.3s ease;
         }
 
+        .progress {
+            margin-top: 20px;
+        }
+
         .task-display {
             font-size: 48px;
             text-align: center;
@@ -138,16 +126,33 @@
             justify-content: center;
         }
 
-        .response-buttons {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
-            flex-wrap: wrap;
+        .response-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
         }
 
-        .domain-selector {
+        .response-btn {
+            padding: 15px;
+            font-size: 20px;
+            font-weight: bold;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .response-btn:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+        }
+
+        .domain-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
             margin: 20px 0;
         }
@@ -167,48 +172,29 @@
             transform: translateY(-2px);
         }
 
-        .domain-card.selected {
-            background: #667eea;
-            color: white;
+        .domain-card h3 {
+            margin-bottom: 8px;
         }
 
-        .settings-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-
-        .setting-item {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .setting-item label {
-            font-weight: 500;
-            color: #4a5568;
-        }
-
-        .setting-item input,
-        .setting-item select {
-            padding: 8px;
-            border: 1px solid #cbd5e0;
-            border-radius: 4px;
+        .domain-card p {
+            color: #718096;
             font-size: 14px;
         }
 
-        .loading {
-            text-align: center;
-            padding: 40px;
+        /* Loading state */
+        #loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
             color: white;
         }
 
-        .loading-spinner {
-            display: inline-block;
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(255,255,255,0.3);
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
             border-top-color: white;
             border-radius: 50%;
             animation: spin 1s linear infinite;
@@ -218,106 +204,6 @@
             to { transform: rotate(360deg); }
         }
 
-        .navigation {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding: 20px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 20px;
-        }
-
-        .nav-link {
-            color: #4a5568;
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.2s;
-        }
-
-        .nav-link:hover,
-        .nav-link.active {
-            color: #667eea;
-        }
-
-        .offline-indicator,
-        .online-indicator {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 500;
-            z-index: 1000;
-            animation: fadeIn 0.3s ease;
-        }
-        
-        .offline-indicator {
-            background: #feb2b2;
-            color: #742a2a;
-        }
-        
-        .online-indicator {
-            background: #9ae6b4;
-            color: #22543d;
-        }
-        
-        .mode-indicator {
-            display: inline-block;
-            padding: 4px 12px;
-            background: #edf2f7;
-            border-radius: 12px;
-            font-size: 14px;
-            color: #4a5568;
-            margin: 10px 0;
-        }
-        
-        .sync-status {
-            color: #ed8936;
-            font-size: 14px;
-            margin-top: 10px;
-        }
-        
-        .install-prompt {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: white;
-            padding: 16px 24px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            z-index: 1001;
-            animation: slideUp 0.3s ease;
-        }
-        
-        .install-prompt button {
-            margin: 0 8px;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
-        @keyframes slideUp {
-            from { 
-                transform: translateX(-50%) translateY(100px);
-                opacity: 0;
-            }
-            to { 
-                transform: translateX(-50%) translateY(0);
-                opacity: 1;
-            }
-        }
-        
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -327,138 +213,22 @@
                 font-size: 32px;
                 padding: 20px;
             }
-            
-            .navigation {
-                flex-direction: column;
-                gap: 15px;
-            }
-            
-            .offline-indicator,
-            .online-indicator {
-                top: auto;
-                bottom: 10px;
-                right: 10px;
-            }
         }
     </style>
 </head>
 <body>
-    <div id="app">
-        <div class="loading">
-            <div class="loading-spinner"></div>
-            <h2>Loading Graph Learning System...</h2>
-            <noscript>
-                <p style="color: white; margin-top: 20px;">
-                    JavaScript is required to run this application.
-                </p>
-            </noscript>
-        </div>
+    <div id="loading">
+        <div class="spinner"></div>
+        <h2 style="margin-top: 20px;">Loading ABCDEEZ...</h2>
     </div>
     
-    <!-- Install Prompt (hidden by default) -->
-    <div id="install-prompt" class="install-prompt" style="display: none;">
-        <p>Install ABCDEEZ for offline access!</p>
-        <button id="install-btn" class="button">Install</button>
-        <button id="install-dismiss" class="button secondary">Not Now</button>
-    </div>
-    
-    <script>
-        // Register service worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./service-worker.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registration successful');
-                        
-                        // Check for updates periodically
-                        setInterval(() => {
-                            registration.update();
-                        }, 60000); // Check every minute
-                    })
-                    .catch(err => {
-                        console.log('ServiceWorker registration failed: ', err);
-                    });
-            });
-        }
-        
-        // Handle PWA install prompt
-        let deferredPrompt;
-        const installPrompt = document.getElementById('install-prompt');
-        const installBtn = document.getElementById('install-btn');
-        const dismissBtn = document.getElementById('install-dismiss');
-        
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            
-            // Show install prompt after 30 seconds
-            setTimeout(() => {
-                if (deferredPrompt) {
-                    installPrompt.style.display = 'block';
-                }
-            }, 30000);
-        });
-        
-        installBtn.addEventListener('click', async () => {
-            if (deferredPrompt) {
-                installPrompt.style.display = 'none';
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                console.log(`User response to the install prompt: ${outcome}`);
-                deferredPrompt = null;
-            }
-        });
-        
-        dismissBtn.addEventListener('click', () => {
-            installPrompt.style.display = 'none';
-        });
-        
-        // Handle online/offline events
-        window.addEventListener('online', () => {
-            console.log('Back online');
-            // Notify the WASM app if it's loaded
-            if (window.graphLearningApp) {
-                window.graphLearningApp.check_online_status();
-            }
-        });
-        
-        window.addEventListener('offline', () => {
-            console.log('Gone offline');
-            // Notify the WASM app if it's loaded
-            if (window.graphLearningApp) {
-                window.graphLearningApp.check_online_status();
-            }
-        });
-        
-        // Handle app updates
-        let refreshing;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (refreshing) return;
-            window.location.reload();
-            refreshing = true;
-        });
-    </script>
-    
-    <!-- Load WASM module -->
     <script type="module">
-        import init, { GraphLearningApp } from './abcdeez.js';
+        import init from './abcdeez.js';
         
         async function run() {
+            // Hide loading screen once WASM loads
             await init();
-            
-            try {
-                const app = new GraphLearningApp();
-                window.graphLearningApp = app;
-                app.init();
-            } catch (error) {
-                console.error('Failed to initialize app:', error);
-                document.getElementById('app').innerHTML = `
-                    <div class="loading">
-                        <h2 style="color: white;">Failed to load application</h2>
-                        <p style="color: white;">${error.message}</p>
-                    </div>
-                `;
-            }
+            document.getElementById('loading').style.display = 'none';
         }
         
         run();
