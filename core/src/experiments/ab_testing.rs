@@ -1,5 +1,4 @@
 use crate::core::config::LearnerConfig;
-use super::design::ExperimentalDesign;
 use crate::statistics::power_analysis::PowerAnalyzer;
 use crate::statistics::validation::StatisticalValidator;
 use crate::statistics::TestResult;
@@ -462,11 +461,11 @@ impl ABTestFramework {
         &mut self,
         test_id: &str,
         participant_id: &str,
-        metric_name: &str,
-        value: f64,
-        timestamp: Option<chrono::DateTime<chrono::Utc>>,
+        _metric_name: &str,
+        _value: f64,
+        _timestamp: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<(), String> {
-        let assignment = self
+        let _assignment = self
             .assignments
             .get(participant_id)
             .ok_or("Participant not assigned to any test")?;
@@ -580,7 +579,7 @@ impl ABTestFramework {
     fn validate_test_configuration(
         &self,
         variants: &[TestVariant],
-        allocation_strategy: &AllocationStrategy,
+        _allocation_strategy: &AllocationStrategy,
     ) -> Result<(), String> {
         if variants.len() < 2 {
             return Err("At least 2 variants required".to_string());

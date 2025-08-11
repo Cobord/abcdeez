@@ -334,10 +334,12 @@ fn test_strategy_shift_with_practice() {
     }
 
     // Late phase: simulate direct access pattern
+    use rand::{SeedableRng, Rng};
+    let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut late_correlations = Vec::new();
     for distance in 1..=5 {
         // RT approximately constant with substantial noise, weak relation to distance (direct access)
-        let rt = 900.0 + (rand::random::<f64>() * 150.0);
+        let rt = 900.0 + (rng.gen::<f64>() * 150.0);
         late_correlations.push((distance as f64, rt));
     }
 

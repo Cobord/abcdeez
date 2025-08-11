@@ -6,8 +6,8 @@ pub mod prediction;
 
 pub use core::{
     CorrectionMethod, DetailedStatistics, ExGaussianModel, ExGaussianParameters,
-    MultipleComparisonCorrection, ResponseTimeDistribution, SessionAnalyzer, StrategyAnalysis,
-    StrategyType, TestResult,
+    MultipleComparisonCorrection, PowerAnalysis, ResponseTimeDistribution, SessionAnalyzer, 
+    StrategyAnalysis, StrategyType, TestResult,
 };
 pub use validation::{
     AssumptionChecks, HomoscedasticityTest, NormalityTest, OutlierAnalysis, StatisticalValidator,
@@ -17,6 +17,7 @@ pub use mixed_effects::{
     RandomEffectSpec,
 };
 pub use power_analysis::{
-    EffectSizeCalculator, PowerAnalysis, PowerAnalyzer, RealTimeEffectMonitor, RealTimeMonitor,
+    EffectSizeCalculator, PowerAnalysis as AdvancedPowerAnalysis, PowerAnalyzer, 
+    RealTimeEffectMonitor, RealTimeMonitor,
 };
 pub use prediction::{PerformancePredictor, ScheduleOptimizer};
