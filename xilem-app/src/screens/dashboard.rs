@@ -3,7 +3,7 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{components::*, models::*, visualization_components::*, AppData, Screen};
+use crate::{components::*, models::*, viz::*, AppData, Screen};
 
 // Enhanced Performance Dashboard with interactive features
 pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
@@ -25,7 +25,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                         .alignment(TextAlignment::Start),
                     label(format!(
                         "Duration: {}",
-                        crate::visualizations::format_duration(duration)
+                        crate::viz::format_duration(duration)
                     ))
                     .alignment(TextAlignment::End),
                 ))
@@ -72,7 +72,7 @@ pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                 ),
                 metric_display(
                     "Accuracy",
-                    crate::visualizations::format_percentage(data.current_metrics.accuracy_rate, 1),
+                    crate::viz::format_percentage(data.current_metrics.accuracy_rate, 1),
                     if data.current_metrics.accuracy_rate >= 0.85 {
                         Color::from_rgb8(0, 158, 115) // Colorblind-safe teal
                     } else if data.current_metrics.accuracy_rate >= 0.70 {

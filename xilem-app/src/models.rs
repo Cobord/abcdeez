@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
 use abcdeez_core::{
-    tasks::TaskResponse as CoreTaskResponse, LearnerMetrics as CoreLearnerMetrics,
-    LearnerModel as CoreLearnerModel, Task as CoreTask, Topology, TopologyType,
+    LearnerMetrics as CoreLearnerMetrics, LearnerModel as CoreLearnerModel, 
+    Task as CoreTask, Topology, TopologyType,
 };
+use abcdeez_core::tasks::TaskResponse as CoreTaskResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

@@ -5,7 +5,8 @@ use xilem::{
     Color, WidgetView,
 };
 
-use crate::{models::*, visualizations::*, AppData};
+use crate::{models::*, AppData};
+use super::core::*;
 use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 

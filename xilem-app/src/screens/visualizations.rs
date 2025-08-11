@@ -3,10 +3,10 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{components::*, visualization_components::*, AppData, Screen};
+use crate::{components::*, viz::*, AppData, Screen};
 
-use abcdeez_core::learner::OperationType;
-use abcdeez_core::tasks::{TaskResponse, TaskType};
+use abcdeez_core::{OperationType, TaskType};
+use abcdeez_core::tasks::TaskResponse;
 
 pub fn visualizations_screen(data: &mut AppData) -> impl WidgetView<AppData> {
     let has_data = !data.session_responses.is_empty();

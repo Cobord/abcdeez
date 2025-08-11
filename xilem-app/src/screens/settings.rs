@@ -3,7 +3,7 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{api_client::ApiClientTrait, components::*, models::*, AppData, Screen};
+use crate::{services::ApiClientTrait, components::*, models::*, AppData, Screen};
 
 // Enhanced Settings Screen with Demo Preferences
 pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
@@ -302,7 +302,7 @@ pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData> {
                                             Some("API settings saved successfully!".to_string());
                                         // Recreate API client with new settings
                                         data.api_client = std::sync::Arc::new(
-                                            crate::api_client::AdaptiveApiClient::new(
+                                            crate::services::AdaptiveApiClient::new(
                                                 data.config_manager.config(),
                                             ),
                                         );

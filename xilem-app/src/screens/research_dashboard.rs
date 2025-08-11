@@ -3,7 +3,7 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{components::*, models::*, research::*, visualization_components::*, AppData, Screen};
+use crate::{components::*, models::*, research::*, viz::*, AppData, Screen};
 
 pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData> {
     let has_controller = data.research_controller.is_some();
@@ -26,7 +26,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                         .alignment(TextAlignment::Start),
                     label(format!(
                         "Duration: {}",
-                        crate::visualizations::format_duration(
+                        crate::viz::format_duration(
                             chrono::Utc::now()
                                 .signed_duration_since(session.start_time)
                                 .num_seconds()
@@ -1167,7 +1167,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                     flex((
                         button("🏛️ Set Institution", |data: &mut AppData| {
                             // Initialize federation network with demo institution
-                            let contact = crate::federation::InstitutionContact {
+                            let contact = crate::services::federation::InstitutionContact {
                                 primary_investigator: "Dr. Jane Smith".to_string(),
                                 email: "jane.smith@university.edu".to_string(),
                                 institution: "University Research Center".to_string(),
@@ -1177,7 +1177,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                             };
 
                             data.federation_network =
-                                Some(crate::federation::FederationNetwork::new(
+                                Some(crate::services::federation::FederationNetwork::new(
                                     "University Research Center".to_string(),
                                     contact,
                                 ));
@@ -1217,7 +1217,7 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                 .direction(Axis::Vertical),
                 flex((
                     button("✅ Complete Setup", |data: &mut AppData| {
-                        data.federation_status = crate::federation::ComplianceStatus::Compliant;
+                        data.federation_status = crate::services::federation::ComplianceStatus::Compliant;
                         data.show_federation_setup = false;
                         data.success_message =
                             Some("Federation network setup complete!".to_string());
@@ -1404,13 +1404,13 @@ pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
                 flex((
                     label(format!("Status: {:?}", data.federation_status))
                         .brush(match data.federation_status {
-                            crate::federation::ComplianceStatus::Compliant => {
+                            crate::services::federation::ComplianceStatus::Compliant => {
                                 Color::from_rgb8(0, 128, 0)
                             }
-                            crate::federation::ComplianceStatus::NonCompliant => {
+                            crate::services::federation::ComplianceStatus::NonCompliant => {
                                 Color::from_rgb8(255, 0, 0)
                             }
-                            crate::federation::ComplianceStatus::UnderReview => {
+                            crate::services::federation::ComplianceStatus::UnderReview => {
                                 Color::from_rgb8(255, 165, 0)
                             }
                         })

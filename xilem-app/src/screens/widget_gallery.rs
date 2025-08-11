@@ -5,7 +5,7 @@ use xilem::{
     Color, TextAlignment, WidgetView,
 };
 
-use crate::{components::*, visualization_components::*, AppData};
+use crate::{components::*, viz::*, AppData};
 
 pub fn widget_gallery_screen(data: &AppData) -> impl WidgetView<AppData> {
     let demo_metrics = data.current_metrics.clone();
@@ -16,13 +16,13 @@ pub fn widget_gallery_screen(data: &AppData) -> impl WidgetView<AppData> {
         .collect();
 
     let demo_task = crate::models::UITask {
-        core_task: abcdeez_core::tasks::Task {
-            task_type: abcdeez_core::tasks::TaskType::Successor { item: "A".into() },
+        core_task: abcdeez_core::Task {
+            task_type: abcdeez_core::TaskType::Successor { item: "A".into() },
             prompt: "What comes after A?".into(),
             correct_answer: "B".into(),
             options: vec!["A".into(), "B".into(), "C".into()],
             difficulty: 0.5,
-            operation: abcdeez_core::learner::OperationType::Successor,
+            operation: abcdeez_core::OperationType::Successor,
         },
         display_prompt: "What comes after A?".into(),
         display_options: vec!["A".into(), "B".into(), "C".into()],

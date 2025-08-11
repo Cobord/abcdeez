@@ -3,7 +3,7 @@ use xilem::{
     TextAlignment, WidgetView,
 };
 
-use crate::{apple_signin_button::standard_apple_signin_button, components::*, AppData, Screen};
+use crate::{auth::standard_apple_signin_button, components::*, AppData, Screen};
 
 // Welcome/Login Screen
 pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData> {
