@@ -711,12 +711,12 @@ impl ProtocolVersionManager {
         strategy: MergeStrategy,
     ) -> Result<String, String> {
         // Check if branches exist
-        let source = self
+        let _source = self
             .repository
             .branches
             .get(&source_branch)
             .ok_or("Source branch does not exist")?;
-        let target = self
+        let _target = self
             .repository
             .branches
             .get(&target_branch)
@@ -940,6 +940,40 @@ impl ProtocolVersionManager {
     fn validate_protocol(&self, snapshot: &ProtocolSnapshot) -> Result<ValidationResults, String> {
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
+
+        // Check required sections from validation rules
+        for required_section in &self.validation_rules.required_sections {
+            match required_section.as_str() {
+                "experimental_design" if snapshot.experimental_design.factors.is_empty() => {
+                    errors.push(ValidationError {
+                        error_code: "REQ001".to_string(),
+                        section: required_section.clone(),
+                        field: "factors".to_string(),
+                        message: format!("Required section '{}' is incomplete", required_section),
+                        severity: ErrorSeverity::Critical,
+                    });
+                }
+                "randomization_settings" if snapshot.randomization_settings.randomization_type.is_empty() => {
+                    errors.push(ValidationError {
+                        error_code: "REQ002".to_string(),
+                        section: required_section.clone(),
+                        field: "randomization_type".to_string(),
+                        message: format!("Required section '{}' is incomplete", required_section),
+                        severity: ErrorSeverity::Critical,
+                    });
+                }
+                "data_collection_params" if snapshot.data_collection_params.collection_methods.is_empty() => {
+                    errors.push(ValidationError {
+                        error_code: "REQ003".to_string(),
+                        section: required_section.clone(),
+                        field: "collection_methods".to_string(),
+                        message: format!("Required section '{}' is incomplete", required_section),
+                        severity: ErrorSeverity::Critical,
+                    });
+                }
+                _ => {}
+            }
+        }
 
         // Check required sections
         if snapshot.experimental_design.factors.is_empty() {

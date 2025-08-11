@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
-    handlers::common::{ResponseHelper, ValidationHelper},
+    handlers::common::ValidationHelper,
     middleware::Claims,
     state::AppState,
 };
@@ -39,9 +39,8 @@ pub async fn generate_simple(
     let mut task_generator = TaskGenerator::new(topology);
 
     // Generate a task
-    let task = task_generator
-        .generate_task(params.difficulty)
-        .map_err(|_| AppError::TaskGenerationError("Failed to generate task".to_string()))?;
+    // The core API accepts an optional TaskType; difficulty is not used directly.
+    let task = task_generator.generate_task(None);
 
     let response = SimpleTaskResponse {
         task_type: format!("{:?}", task.task_type),
@@ -52,7 +51,7 @@ pub async fn generate_simple(
         operation: format!("{:?}", task.operation),
     };
 
-    ResponseHelper::ok_response(response)
+    Ok(Json(response))
 }
 
 /// Get task difficulty analysis
@@ -69,7 +68,7 @@ pub async fn get_difficulty(
         recommended_difficulty: params.learner_id.map(|_| DEFAULT_RECOMMENDED_DIFFICULTY),
     };
 
-    ResponseHelper::ok_response(response)
+    Ok(Json(response))
 }
 
 /// Simple hint generation endpoint
@@ -89,7 +88,7 @@ pub async fn generate_hint(
         timestamp: chrono::Utc::now(),
     };
 
-    ResponseHelper::ok_response(response)
+    Ok(Json(response))
 }
 
 // Helper functions

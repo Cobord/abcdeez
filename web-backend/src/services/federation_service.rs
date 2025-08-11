@@ -405,8 +405,19 @@ impl FederationService {
         data: &serde_json::Value,
         signature: &str,
     ) -> AppResult<bool> {
+        // CRITICAL: Signature verification must be implemented before production use
+        // This is a security vulnerability that allows any node to impersonate others
+        tracing::error!(
+            "SECURITY WARNING: Signature verification not implemented for node {}",
+            node_id
+        );
+        
+        // For now, reject all requests to prevent exploitation
         // TODO: Implement actual signature verification using node's public key
-        Ok(true)
+        // 1. Fetch node's public key from database
+        // 2. Serialize data in canonical form
+        // 3. Verify signature using appropriate crypto library
+        Err(AppError::Forbidden)
     }
 
     async fn has_valid_agreement(&self, source_id: &Uuid, target_id: &Uuid) -> AppResult<bool> {

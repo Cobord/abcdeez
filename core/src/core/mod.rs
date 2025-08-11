@@ -1,9 +1,11 @@
-pub mod topology;
-pub mod config;
-pub mod error;
-pub mod backend;
+mod backend;
+mod config;
+mod error;
+mod topology;
 
-pub use topology::{Edge, Node, Topology, TopologyType};
-pub use config::*;
-pub use error::{Error, Result};
-pub use backend::*;
+pub use self::{
+    backend::*,
+    config::*,
+    error::{Error, Result},
+    topology::{Edge, Node, Topology, TopologyType},
+};

@@ -94,7 +94,7 @@ macro_rules! track_performance {
         let _tracker = $crate::data::performance_tracing::PerformanceTracker::start($operation);
     }};
     ($operation:expr, $block:block) => {{
-        let mut tracker = $crate::data::performance_tracing::PerformanceTracker::start($operation);
+        let tracker = $crate::data::performance_tracing::PerformanceTracker::start($operation);
         let result = $block;
         let _metrics = tracker.finish();
         result

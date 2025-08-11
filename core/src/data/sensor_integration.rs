@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 /// External Physiological Sensor Integration System
 /// Provides integration for EEG, GSR, eye-tracking, and other biometric sensors
@@ -636,7 +636,7 @@ pub struct MockEEGSensor {
     connected: bool,
     recording: bool,
     device_info: DeviceInfo,
-    last_reading: Option<SensorReading>,
+    last_reading: Arc<Mutex<Option<SensorReading>>>,
 }
 
 impl MockEEGSensor {
@@ -651,7 +651,7 @@ impl MockEEGSensor {
                 serial_number: Some("MOCK001".to_string()),
                 battery_level: Some(0.85),
             },
-            last_reading: None,
+            last_reading: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -716,13 +716,24 @@ impl SensorInterface for MockEEGSensor {
 
     fn get_latest_reading(&self) -> Option<SensorReading> {
         if self.recording {
-            // Generate mock EEG data
+            let mut last_reading = self.last_reading.lock().unwrap();
+            
+            // Return the cached last reading if available and recent
+            if let Some(ref last) = *last_reading {
+                let age = chrono::Utc::now().signed_duration_since(last.timestamp);
+                if age.num_milliseconds() < 50 {
+                    // Less than 50ms old, return cached
+                    return Some(last.clone());
+                }
+            }
+            
+            // Generate new mock EEG data
             let mut channels = HashMap::new();
             channels.insert(EEGChannel::Fp1, rand::random::<f64>() * 20.0 - 10.0);
             channels.insert(EEGChannel::Fp2, rand::random::<f64>() * 20.0 - 10.0);
             channels.insert(EEGChannel::Cz, rand::random::<f64>() * 20.0 - 10.0);
 
-            Some(SensorReading {
+            let reading = SensorReading {
                 timestamp: chrono::Utc::now(),
                 sensor_id: "mock_eeg".to_string(),
                 data: SensorData::EEG {
@@ -732,9 +743,13 @@ impl SensorInterface for MockEEGSensor {
                 },
                 quality_indicator: Some(0.9),
                 sync_marker: None,
-            })
+            };
+            
+            // Cache the reading
+            *last_reading = Some(reading.clone());
+            Some(reading)
         } else {
-            None
+            self.last_reading.lock().unwrap().clone()
         }
     }
 

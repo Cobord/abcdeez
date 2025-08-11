@@ -68,41 +68,60 @@ impl ConnectionManager {
 
 #[derive(Default)]
 struct InMemoryCache {
-    map: HashMap<String, Entry>,
+    map: Arc<Mutex<HashMap<String, Entry>>>,
 }
 
 impl InMemoryCache {
     fn new() -> Self {
-        Self {
-            map: HashMap::new(),
-        }
+        let cache = Self {
+            map: Arc::new(Mutex::new(HashMap::new())),
+        };
+        
+        // Start background cleanup task
+        let map_clone = Arc::clone(&cache.map);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(300)); // Clean every 5 minutes
+            loop {
+                interval.tick().await;
+                let mut map = map_clone.lock().await;
+                map.retain(|_, entry| !entry.is_expired());
+            }
+        });
+        
+        cache
     }
 
-    fn get(&mut self, key: &str) -> Option<String> {
+    async fn get(&self, key: &str) -> Option<String> {
+        let mut map = self.map.lock().await;
         // Purge expired values on access
-        if let Some(entry) = self.map.get(key) {
+        if let Some(entry) = map.get(key) {
             if entry.is_expired() {
-                self.map.remove(key);
+                map.remove(key);
                 return None;
             }
+            Some(entry.value.clone())
+        } else {
+            None
         }
-        self.map.get(key).map(|e| e.value.clone())
     }
 
-    fn set_ex(&mut self, key: String, ttl_secs: u64, value: String) {
+    async fn set_ex(&self, key: String, ttl_secs: u64, value: String) {
         let expires_at = Instant::now().checked_add(Duration::from_secs(ttl_secs));
-        self.map.insert(key, Entry { value, expires_at });
+        let mut map = self.map.lock().await;
+        map.insert(key, Entry { value, expires_at });
     }
 
-    fn del(&mut self, key: &str) -> bool {
-        self.map.remove(key).is_some()
+    async fn del(&self, key: &str) -> bool {
+        let mut map = self.map.lock().await;
+        map.remove(key).is_some()
     }
 
-    fn exists(&mut self, key: &str) -> bool {
+    async fn exists(&self, key: &str) -> bool {
+        let mut map = self.map.lock().await;
         // Check existence and remove if expired
-        if let Some(entry) = self.map.get(key) {
+        if let Some(entry) = map.get(key) {
             if entry.is_expired() {
-                self.map.remove(key);
+                map.remove(key);
                 return false;
             }
             true
@@ -111,11 +130,12 @@ impl InMemoryCache {
         }
     }
 
-    fn incr(&mut self, key: &str) -> Result<i64, CacheError> {
+    async fn incr(&self, key: &str) -> Result<i64, CacheError> {
+        let mut map = self.map.lock().await;
         // Get current value or default to 0
-        let current = if let Some(entry) = self.map.get(key) {
+        let current = if let Some(entry) = map.get(key) {
             if entry.is_expired() {
-                self.map.remove(key);
+                map.remove(key);
                 0
             } else {
                 entry.value.parse::<i64>().unwrap_or(0)
@@ -126,7 +146,7 @@ impl InMemoryCache {
 
         let new_value = current + 1;
         // Store with no expiry (will be set by EXPIRE if needed)
-        self.map.insert(
+        map.insert(
             key.to_string(),
             Entry {
                 value: new_value.to_string(),
@@ -136,8 +156,9 @@ impl InMemoryCache {
         Ok(new_value)
     }
 
-    fn expire(&mut self, key: &str, ttl_secs: u64) -> bool {
-        if let Some(entry) = self.map.get_mut(key) {
+    async fn expire(&self, key: &str, ttl_secs: u64) -> bool {
+        let mut map = self.map.lock().await;
+        if let Some(entry) = map.get_mut(key) {
             entry.expires_at = Instant::now().checked_add(Duration::from_secs(ttl_secs));
             true
         } else {
@@ -265,7 +286,7 @@ impl Command {
                 }
                 let key = &self.args[0];
                 let mut guard = conn.inner.lock().await;
-                let val = guard.get(key);
+                let val = guard.get(key).await;
                 T::from_get(val)
             }
             "SETEX" => {
@@ -279,8 +300,8 @@ impl Command {
                     .map_err(|_| CacheError::ParseError("ttl_seconds must be an integer"))?;
                 let value = self.args[2].clone();
 
-                let mut guard = conn.inner.lock().await;
-                guard.set_ex(key, ttl_secs, value);
+                let guard = conn.inner.lock().await;
+                guard.set_ex(key, ttl_secs, value).await;
                 T::from_set()
             }
             "DEL" => {
@@ -288,8 +309,8 @@ impl Command {
                     return Err(CacheError::InvalidArgs("DEL requires 1 argument: key"));
                 }
                 let key = &self.args[0];
-                let mut guard = conn.inner.lock().await;
-                let deleted = guard.del(key);
+                let guard = conn.inner.lock().await;
+                let deleted = guard.del(key).await;
                 T::from_del(deleted)
             }
             "EXISTS" => {
@@ -297,8 +318,8 @@ impl Command {
                     return Err(CacheError::InvalidArgs("EXISTS requires 1 argument: key"));
                 }
                 let key = &self.args[0];
-                let mut guard = conn.inner.lock().await;
-                let exists = guard.exists(key);
+                let guard = conn.inner.lock().await;
+                let exists = guard.exists(key).await;
                 T::from_exists(exists)
             }
             "INCR" => {
@@ -306,8 +327,8 @@ impl Command {
                     return Err(CacheError::InvalidArgs("INCR requires 1 argument: key"));
                 }
                 let key = &self.args[0];
-                let mut guard = conn.inner.lock().await;
-                let value = guard.incr(key)?;
+                let guard = conn.inner.lock().await;
+                let value = guard.incr(key).await?;
                 T::from_incr(value)
             }
             "EXPIRE" => {
@@ -319,8 +340,8 @@ impl Command {
                 let key = &self.args[0];
                 let ttl_secs = u64::from_str(&self.args[1])
                     .map_err(|_| CacheError::ParseError("ttl_seconds must be an integer"))?;
-                let mut guard = conn.inner.lock().await;
-                let success = guard.expire(key, ttl_secs);
+                let guard = conn.inner.lock().await;
+                let success = guard.expire(key, ttl_secs).await;
                 T::from_expire(success)
             }
             other => Err(CacheError::InvalidCommand(other.to_string())),

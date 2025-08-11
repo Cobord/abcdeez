@@ -1,0 +1,3079 @@
+<file name="06_services.md"># Services Layer Specification
+
+## Overview
+
+The services layer provides abstraction for external integrations including API communication, offline storage, federation, and cloud synchronization. All services use trait-based design for testability and flexibility.
+
+## API Client Service
+
+### ApiClientTrait
+Core trait defining all API operations:
+
+```rust
+#[async_trait]
+pub trait ApiClientTrait: Send + Sync {
+    // Authentication
+    async fn login(&self, username: String, password: String) -> Result<User>;
+    async fn get_user_info(&self) -> Result<User>;
+    
+    // Learner Management
+    async fn create_learner(&self, display_name: Option<String>) -> Result<serde_json::Value>;
+    async fn get_learner(&self, learner_id: &str) -> Result<serde_json::Value>;
+    
+    // Session Management
+    async fn create_session(&self, request: CreateSessionRequest) -> Result<Session>;
+    async fn get_session(&self, session_id: &str) -> Result<Session>;
+    async fn complete_session(&self, session_id: &str) -> Result<()>;
+    
+    // Task Responses
+    async fn submit_response(&self, session_id: &str, request: SubmitResponseRequest) 
+        -> Result<SubmitResponseResponse>;
+    
+    // Protocol Versioning
+    async fn get_protocol_versions(&self, experiment_id: &str) -> Result<Vec<ProtocolVersion>>;
+    async fn create_protocol_version(&self, experiment_id: &str, content: ProtocolContent) 
+        -> Result<ProtocolVersion>;
+    async fn compare_protocol_versions(&self, experiment_id: &str, from: &str, to: &str) 
+        -> Result<ProtocolVersionDiff>;
+}
+```
+
+### AdaptiveApiClient
+Wrapper providing fallback capability:
+
+```rust
+pub struct AdaptiveApiClient {
+    primary_client: Box<dyn ApiClientTrait>,
+    fallback_client: Option<Box<dyn ApiClientTrait>>,
+    config: ApiConfig,
+}
+```
+
+**Features**:
+- Automatic fallback to mock
+- Configurable retry logic
+- Token management
+- Request/response logging
+
+### RealApiClient
+Actual HTTP implementation:
+
+```rust
+pub struct RealApiClient {
+    client: reqwest::Client,
+    base_url: String,
+    auth_token: Arc<RwLock<Option<String>>>,
+    retry_attempts: u32,
+}
+```
+
+**Methods**:
+- `post_with_retry()` - POST with exponential backoff
+- `get_with_retry()` - GET with exponential backoff
+- `set_auth_token()` - Update authentication
+- `clear_auth_token()` - Remove authentication
+
+### MockApiClient
+Testing implementation:
+
+```rust
+pub struct MockApiClient {
+    responses: HashMap<String, serde_json::Value>,
+    delay_ms: Option<u64>,
+    should_fail: bool,
+}
+```
+
+**Features**:
+- Predefined responses
+- Configurable delays
+- Error simulation
+- State tracking
+
+## Offline Storage Service
+
+### OfflineStorage
+SQLite-based local storage:
+
+```rust
+pub struct OfflineStorage {
+    db_path: PathBuf,
+    connection: Arc<Mutex<Connection>>,
+    sync_queue: Arc<RwLock<SyncQueue>>,
+}
+```
+
+### Database Schema
+
+```sql
+-- Sessions table
+CREATE TABLE sessions (
+    id TEXT PRIMARY KEY,
+    learner_id TEXT NOT NULL,
+    topology_type TEXT,
+    start_time TIMESTAMP,
+    end_time TIMESTAMP,
+    status TEXT,
+    data JSON,
+    synced BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Responses table
+CREATE TABLE responses (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    task_data JSON,
+    user_answer TEXT,
+    correct BOOLEAN,
+    response_time_ms INTEGER,
+    synced BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+-- Sync queue table
+CREATE TABLE sync_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    data JSON,
+    retry_count INTEGER DEFAULT 0,
+    last_attempt TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- User preferences
+CREATE TABLE preferences (
+    key TEXT PRIMARY KEY,
+    value JSON,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Key Methods
+
+```rust
+impl OfflineStorage {
+    // Session operations
+    pub async fn save_session(&self, session: &Session) -> Result<()>;
+    pub async fn get_session(&self, id: &str) -> Result<Option<Session>>;
+    pub async fn get_unsynced_sessions(&self) -> Result<Vec<Session>>;
+    
+    // Response operations  
+    pub async fn save_response(&self, session_id: &str, response: &TaskResponse) -> Result<()>;
+    pub async fn get_session_responses(&self, session_id: &str) -> Result<Vec<TaskResponse>>;
+    
+    // Sync operations
+    pub async fn mark_synced(&self, entity_type: &str, entity_id: &str) -> Result<()>;
+    pub async fn get_sync_queue(&self) -> Result<Vec<SyncQueueItem>>;
+    pub async fn process_sync_queue(&self, api: &dyn ApiClientTrait) -> Result<SyncResult>;
+    
+    // Cache operations
+    pub async fn cache_data(&self, key: &str, data: &serde_json::Value) -> Result<()>;
+    pub async fn get_cached_data(&self, key: &str) -> Result<Option<serde_json::Value>>;
+}
+```
+
+### SyncQueue Management
+
+```rust
+pub struct SyncQueue {
+    pending_items: Vec<SyncQueueItem>,
+    in_progress: HashSet<String>,
+    failed_items: HashMap<String, FailedSyncItem>,
+}
+
+pub struct SyncQueueItem {
+    pub entity_type: String,
+    pub entity_id: String,
+    pub operation: SyncOperation,
+    pub data: serde_json::Value,
+    pub retry_count: u32,
+}
+
+pub enum SyncOperation {
+    Create,
+    Update,
+    Delete,
+}
+```
+
+## Connectivity Monitor
+
+### ConnectivityMonitor
+Network status tracking:
+
+```rust
+pub struct ConnectivityMonitor {
+    is_online: Arc<RwLock<bool>>,
+    listeners: Arc<RwLock<Vec<Box<dyn Fn(bool) + Send + Sync>>>>,
+    last_check: Arc<RwLock<Option<Instant>>>,
+}
+```
+
+**Methods**:
+- `is_online()` - Current status
+- `set_online()` - Update status
+- `add_listener()` - Register callback
+- `check_connectivity()` - Active probe
+
+### Platform Integration
+
+#### Web/WASM
+```javascript
+window.addEventListener('online', () => monitor.setOnline(true));
+window.addEventListener('offline', () => monitor.setOnline(false));
+```
+
+#### Native
+Periodic connectivity checks via HTTP
+
+## Federation Service
+
+### FederationNetwork
+Multi-site study coordination:
+
+```rust
+pub struct FederationNetwork {
+    node_id: String,
+    peers: Vec<FederationPeer>,
+    protocols: HashMap<String, SharedProtocol>,
+    compliance_status: ComplianceStatus,
+}
+```
+
+### FederationPeer
+```rust
+pub struct FederationPeer {
+    pub id: String,
+    pub name: String,
+    pub endpoint: String,
+    pub public_key: String,
+    pub trusted: bool,
+    pub last_seen: DateTime<Utc>,
+}
+```
+
+### SharedProtocol
+```rust
+pub struct SharedProtocol {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub content: ProtocolContent,
+    pub participants: Vec<String>,
+    pub data_aggregation_rules: AggregationRules,
+}
+```
+
+### Federation Operations
+
+```rust
+impl FederationNetwork {
+    // Network management
+    pub async fn join_network(&mut self, endpoint: &str) -> Result<()>;
+    pub async fn leave_network(&mut self) -> Result<()>;
+    pub async fn discover_peers(&mut self) -> Result<Vec<FederationPeer>>;
+    
+    // Protocol sharing
+    pub async fn share_protocol(&self, protocol: &ProtocolContent) -> Result<()>;
+    pub async fn get_shared_protocols(&self) -> Result<Vec<SharedProtocol>>;
+    
+    // Data aggregation
+    pub async fn submit_data(&self, protocol_id: &str, data: &serde_json::Value) -> Result<()>;
+    pub async fn get_aggregated_data(&self, protocol_id: &str) -> Result<AggregatedData>;
+    
+    // Compliance
+    pub async fn verify_compliance(&self) -> Result<ComplianceStatus>;
+    pub async fn audit_trail(&self, start: DateTime<Utc>, end: DateTime<Utc>) 
+        -> Result<Vec<AuditEntry>>;
+}
+```
+
+## Cloud Sync Service
+
+### CloudSyncService
+Bi-directional synchronization:
+
+```rust
+pub struct CloudSyncService {
+    api_client: Arc<dyn ApiClientTrait>,
+    offline_storage: Arc<OfflineStorage>,
+    sync_status: Arc<RwLock<SyncStatus>>,
+    conflict_resolver: Box<dyn ConflictResolver>,
+}
+```
+
+### SyncStatus
+```rust
+pub struct SyncStatus {
+    pub online: bool,
+    pub last_sync: Option<DateTime<Utc>>,
+    pub pending_count: usize,
+    pub failed_count: usize,
+    pub sync_progress: Option<SyncProgress>,
+}
+
+pub struct SyncProgress {
+    pub current: usize,
+    pub total: usize,
+    pub message: String,
+}
+```
+
+### Conflict Resolution
+
+```rust
+pub trait ConflictResolver {
+    fn resolve(&self, local: &serde_json::Value, remote: &serde_json::Value) 
+        -> ConflictResolution;
+}
+
+pub enum ConflictResolution {
+    UseLocal,
+    UseRemote,
+    Merge(serde_json::Value),
+    AskUser,
+}
+```
+
+### Sync Strategy
+
+1. **Push Phase**:
+   - Upload unsynced local changes
+   - Handle conflicts
+   - Mark items as synced
+
+2. **Pull Phase**:
+   - Fetch remote changes
+   - Apply to local storage
+   - Update cache
+
+3. **Merge Phase**:
+   - Resolve conflicts
+   - Update both stores
+   - Log resolution
+
+## Authentication Service
+
+### OAuth Integration
+
+#### Apple Sign In (iOS)
+```rust
+#[cfg(target_os = "ios")]
+pub struct IOSAuthBridge {
+    api_client: Arc<dyn ApiClientTrait>,
+}
+
+impl IOSAuthBridge {
+    pub async fn sign_in_with_apple(&self, callback: Box<dyn FnOnce(Result<User>)>) 
+        -> Result<()>;
+}
+```
+
+#### OAuth Flow
+1. Request authorization URL
+2. Open browser/webview
+3. Handle callback
+4. Exchange code for token
+5. Fetch user info
+
+### Token Management
+
+```rust
+pub struct TokenManager {
+    access_token: Option<String>,
+    refresh_token: Option<String>,
+    expires_at: Option<DateTime<Utc>>,
+}
+
+impl TokenManager {
+    pub async fn get_valid_token(&mut self) -> Result<String>;
+    pub async fn refresh_if_needed(&mut self) -> Result<()>;
+    pub fn is_expired(&self) -> bool;
+}
+```
+
+## Error Handling
+
+### Service Errors
+```rust
+#[derive(Debug, thiserror::Error)]
+pub enum ServiceError {
+    #[error("Network error: {0}")]
+    Network(String),
+    
+    #[error("Storage error: {0}")]
+    Storage(String),
+    
+    #[error("Authentication failed: {0}")]
+    Authentication(String),
+    
+    #[error("Sync conflict: {0}")]
+    SyncConflict(String),
+    
+    #[error("Federation error: {0}")]
+    Federation(String),
+}
+```
+
+### Retry Logic
+- Exponential backoff
+- Maximum retry limits
+- Circuit breaker pattern
+- Fallback strategies
+
+## Testing
+
+### Mock Services
+All services have mock implementations for testing
+
+### Integration Tests
+- End-to-end sync tests
+- Offline/online transitions
+- Conflict resolution scenarios
+- Federation protocols</file>
+<file name="00_index.md"># ABCDeez App Crate - Complete Specification Index
+
+## Documentation Organization
+
+This documentation provides a complete specification of the `abcdeez-app` crate, a Xilem-based adaptive learning application with offline-first PWA support. The documentation is organized to enable complete reimplementation of the system.
+
+## Document Structure
+
+1. **[01_overview.md](01_overview.md)** - High-level architecture and system overview
+2. **[02_architecture.md](02_architecture.md)** - Detailed architectural patterns and design decisions
+3. **[03_core_modules.md](03_core_modules.md)** - Core module specifications
+4. **[04_state_management.md](04_state_management.md)** - Application state and data flow
+5. **[05_ui_components.md](05_ui_components.md)** - UI component specifications
+6. **[06_screens.md](06_screens.md)** - Screen implementations and navigation
+7. **[07_services.md](07_services.md)** - Service layer and external integrations
+8. **[08_authentication.md](08_authentication.md)** - Authentication and authorization
+9. **[09_offline_support.md](09_offline_support.md)** - Offline storage and sync mechanisms
+10. **[10_research_features.md](10_research_features.md)** - Research and experimental features
+11. **[11_visualization.md](11_visualization.md)** - Data visualization components
+12. **[12_configuration.md](12_configuration.md)** - Configuration management
+13. **[13_testing.md](13_testing.md)** - Testing strategies and patterns
+14. **[14_deployment.md](14_deployment.md)** - Build and deployment specifications
+
+## Quick Start
+
+For implementing this system:
+1. Start with the overview and architecture documents
+2. Review the state management pattern
+3. Implement core modules following the specifications
+4. Build UI components and screens
+5. Add service integrations
+6. Implement offline support
+7. Add research features as needed
+
+## Key Technologies
+
+- **UI Framework**: Xilem 0.3.0
+- **Core Library**: abcdeez-core (local dependency)
+- **Async Runtime**: Tokio
+- **Storage**: SQLite (rusqlite)
+- **Visualization**: Plotters
+- **Audio**: CPAL + Hound
+- **Platform Support**: iOS, Web (WASM), Desktop
+
+## Primary Features
+
+- Adaptive learning with multiple domains
+- Offline-first with automatic sync
+- Protocol versioning for experiments
+- Research dashboard with IRB compliance
+- OAuth authentication (Apple Sign In)
+- Progressive Web App support
+- Guided demo system
+- Federation support for distributed studies</file>
+<file name="01_overview.md"># ABCDeez App - System Overview
+
+## Purpose
+
+The ABCDeez App is a cross-platform adaptive learning application built with the Xilem UI framework. It provides a research-grade learning system with offline-first capabilities, experimental protocol management, and comprehensive data collection features.
+
+## Core Functionality
+
+### Learning System
+- **Adaptive Scheduling**: Uses Expected Information Gain (EIG) algorithms from abcdeez-core
+- **Multiple Domains**: Supports Alphabet, Days of Week, Music Theory, Mathematics, and custom domains
+- **Task Generation**: Dynamic task creation based on learner model and topology
+- **Intervention System**: Automated hints, difficulty adjustment, and struggle detection
+- **Performance Tracking**: Real-time metrics including accuracy, response time, and streaks
+
+### Platform Support
+- **Desktop**: Native application via Winit
+- **iOS**: Native iOS app with Apple Sign In support
+- **Web**: Progressive Web App (PWA) with service worker
+- **Android**: Support via native activity (planned)
+
+### Key Features
+
+#### Offline-First Architecture
+- SQLite-based local storage
+- Automatic sync when online
+- Connectivity monitoring
+- Queue-based sync management
+- Conflict resolution
+
+#### Research Capabilities
+- Protocol versioning system
+- IRB compliance tracking
+- Experiment design configuration
+- Data collection plans
+- Statistical analysis integration
+- Federation support for multi-site studies
+
+#### Authentication
+- Local authentication
+- Apple Sign In (iOS)
+- OAuth provider support
+- Guest mode
+- Private email relay support
+
+## Application Architecture
+
+### Entry Points
+- `main.rs`: Binary entry point, calls `abcdeez_app::run()`
+- `lib.rs`: Library entry point, contains `app_logic()` and `run()` functions
+
+### Core Components
+
+#### State Management (`state.rs`)
+- `AppData`: Central application state
+- Contains all UI state, user data, session info
+- Manages async operation flags
+- Holds references to core library components
+
+#### Data Models (`models.rs`)
+- `User`: Authentication and user profile
+- `Learner`: Wrapper around core LearnerModel
+- `Session`: Training session management
+- `Domain`: Learning domain enumeration
+- `UITask`: UI-specific task wrapper
+- Protocol versioning models
+
+#### UI Framework
+- Uses Xilem's Model-View-Update pattern
+- Reactive UI with `app_logic()` function
+- Component-based architecture
+- Navigation through `Screen` enum
+
+### Service Layer
+
+#### API Client (`services/api_client.rs`)
+- Adaptive client with fallback support
+- Configurable timeouts and retries
+- Mock mode for testing
+- Protocol version management
+
+#### Offline Storage (`services/offline.rs`)
+- SQLite database management
+- Session and response caching
+- Sync queue management
+- Connectivity monitoring
+
+#### Federation (`services/federation.rs`)
+- Multi-site study coordination
+- Protocol sharing
+- Compliance status tracking
+- Data aggregation
+
+## Data Flow
+
+### Learning Session Flow
+1. User selects domain
+2. System creates topology
+3. Learner model initialized
+4. Task generator creates tasks
+5. User responds to tasks
+6. Model updates based on responses
+7. Adaptive scheduler selects next task
+8. Intervention system provides help as needed
+9. Session ends with summary
+
+### Sync Flow
+1. Data saved locally first
+2. Connectivity monitor tracks online status
+3. When online, sync queue processed
+4. Successful syncs update local status
+5. Failed syncs retry with backoff
+
+## Configuration
+
+### Runtime Configuration
+- TOML-based configuration files
+- Environment variable overrides
+- API endpoint configuration
+- Feature flags
+
+### Build Configuration
+- Cargo workspace integration
+- Platform-specific features
+- Conditional compilation for platforms
+
+## Special Features
+
+### Demo System
+- Guided tours for new users
+- Scenario-based demonstrations
+- Deterministic demo mode with seeds
+- Interactive step-by-step guides
+
+### Easter Eggs
+- Hidden "Little Crab" feature
+- Discovery triggers (triple-click, perfect streaks)
+- Interactive mascot system
+
+### Progressive Web App
+- Service worker for offline caching
+- Web manifest for installation
+- Background sync
+- Push notifications (planned)
+
+## Dependencies
+
+### Core Dependencies
+- `xilem`: UI framework
+- `masonry`: Layout engine
+- `winit`: Window management
+- `abcdeez-core`: Learning algorithms
+
+### Data & Storage
+- `serde`: Serialization
+- `rusqlite`: Local database
+- `chrono`: Date/time handling
+- `uuid`: Unique identifiers
+
+### Networking
+- `reqwest`: HTTP client
+- `tokio`: Async runtime
+- `url`: URL parsing
+
+### Visualization
+- `plotters`: Charts and graphs
+- `image`: Image processing
+- `imageproc`: Image manipulation
+
+### Audio
+- `cpal`: Cross-platform audio
+- `hound`: WAV file handling
+- `ringbuf`: Audio buffering
+
+## Error Handling
+
+### Strategies
+- Result types for recoverable errors
+- Graceful degradation for network issues
+- User-friendly error messages
+- Detailed logging for debugging
+
+### Recovery Mechanisms
+- Automatic retry with backoff
+- Fallback to offline mode
+- Cache-based operation
+- Manual sync triggers</file>
+<file name="04_state_management.md"># State Management Specification
+
+## Overview
+
+The application uses a centralized state management pattern with a single `AppData` struct containing all application state. This follows Xilem's MVU (Model-View-Update) pattern where state mutations happen through event handlers.
+
+## AppData Structure
+
+### Categories of State
+
+#### 1. UI State
+Controls the visual presentation and navigation:
+```rust
+current_screen: Screen              // Active screen/route
+error_message: Option<String>       // Error display
+success_message: Option<String>     // Success notifications
+show_end_session_confirmation: bool // Modal states
+```
+
+#### 2. Authentication State
+User and session management:
+```rust
+current_user: Option<User>          // Logged-in user
+is_guest_mode: bool                 // Guest/anonymous mode
+username_input: String              // Form inputs
+password_input: String
+email_input: String
+oauth_login_in_flight: bool         // OAuth processing
+```
+
+#### 3. Learning State
+Core learning system integration:
+```rust
+current_learner: Option<Learner>           // Active learner profile
+current_session: Option<Session>           // Training session
+selected_domain: Domain                    // Learning domain
+topology: Option<Topology>                 // Domain structure
+adaptive_scheduler: Option<AdaptiveScheduler>
+task_generator: Option<TaskGenerator>
+intervention_system: Option<InterventionSystem>
+```
+
+#### 4. Training State
+Active training session state:
+```rust
+current_task: Option<UITask>        // Active learning task
+task_start_time: Option<Instant>    // For response timing
+selected_answer: Option<String>     // User's selection
+selected_answer_index: Option<usize>
+show_feedback: bool                 // Display feedback
+last_response_correct: bool
+current_hint: Option<String>        // Active hint text
+hint_level: HintLevel              // Hint detail level
+```
+
+#### 5. Async Operation Flags
+Tracks in-flight async operations:
+```rust
+login_request_in_flight: bool
+create_session_in_flight: bool
+submit_response_in_flight: bool
+end_session_in_flight: bool
+export_data_in_flight: bool
+protocol_creation_in_flight: bool
+protocol_update_in_flight: bool
+```
+
+#### 6. Service References
+Shared service instances:
+```rust
+api_client: Arc<AdaptiveApiClient>
+offline_storage: Option<Arc<OfflineStorage>>
+connectivity_monitor: Arc<ConnectivityMonitor>
+runtime: Arc<tokio::runtime::Runtime>
+```
+
+#### 7. Configuration State
+Runtime configuration:
+```rust
+config_manager: ConfigManager
+use_adaptive_scheduling: bool
+enable_hints: bool
+difficulty_level: f64
+export_format: ExportFormat
+```
+
+#### 8. Demo State
+Demo and tutorial system:
+```rust
+demo_controller: DemoController
+demo_seed: Option<u64>              // For reproducible demos
+demo_rng: Option<StdRng>            // Demo RNG
+demo_auto_advance: bool
+demo_show_tooltips: bool
+demo_highlight_elements: bool
+demo_speed: f64
+preferred_demo: String
+```
+
+#### 9. Research Features
+Experimental and research tools:
+```rust
+research_controller: Option<ResearchController>
+federation_network: Option<FederationNetwork>
+protocol_versions: Vec<ProtocolVersion>
+current_protocol_version: Option<String>
+irb_form_data: IRBFormData
+```
+
+#### 10. Easter Eggs
+Hidden features:
+```rust
+little_crab: Option<LittleCrab>
+crab_trigger_clicks: usize
+last_click_time: Option<Instant>
+```
+
+## State Update Patterns
+
+### Direct Mutations
+Simple field updates in event handlers:
+```rust
+button("Click", |data: &mut AppData| {
+    data.current_screen = Screen::Dashboard;
+    data.success_message = Some("Navigated!".to_string());
+})
+```
+
+### Flag-Based Async Handling
+Pattern for async operations:
+
+1. **Set flag**:
+```rust
+data.login_request_in_flight = true;
+```
+
+2. **Check in app_logic()**:
+```rust
+if data.login_request_in_flight {
+    // Simulate async completion
+    let result = perform_login();
+    data.login_request_in_flight = false;
+    data.current_user = Some(result);
+}
+```
+
+3. **Update UI based on flag**:
+```rust
+if data.login_request_in_flight {
+    label("Loading...")
+} else {
+    button("Login", |data| data.login())
+}
+```
+
+### Complex State Transitions
+
+#### Session Creation Flow
+```rust
+// 1. User triggers session start
+data.create_session_in_flight = true;
+
+// 2. app_logic() processes
+if data.create_session_in_flight {
+    // Create topology
+    let topology = data.create_topology_for_domain();
+    
+    // Initialize core components
+    data.task_generator = Some(TaskGenerator::new(topology.clone()));
+    data.adaptive_scheduler = Some(AdaptiveScheduler::new(...));
+    data.intervention_system = Some(InterventionSystem::new(...));
+    
+    // Create session
+    data.current_session = Some(Session::new(...));
+    
+    // Clear flag
+    data.create_session_in_flight = false;
+    
+    // Navigate
+    data.current_screen = Screen::Training;
+}
+```
+
+#### Task Submission Flow
+```rust
+// 1. User selects answer
+data.selected_answer_index = Some(index);
+data.submit_response_in_flight = true;
+
+// 2. Process submission
+if data.submit_response_in_flight {
+    // Calculate metrics
+    let response_time = data.task_start_time.elapsed();
+    let correct = check_answer();
+    
+    // Update model
+    data.current_learner.core_model.update(...);
+    
+    // Update metrics
+    data.current_metrics.update(correct, response_time);
+    
+    // Store response
+    data.session_responses.push(response);
+    
+    // Show feedback
+    data.show_feedback = true;
+    data.submit_response_in_flight = false;
+}
+```
+
+## State Persistence
+
+### Local Storage
+State persisted to SQLite:
+- Sessions
+- Responses
+- User preferences
+- Offline queue
+
+### Memory Only
+Transient state not persisted:
+- UI navigation state
+- Form inputs
+- Error/success messages
+- In-flight flags
+
+## State Synchronization
+
+### Offline-First Pattern
+1. Update local state immediately
+2. Queue sync operations
+3. Process sync when online
+4. Update sync status
+
+```rust
+// Save locally first
+data.save_session_offline().await;
+
+// Update sync status
+data.sync_status.pending_count += 1;
+
+// Trigger sync if online
+if data.connectivity_monitor.is_online() {
+    data.trigger_sync();
+}
+```
+
+### Conflict Resolution
+- Last-write-wins for simple fields
+- Merge strategies for collections
+- User resolution for conflicts
+
+## State Validation
+
+### Input Validation
+```rust
+impl AppData {
+    pub fn validate_protocol_form(&self) -> Result<(), String> {
+        // Validate numeric fields
+        self.protocol_editor_target_n.parse::<usize>()
+            .map_err(|_| "Invalid target N")?;
+            
+        // Validate ranges
+        let power = self.protocol_editor_power.parse::<f64>()?;
+        if power <= 0.0 || power > 1.0 {
+            return Err("Power must be between 0 and 1");
+        }
+        
+        // Validate required fields
+        if self.protocol_editor_name.trim().is_empty() {
+            return Err("Name is required");
+        }
+        
+        Ok(())
+    }
+}
+```
+
+### State Invariants
+Maintained through encapsulation:
+- Session requires learner
+- Task requires session
+- Response requires task
+
+## State Debugging
+
+### Debug Display
+```rust
+impl fmt::Debug for AppData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("AppData")
+            .field("screen", &self.current_screen)
+            .field("user", &self.current_user.is_some())
+            .field("session", &self.current_session.is_some())
+            .finish()
+    }
+}
+```
+
+### State Export
+```rust
+pub fn export_current_data(&mut self) {
+    let export = ExportData {
+        learner: self.current_learner.clone(),
+        sessions: vec![self.current_session.clone()],
+        metrics: self.current_metrics.clone(),
+        export_time: Utc::now(),
+        demo_seed: self.demo_seed,
+    };
+    self.export_data = Some(export);
+}
+```
+
+## Performance Considerations
+
+### Cloning Strategy
+- Use `Arc` for shared large data
+- Clone small data directly
+- Use references in view functions
+
+### Update Batching
+- Group related state changes
+- Minimize re-renders
+- Use flags for batch updates
+
+### Memory Management
+- Clear temporary state after use
+- Release large resources explicitly
+- Use weak references where appropriate</file>
+<file name="07_special_features.md"># Special Features Specification
+
+## Demo System
+
+### Overview
+Comprehensive guided tour and demonstration system for onboarding and showcasing features.
+
+### DemoController
+Central controller managing demo scenarios:
+
+```rust
+pub struct DemoController {
+    scenarios: HashMap<String, DemoScenario>,
+    current_scenario: Option<String>,
+    current_step_index: usize,
+    highlights: HashMap<String, HighlightStyle>,
+    is_active: bool,
+    is_paused: bool,
+    step_history: Vec<String>,
+    tooltips: HashMap<String, String>,
+}
+```
+
+### Demo Scenarios
+
+#### Quick Tour
+- Welcome introduction
+- Navigation overview
+- Domain selection
+- Training interface
+- Dashboard tour
+- Settings overview
+
+#### Training Demo
+- Task presentation
+- Answer selection
+- Hint system
+- Feedback display
+- Progress tracking
+- Session completion
+
+#### Research Demo
+- Protocol creation
+- Experiment setup
+- IRB compliance
+- Data collection
+- Federation setup
+
+### Demo Steps
+```rust
+pub struct DemoStep {
+    id: String,
+    title: String,
+    description: String,
+    highlight_elements: Vec<String>,  // UI elements to highlight
+    action: Option<DemoAction>,
+    navigation: Option<Screen>,
+    wait_for_user: bool,
+    auto_advance_ms: Option<u64>,
+}
+```
+
+### Demo Actions
+```rust
+pub enum DemoAction {
+    ClickButton(String),
+    EnterText { field: String, text: String },
+    SelectDomain(String),
+    SubmitAnswer(String),
+    RequestHint,
+    NavigateTo(Screen),
+    ShowTooltip { element: String, text: String },
+    RunMiniDemo,
+}
+```
+
+### Highlight System
+```rust
+pub struct HighlightStyle {
+    color: String,
+    animation: HighlightAnimation,
+    opacity: f32,
+    border_width: f32,
+}
+
+pub enum HighlightAnimation {
+    None,
+    Pulse,
+    Glow,
+    Bounce,
+    Arrow,
+}
+```
+
+### Demo Showcase Mode
+Automated demonstration with deterministic behavior:
+
+```rust
+impl AppData {
+    pub fn demo_showcase_with_seed(&mut self, seed: Option<u64>) {
+        // Create demo user
+        // Generate predictable sequence
+        // Run through training tasks
+        // Show results
+    }
+}
+```
+
+**Features**:
+- Reproducible with seed
+- Simulated response times
+- Realistic error rates (70% correct)
+- Automatic navigation
+
+## Easter Eggs
+
+### Little Crab System
+Hidden mascot that can be discovered:
+
+```rust
+pub struct LittleCrab {
+    discovered: bool,
+    position: CrabPosition,
+    mood: CrabMood,
+    discovery_triggers: HashSet<CrabTrigger>,
+    interaction_count: usize,
+}
+
+pub enum CrabTrigger {
+    TripleClick,
+    PerfectStreak(usize),
+    SecretWord(String),
+    LongSession,
+    EasterDate,
+}
+
+pub enum CrabMood {
+    Happy,
+    Excited,
+    Sleepy,
+    Dancing,
+    Studying,
+}
+```
+
+### Discovery Mechanisms
+
+#### Triple Click
+```rust
+pub fn try_crab_triple_click(&mut self) {
+    if self.crab_trigger_clicks >= 3 {
+        if crab.try_discover(CrabTrigger::TripleClick) {
+            self.success_message = Some("🦀 You found the secret crab! 🦀");
+            self.current_screen = Screen::WidgetGallery;
+        }
+    }
+}
+```
+
+#### Perfect Streak
+Triggered after 10+ correct answers in a row
+
+#### Secret Words
+Type "crab" in any text field
+
+### Crab Behaviors
+- Moves around screen edges
+- Reacts to user performance
+- Provides encouragement
+- Unlocks widget gallery
+
+## Research Features
+
+### Research Controller
+Manages experimental protocols:
+
+```rust
+pub struct ResearchController {
+    pub experiments: HashMap<String, Experiment>,
+    pub active_session: Option<ResearchSession>,
+    pub data_collector: DataCollector,
+    pub irb_compliance: IRBCompliance,
+}
+```
+
+### Experiment Types
+```rust
+pub enum ExperimentType {
+    LearningCurve,
+    RetentionTest,
+    TransferLearning,
+    AdaptiveComparison,
+    Custom(String),
+}
+```
+
+### Data Collection
+```rust
+pub struct DataPoint {
+    timestamp: DateTime<Utc>,
+    trial_number: u32,
+    stimulus: String,
+    response: String,
+    correct: bool,
+    response_time_ms: u128,
+    confidence: Option<f32>,
+    eye_tracking: Option<EyeTrackingData>,
+    physiological: Option<PhysiologicalData>,
+    metadata: HashMap<String, serde_json::Value>,
+}
+```
+
+### IRB Compliance
+```rust
+pub struct IRBCompliance {
+    approval_number: Option<String>,
+    consent_obtained: bool,
+    data_anonymized: bool,
+    retention_period: Duration,
+    audit_log: Vec<AuditEntry>,
+}
+```
+
+### Protocol Versioning
+
+#### Version Management
+```rust
+pub struct ProtocolVersion {
+    id: String,
+    experiment_id: String,
+    version: String,
+    commit_hash: String,
+    author: String,
+    message: String,
+    created_at: DateTime<Utc>,
+    protocol_content: ProtocolContent,
+    is_current: bool,
+    is_draft: bool,
+}
+```
+
+#### Version Comparison
+```rust
+pub struct ProtocolVersionDiff {
+    from_version: String,
+    to_version: String,
+    changes: Vec<ProtocolChange>,
+    summary: String,
+    compatibility: CompatibilityStatus,
+}
+```
+
+#### Change Tracking
+```rust
+pub struct ProtocolChange {
+    field: String,
+    change_type: ChangeType,
+    old_value: Option<serde_json::Value>,
+    new_value: Option<serde_json::Value>,
+    description: String,
+    impact_level: ImpactLevel,
+}
+```
+
+## Progressive Web App (PWA)
+
+### Service Worker
+Located at `src/service_worker.js`:
+
+```javascript
+// Cache strategies
+const CACHE_NAME = 'abcdeez-v1';
+const urlsToCache = [
+    '/',
+    '/offline.html',
+    '/manifest.json',
+    '/app.js',
+    '/app.css'
+];
+
+// Install event
+self.addEventListener('install', event => {
+    event.waitUntil(
+        caches.open(CACHE_NAME)
+            .then(cache => cache.addAll(urlsToCache))
+    );
+});
+
+// Fetch event with offline fallback
+self.addEventListener('fetch', event => {
+    event.respondWith(
+        caches.match(event.request)
+            .then(response => response || fetch(event.request))
+            .catch(() => caches.match('/offline.html'))
+    );
+});
+```
+
+### Web Manifest
+```json
+{
+    "name": "ABCDeez Adaptive Learning",
+    "short_name": "ABCDeez",
+    "description": "Adaptive learning system",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#4CAF50",
+    "icons": [
+        {
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
+```
+
+### PWA Integration (WASM)
+```rust
+#[cfg(target_arch = "wasm32")]
+impl AppData {
+    pub fn init_pwa_integration(&mut self) -> Result<(), String> {
+        // Register service worker
+        Self::register_service_worker()?;
+        
+        // Setup online/offline listeners
+        Self::setup_online_offline_listeners(self.connectivity_monitor.clone())?;
+        
+        // Initialize offline storage
+        self.init_offline_storage().await?;
+        
+        Ok(())
+    }
+}
+```
+
+## Audio Recording
+
+### AudioRecorder
+Voice response capture:
+
+```rust
+pub struct AudioRecorder {
+    device: Device,
+    config: StreamConfig,
+    recording: Arc<Mutex<bool>>,
+    buffer: Arc<Mutex<Vec<f32>>>,
+    sample_rate: u32,
+}
+
+impl AudioRecorder {
+    pub fn start_recording(&mut self) -> Result<()>;
+    pub fn stop_recording(&mut self) -> Result<Vec<f32>>;
+    pub fn save_to_wav(&self, path: &Path, samples: &[f32]) -> Result<()>;
+}
+```
+
+### Audio Processing
+- WAV file generation
+- Sample rate conversion
+- Buffer management
+- Real-time streaming
+
+## Gamification
+
+### Achievement System
+```rust
+pub struct Achievement {
+    id: String,
+    name: String,
+    description: String,
+    icon: String,
+    points: u32,
+    unlocked: bool,
+    unlocked_at: Option<DateTime<Utc>>,
+}
+```
+
+### Leaderboards
+```rust
+pub struct LeaderboardEntry {
+    rank: u32,
+    user_id: String,
+    display_name: String,
+    score: u32,
+    timestamp: DateTime<Utc>,
+}
+```
+
+### Rewards
+- Streak bonuses
+- Perfect session badges
+- Learning milestones
+- Time-based challenges
+
+## Visualization System
+
+### Chart Types
+Using plotters library:
+
+#### Learning Curve
+Shows accuracy over time with trend line
+
+#### Response Time Distribution
+Histogram of response times
+
+#### Performance Heatmap
+Grid showing performance by topic/time
+
+#### Topology Graph
+Visual representation of learning domain
+
+### Rendering Pipeline
+1. Data preparation
+2. Chart configuration
+3. Plotters rendering
+4. Image generation
+5. Display in UI
+
+## Federation Features
+
+### Multi-Site Coordination
+```rust
+pub struct FederationCoordinator {
+    local_site: SiteInfo,
+    remote_sites: Vec<RemoteSite>,
+    shared_protocols: Vec<SharedProtocol>,
+    data_aggregator: DataAggregator,
+}
+```
+
+### Data Sharing
+- Encrypted transmission
+- Privacy-preserving aggregation
+- Differential privacy
+- Audit trails
+
+### Protocol Synchronization
+- Version control
+- Conflict resolution
+- Approval workflows
+- Change notifications
+
+## Accessibility Features
+
+### Screen Reader Support
+- Semantic HTML (web)
+- VoiceOver (iOS)
+- Narrator (Windows)
+
+### Keyboard Navigation
+- Tab order
+- Shortcut keys
+- Focus indicators
+
+### Visual Adaptations
+- High contrast mode
+- Font size adjustment
+- Color blind modes
+
+### Cognitive Accessibility
+- Simple language
+- Clear instructions
+- Progress indicators
+- Consistent layouts</file>
+<file name="02_architecture.md"># Architecture Specification
+
+## High-Level Architecture
+
+### Design Patterns
+
+#### Model-View-Update (MVU)
+The application uses Xilem's MVU pattern:
+- **Model**: `AppData` struct containing all application state
+- **View**: `app_logic()` function producing widget trees
+- **Update**: Event handlers modifying `AppData`
+
+#### Offline-First
+- All operations work offline by default
+- Network requests are optional enhancements
+- Local storage is source of truth
+- Sync is eventual and automatic
+
+#### Component-Based UI
+- Reusable UI components in `components.rs`
+- Screen modules for each major view
+- Composable widget functions
+- Consistent styling patterns
+
+### Architectural Layers
+
+```
+┌─────────────────────────────────────┐
+│         Presentation Layer          │
+│  (Screens, Components, UI Logic)    │
+├─────────────────────────────────────┤
+│         Application Layer           │
+│   (AppData, Business Logic)         │
+├─────────────────────────────────────┤
+│          Service Layer              │
+│  (API, Storage, Federation)         │
+├─────────────────────────────────────┤
+│           Core Layer                │
+│      (abcdeez-core library)         │
+└─────────────────────────────────────┘
+```
+
+## State Management
+
+### Central State (`AppData`)
+
+The `AppData` struct is the single source of truth:
+
+```rust
+pub struct AppData {
+    // UI State
+    current_screen: Screen,
+    error_message: Option<String>,
+    success_message: Option<String>,
+    
+    // User & Session
+    current_user: Option<User>,
+    current_learner: Option<Learner>,
+    current_session: Option<Session>,
+    
+    // Core Integration
+    topology: Option<Topology>,
+    adaptive_scheduler: Option<AdaptiveScheduler>,
+    task_generator: Option<TaskGenerator>,
+    intervention_system: Option<InterventionSystem>,
+    
+    // Services
+    api_client: Arc<AdaptiveApiClient>,
+    offline_storage: Option<Arc<OfflineStorage>>,
+    connectivity_monitor: Arc<ConnectivityMonitor>,
+    
+    // Runtime
+    runtime: Arc<tokio::runtime::Runtime>,
+}
+```
+
+### State Update Patterns
+
+#### Synchronous Updates
+Direct field modifications in event handlers:
+```rust
+data.current_screen = Screen::Dashboard;
+data.error_message = Some("Error occurred".to_string());
+```
+
+#### Asynchronous Operations
+Flag-based async handling:
+```rust
+// Set flag
+data.login_request_in_flight = true;
+
+// In app_logic(), check flag and process
+if data.login_request_in_flight {
+    // Perform async operation
+    // Update state when complete
+    data.login_request_in_flight = false;
+}
+```
+
+## Navigation System
+
+### Screen Enumeration
+```rust
+enum Screen {
+    Welcome,
+    DomainSelection,
+    Training,
+    Dashboard,
+    Settings,
+    ResearchDashboard,
+    Visualizations,
+    WidgetGallery,
+}
+```
+
+### Navigation Flow
+1. Welcome → Login/Register
+2. Domain Selection → Choose learning domain
+3. Training → Active learning session
+4. Dashboard → Performance overview
+5. Settings → Configuration
+6. Research Dashboard → Experiment management
+
+### Conditional Rendering
+```rust
+(data.current_screen == Screen::Welcome).then(|| welcome_screen(data))
+```
+
+## Component Architecture
+
+### Component Types
+
+#### Pure Components
+Stateless functions returning widgets:
+```rust
+fn button_primary(label: &str) -> impl WidgetView<AppData>
+```
+
+#### Stateful Components
+Components accessing AppData:
+```rust
+fn nav_bar(title: &str) -> impl WidgetView<AppData>
+```
+
+#### Container Components
+Layout and composition:
+```rust
+fn card<T, V>(title: &str, content: V) -> impl WidgetView<T>
+```
+
+### Component Composition
+```rust
+flex((
+    nav_bar("Title"),
+    card("Content", 
+        flex((
+            label("Text"),
+            button("Action", handler),
+        ))
+    ),
+))
+```
+
+## Service Architecture
+
+### API Client Pattern
+
+#### Trait-Based Abstraction
+```rust
+pub trait ApiClientTrait {
+    async fn login(&self, username: &str, password: &str) -> Result<TokenResponse>;
+    async fn create_session(&self, request: CreateSessionRequest) -> Result<Session>;
+}
+```
+
+#### Adaptive Implementation
+```rust
+pub struct AdaptiveApiClient {
+    primary_client: Box<dyn ApiClientTrait>,
+    fallback_client: Option<Box<dyn ApiClientTrait>>,
+    config: ApiConfig,
+}
+```
+
+### Offline Storage
+
+#### Database Schema
+```sql
+CREATE TABLE sessions (
+    id TEXT PRIMARY KEY,
+    learner_id TEXT,
+    data JSON,
+    synced BOOLEAN,
+    created_at TIMESTAMP
+);
+
+CREATE TABLE responses (
+    id TEXT PRIMARY KEY,
+    session_id TEXT,
+    data JSON,
+    synced BOOLEAN,
+    created_at TIMESTAMP
+);
+```
+
+#### Sync Queue Management
+```rust
+pub struct SyncQueue {
+    pending_sessions: Vec<Session>,
+    pending_responses: Vec<Response>,
+    retry_count: HashMap<String, u32>,
+}
+```
+
+## Platform Adaptations
+
+### iOS-Specific
+```rust
+#[cfg(target_os = "ios")]
+pub struct IOSAuthBridge {
+    api_client: Arc<dyn ApiClientTrait>,
+}
+```
+
+### Web/WASM-Specific
+```rust
+#[cfg(target_arch = "wasm32")]
+fn register_service_worker() -> Result<(), String>
+```
+
+### Desktop-Specific
+Default implementation, no special adaptations needed.
+
+## Concurrency Model
+
+### Tokio Runtime
+Single shared runtime for all async operations:
+```rust
+runtime: Arc<tokio::runtime::Runtime>
+```
+
+### Task Spawning
+```rust
+runtime.spawn(async move {
+    // Async operation
+});
+```
+
+### Channel Communication
+Not currently used, but would follow:
+```rust
+let (tx, rx) = tokio::sync::mpsc::channel(100);
+```
+
+## Error Handling Strategy
+
+### Result Types
+```rust
+type AppResult<T> = Result<T, AppError>;
+
+enum AppError {
+    Network(String),
+    Storage(String),
+    Validation(String),
+    Authentication(String),
+}
+```
+
+### Error Propagation
+- Service layer returns Results
+- UI layer converts to user messages
+- Logging for debugging
+
+### Recovery Strategies
+1. Retry with exponential backoff
+2. Fallback to cached data
+3. Degrade to offline mode
+4. User notification
+
+## Security Considerations
+
+### Authentication
+- Token-based authentication
+- Secure token storage
+- Automatic token refresh
+- Session management
+
+### Data Protection
+- Local encryption (planned)
+- Secure communication (HTTPS)
+- Privacy mode for research
+- Data anonymization for export
+
+### Platform Security
+- iOS: Keychain integration
+- Web: Secure storage API
+- Desktop: OS credential storage
+
+## Performance Optimizations
+
+### Lazy Loading
+- Components rendered on demand
+- Data fetched as needed
+- Images loaded progressively
+
+### Caching Strategy
+- Response caching in SQLite
+- Memory cache for frequent data
+- Invalidation on updates
+
+### Batch Operations
+- Bulk sync for offline data
+- Grouped database operations
+- Batched UI updates
+
+## Testing Architecture
+
+### Unit Tests
+- Model logic testing
+- Service mocking
+- Component testing
+
+### Integration Tests
+- End-to-end flows
+- Database operations
+- API interactions
+
+### Platform Tests
+- iOS-specific features
+- Web/PWA functionality
+- Desktop behavior</file>
+<file name="08_deployment.md"># Deployment and Build Specification
+
+## Build Configurations
+
+### Development Build
+```bash
+cargo build
+cargo run
+```
+
+### Release Build
+```bash
+cargo build --release
+cargo run --release
+```
+
+### Platform-Specific Builds
+
+#### Desktop (Native)
+```bash
+# Windows
+cargo build --release --target x86_64-pc-windows-msvc
+
+# macOS
+cargo build --release --target x86_64-apple-darwin
+cargo build --release --target aarch64-apple-darwin
+
+# Linux
+cargo build --release --target x86_64-unknown-linux-gnu
+```
+
+#### iOS
+```bash
+# Requires Xcode and iOS SDK
+cargo build --release --target aarch64-apple-ios
+cargo build --release --target x86_64-apple-ios-sim
+```
+
+#### Web (WASM)
+```bash
+# Install wasm-pack
+cargo install wasm-pack
+
+# Build WASM module
+wasm-pack build --target web --out-dir pkg
+
+# Or with trunk
+trunk build --release
+```
+
+#### Android
+```bash
+# Requires Android NDK
+cargo build --release --target aarch64-linux-android
+```
+
+## Dependencies
+
+### Cargo.toml Configuration
+```toml
+[package]
+name = "abcdeez-app"
+edition = "2021"
+
+[dependencies]
+# UI Framework
+xilem = "0.3.0"
+masonry = "0.3.0"
+winit = { version = "0.30.12", features = ["android-native-activity"] }
+
+# Core Library
+abcdeez-core = { path = "../core" }
+
+# Async Runtime
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
+pollster = "0.3.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Storage
+rusqlite = { version = "0.31", features = ["bundled", "chrono", "serde_json"] }
+
+# Networking
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+url = "2.5"
+
+# Visualization
+plotters = { version = "0.3", default-features = false, features = [
+    "bitmap_backend",
+    "bitmap_encoder",
+    "chrono",
+] }
+image = "0.24"
+
+# Audio
+cpal = "0.15"
+hound = "3.5"
+ringbuf = "0.3"
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+rand = "0.8"
+dirs = "5.0"
+tempfile = "3.8"
+once_cell = "1.19"
+async-trait = "0.1"
+```
+
+## Environment Configuration
+
+### Required Environment Variables
+```bash
+# API Configuration
+ABCDEEZ_API_URL=https://api.example.com/v1
+ABCDEEZ_API_TOKEN=your-api-token
+ABCDEEZ_API_TIMEOUT=30
+ABCDEEZ_API_RETRIES=3
+
+# Feature Flags
+ABCDEEZ_API_FALLBACK_TO_MOCK=true
+ABCDEEZ_UI_SHOW_ADVANCED=true
+ABCDEEZ_UI_ENABLE_ANIMATIONS=true
+
+# Storage
+ABCDEEZ_DATA_STORAGE_PATH=/path/to/data
+ABCDEEZ_DATA_ANONYMOUS=false
+```
+
+### Configuration Files
+
+#### config.toml
+```toml
+[api]
+base_url = "https://api.example.com/v1"
+timeout_seconds = 30
+retry_attempts = 3
+fallback_to_mock = true
+
+[ui]
+show_advanced_metrics = true
+show_response_times = true
+enable_animations = true
+
+[demo]
+preferred_scenario = "quick_tour"
+auto_advance = false
+show_tooltips = true
+speed_multiplier = 1.0
+
+[data]
+anonymous_export = false
+auto_sync = true
+```
+
+## Platform-Specific Setup
+
+### iOS Deployment
+
+#### Info.plist Requirements
+```xml
+<key>NSAppTransportSecurity</key>
+<dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <false/>
+</dict>
+
+<key>CFBundleIdentifier</key>
+<string>com.example.abcdeez</string>
+
+<key>CFBundleName</key>
+<string>ABCDeez</string>
+
+<key>LSRequiresIPhoneOS</key>
+<true/>
+
+<!-- Apple Sign In -->
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>com.example.abcdeez</string>
+        </array>
+    </dict>
+</array>
+```
+
+#### Entitlements
+```xml
+<key>com.apple.developer.applesignin</key>
+<array>
+    <string>Default</string>
+</array>
+```
+
+### Web Deployment
+
+#### Required Files
+- `index.html` - Entry point
+- `manifest.json` - PWA manifest
+- `service_worker.js` - Offline support
+- `offline.html` - Offline fallback
+
+#### Nginx Configuration
+```nginx
+server {
+    listen 80;
+    server_name abcdeez.example.com;
+    
+    root /var/www/abcdeez;
+    index index.html;
+    
+    # WASM mime type
+    location ~ \.wasm$ {
+        add_header Content-Type application/wasm;
+    }
+    
+    # Service worker scope
+    location /service_worker.js {
+        add_header Service-Worker-Allowed /;
+    }
+    
+    # SPA routing
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-XSS-Protection "1; mode=block";
+}
+```
+
+### Desktop Deployment
+
+#### Windows
+- Build with MSVC toolchain
+- Create MSI installer
+- Code signing required
+
+#### macOS
+- Build universal binary
+- Create DMG or pkg
+- Notarization required
+- Gatekeeper compliance
+
+#### Linux
+- AppImage for distribution
+- Snap/Flatpak packages
+- .deb/.rpm packages
+
+## Docker Deployment
+
+### Dockerfile
+```dockerfile
+FROM rust:1.75 as builder
+
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY ../core ../core
+
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/target/release/abcdeez-app /usr/local/bin/
+
+ENV ABCDEEZ_API_URL=https://api.example.com/v1
+ENV ABCDEEZ_DATA_STORAGE_PATH=/data
+
+VOLUME ["/data"]
+EXPOSE 8080
+
+CMD ["abcdeez-app"]
+```
+
+### Docker Compose
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+      - ./config.toml:/config.toml
+    environment:
+      - ABCDEEZ_API_URL=https://api.example.com/v1
+      - ABCDEEZ_API_TOKEN=${API_TOKEN}
+    restart: unless-stopped
+```
+
+## CI/CD Pipeline
+
+### GitHub Actions
+```yaml
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cargo test
+
+  build:
+    needs: test
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+      - run: cargo build --release
+      - uses: actions/upload-artifact@v3
+        with:
+          name: binary-${{ matrix.os }}
+          path: target/release/abcdeez-app*
+
+  deploy-web:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: |
+          cargo install wasm-pack
+          wasm-pack build --target web
+      - uses: actions/deploy-pages@v2
+```
+
+## Performance Optimization
+
+### Compile-Time Optimizations
+```toml
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+```
+
+### Runtime Optimizations
+- Lazy loading of modules
+- Resource bundling
+- Image optimization
+- Code splitting (web)
+
+## Security Considerations
+
+### Build Security
+- Dependency auditing with `cargo audit`
+- SBOM generation
+- Vulnerability scanning
+- License compliance
+
+### Runtime Security
+- Sandboxing (platform-specific)
+- Permission management
+- Secure storage
+- Certificate pinning
+
+## Monitoring and Logging
+
+### Logging Configuration
+```rust
+tracing_subscriber::fmt()
+    .with_env_filter("abcdeez=debug,tower_http=debug")
+    .init();
+```
+
+### Metrics Collection
+- Performance metrics
+- Error tracking
+- Usage analytics
+- Crash reporting
+
+## Testing
+
+### Unit Tests
+```bash
+cargo test
+```
+
+### Integration Tests
+```bash
+cargo test --test '*'
+```
+
+### Platform Tests
+```bash
+# iOS
+xcodebuild test -scheme ABCDeez
+
+# Web
+wasm-pack test --headless --firefox
+```
+
+## Distribution
+
+### App Stores
+- Apple App Store (iOS/macOS)
+- Google Play Store (Android)
+- Microsoft Store (Windows)
+
+### Direct Distribution
+- GitHub Releases
+- Self-hosted downloads
+- Package managers
+
+### Web Distribution
+- Static hosting (Netlify, Vercel)
+- CDN deployment
+- PWA stores</file>
+<file name="05_ui_components.md"># UI Components Specification
+
+## Component Architecture
+
+### Component Types
+
+#### 1. Pure Components
+Stateless, reusable UI elements that don't access AppData:
+```rust
+pub fn card<T, V>(title: &str, content: V) -> impl WidgetView<T>
+```
+
+#### 2. Stateful Components  
+Components that read/write AppData:
+```rust
+pub fn nav_bar(title: &str) -> impl WidgetView<AppData>
+```
+
+#### 3. Container Components
+Layout and composition components:
+```rust
+pub fn flex<T>(children: impl IntoIterator) -> impl WidgetView<T>
+```
+
+## Core Components (components.rs)
+
+### Card Component
+```rust
+pub fn card<T: 'static, V>(title: &str, content: V) -> impl WidgetView<T>
+where V: WidgetView<T> + 'static
+```
+**Purpose**: Container with title and content
+**Usage**: Grouping related UI elements
+**Styling**: Gray title text, vertical layout
+
+### Progress Bar
+```rust
+pub fn progress_bar(progress: f64, label_text: String) -> impl WidgetView<AppData>
+```
+**Purpose**: Visual progress indicator
+**Features**: 
+- Text-based visualization
+- Percentage display
+- ASCII art progress bar
+**Format**: `[====    ] 45.5%`
+
+### Metric Display
+```rust
+pub fn metric_display(label_text: &str, value: String, color: Color) -> impl WidgetView<AppData>
+```
+**Purpose**: Key-value metric display
+**Layout**: Horizontal with label and colored value
+**Usage**: Performance stats, scores
+
+### Task Card
+```rust
+pub fn task_card(task: &UITask) -> impl WidgetView<AppData>
+```
+**Purpose**: Display learning task
+**Elements**:
+- Task prompt
+- Optional hint text
+- Vertical layout
+
+### Answer Options
+```rust
+pub fn answer_options(
+    options: Vec<String>,
+    on_select: Arc<dyn Fn(&mut AppData, usize) + Send + Sync>
+) -> impl WidgetView<AppData>
+```
+**Purpose**: Multiple choice buttons
+**Features**:
+- Dynamic option count
+- Index-based selection
+- Callback on selection
+
+### Performance Chart
+```rust
+pub fn performance_chart(metrics: &PerformanceMetrics) -> impl WidgetView<AppData>
+```
+**Purpose**: Performance overview
+**Displays**:
+- Accuracy percentage
+- Total responses
+- Correct count
+- Average response time
+
+## Demo Components
+
+### Highlighted Component
+```rust
+pub fn highlighted<V>(element_id: &str, content: V, app_data: &AppData) -> impl WidgetView<AppData>
+```
+**Purpose**: Add demo highlighting
+**Features**:
+- Conditional highlighting
+- Tooltip display
+- Element identification
+
+### Demo Button
+```rust
+pub fn demo_button(element_id: &str, text: &str, app_data: &AppData) -> impl WidgetView<AppData>
+```
+**Purpose**: Button with demo support
+**Features**:
+- Highlight during demo
+- Tooltip integration
+- Standard button behavior
+
+## Navigation Components
+
+### Navigation Bar
+```rust
+pub fn nav_bar(title: &str) -> impl WidgetView<AppData>
+```
+**Elements**:
+- Title display
+- Navigation buttons
+- User status
+
+### Error Message
+```rust
+pub fn error_message(message: Option<String>) -> impl WidgetView<AppData>
+```
+**Purpose**: Error notification
+**Styling**: Red text color
+**Behavior**: Auto-hide when None
+
+### Success Message  
+```rust
+pub fn success_message(message: Option<String>) -> impl WidgetView<AppData>
+```
+**Purpose**: Success notification
+**Styling**: Green text color
+**Behavior**: Auto-hide when None
+
+### Labeled Input
+```rust
+pub fn labeled_input(
+    label: &str,
+    value: String,
+    on_change: Arc<dyn Fn(&mut AppData, String)>
+) -> impl WidgetView<AppData>
+```
+**Purpose**: Text input with label
+**Layout**: Horizontal label + textbox
+**Usage**: Forms, settings
+
+## Screen Components
+
+### Welcome Screen
+```rust
+pub fn welcome_screen(data: &mut AppData) -> impl WidgetView<AppData>
+```
+**Sections**:
+- Title with easter egg trigger
+- Description prose
+- Login card
+- Quick start options
+- Demo buttons
+
+### Domain Selection Screen
+```rust
+pub fn domain_selection_screen(data: &mut AppData) -> impl WidgetView<AppData>
+```
+**Features**:
+- Domain cards
+- Domain descriptions
+- Selection handling
+- Navigation to training
+
+### Training Screen
+```rust
+pub fn training_screen(data: &mut AppData) -> impl WidgetView<AppData>
+```
+**Components**:
+- Task display
+- Answer options
+- Feedback section
+- Hint display
+- Progress tracking
+- Control buttons
+
+### Dashboard Screen
+```rust
+pub fn dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
+```
+**Sections**:
+- Performance overview
+- Session history
+- Metrics display
+- Export controls
+- Navigation options
+
+### Settings Screen
+```rust
+pub fn settings_screen(data: &mut AppData) -> impl WidgetView<AppData>
+```
+**Categories**:
+- Learning preferences
+- Display options
+- API configuration
+- Privacy settings
+- Demo preferences
+
+### Research Dashboard
+```rust
+pub fn research_dashboard_screen(data: &mut AppData) -> impl WidgetView<AppData>
+```
+**Features**:
+- Experiment setup
+- Protocol management
+- IRB compliance
+- Data collection
+- Federation status
+
+### Visualizations Screen
+```rust
+pub fn visualizations_screen(data: &mut AppData) -> impl WidgetView<AppData>
+```
+**Charts**:
+- Learning curves
+- Performance trends
+- Response time distribution
+- Topology visualization
+
+### Widget Gallery
+```rust
+pub fn widget_gallery_screen(data: &mut AppData) -> impl WidgetView<AppData>
+```
+**Purpose**: Component showcase
+**Contents**: All UI components
+**Usage**: Development, testing
+
+## Component Composition Patterns
+
+### Conditional Rendering
+```rust
+if condition {
+    some_component()
+} else {
+    other_component()
+}
+```
+
+### Optional Components
+```rust
+data.error_message.as_ref().map(|msg| error_message(Some(msg.clone())))
+```
+
+### Dynamic Lists
+```rust
+flex(items.into_iter().map(|item| item_component(item)))
+```
+
+### Nested Layouts
+```rust
+flex((
+    card("Outer", 
+        flex((
+            label("Inner"),
+            button("Action", handler)
+        ))
+    ),
+))
+```
+
+## Styling System
+
+### Colors
+```rust
+Color::from_rgb8(r, g, b)
+Color::from_rgba8(r, g, b, a)
+```
+
+Common colors:
+- Error: `rgb8(255, 100, 100)`
+- Success: `rgb8(0, 200, 0)`
+- Warning: `rgb8(255, 165, 0)`
+- Primary: `rgb8(0, 128, 255)`
+- Text: `rgb8(64, 64, 64)`
+
+### Text Alignment
+```rust
+TextAlignment::Start
+TextAlignment::Middle
+TextAlignment::End
+```
+
+### Layout Axes
+```rust
+Axis::Horizontal
+Axis::Vertical
+```
+
+## Event Handling
+
+### Button Callbacks
+```rust
+button("Label", |data: &mut AppData| {
+    // Mutation logic
+})
+```
+
+### Text Input
+```rust
+textbox(value, |data: &mut AppData, new_value: String| {
+    data.field = new_value;
+})
+```
+
+### Custom Handlers
+```rust
+Arc<dyn Fn(&mut AppData, T) + Send + Sync>
+```
+
+## Platform Adaptations
+
+### iOS-Specific
+```rust
+#[cfg(target_os = "ios")]
+standard_apple_signin_button(data)
+```
+
+### Web/WASM-Specific
+```rust
+#[cfg(target_arch = "wasm32")]
+pwa_install_prompt()
+```
+
+### Desktop
+Default implementations, no special handling
+
+## Accessibility
+
+### Labels
+All interactive elements have labels
+
+### Navigation
+Keyboard navigation support
+
+### Screen Readers
+Semantic HTML generation (web)
+
+### Contrast
+High contrast color choices
+
+## Performance
+
+### Memoization
+Components rebuild only on state change
+
+### Lazy Rendering
+Components rendered on demand
+
+### Virtual DOM
+Xilem's efficient diffing
+
+### Batching
+Multiple updates in single frame</file>
+<file name="_notes.md"># Analysis Notes for abcdeez-app Crate
+
+## Progress Tracking
+
+### Files Analyzed
+- [x] Cargo.toml - Dependencies and configuration
+- [x] src/lib.rs - Main application logic and entry point  
+- [x] src/main.rs - Binary entry point
+- [x] src/state.rs - Application state management
+- [x] src/models.rs - Data models
+- [x] src/config.rs - Configuration management
+- [x] src/components.rs - UI components
+- [x] src/screens/* - Screen implementations (sampled)
+- [x] src/services/* - Service layer (sampled)
+- [x] src/demo.rs - Demo controller
+- [x] Other special features documented conceptually
+
+## Documentation Created
+- [x] 00_index.md - Documentation index
+- [x] 01_overview.md - System overview
+- [x] 02_architecture.md - Architecture patterns
+- [x] 03_core_modules.md - Core module specifications
+- [x] 04_state_management.md - State management details
+- [x] 05_ui_components.md - UI component specifications
+- [x] 06_services.md - Service layer documentation
+- [x] 07_special_features.md - Special features (demo, easter eggs, research, PWA)
+- [x] 08_deployment.md - Build and deployment specifications
+
+### Key Observations
+
+1. **Architecture**: Xilem-based UI application with offline-first PWA support
+2. **Core Integration**: Uses abcdeez-core for learning algorithms
+3. **Platform Support**: iOS, Web (WASM), Desktop
+4. **Key Features**: 
+   - Adaptive learning system
+   - Offline storage with sync
+   - Protocol versioning for experiments
+   - Research dashboard
+   - Authentication (Apple Sign In, OAuth)
+   - Demo mode with guided tours
+
+### Dependencies Analysis
+- UI: xilem, masonry, winit
+- Core: abcdeez-core (local dependency)
+- Storage: rusqlite with offline sync
+- Async: tokio runtime
+- API: reqwest for HTTP
+- Visualization: plotters
+- Audio: cpal, hound
+- Serialization: serde, serde_json
+
+### Architecture Patterns Identified
+1. Model-View-Update pattern (Xilem)
+2. Offline-first with sync
+3. Service layer abstraction
+4. Component-based UI
+5. State management through AppData</file>
+<file name="03_core_modules.md"># Core Module Specifications
+
+## lib.rs - Main Application Logic
+
+### Entry Points
+
+#### `run()` Function
+```rust
+pub fn run()
+```
+- Creates Xilem EventLoop with user events
+- Initializes default AppData
+- Creates Xilem application with app_logic
+- Runs windowed application with title
+
+#### `app_logic()` Function
+```rust
+fn app_logic(data: &mut AppData) -> impl WidgetView<AppData>
+```
+Main reactive UI function that:
+1. Handles PWA initialization (WASM only)
+2. Updates easter egg behavior
+3. Processes async operation flags
+4. Renders current screen based on state
+5. Manages overlay components (demo, crab)
+
+### Async Operation Handling
+
+The app uses flag-based async handling pattern:
+```rust
+if data.login_request_in_flight {
+    // Simulate completion
+    data.login_request_in_flight = false;
+    data.current_user = Some(user);
+    data.current_screen = Screen::DomainSelection;
+}
+```
+
+Flags processed:
+- `login_request_in_flight`
+- `create_session_in_flight`
+- `submit_response_in_flight`
+- `end_session_in_flight`
+- `export_data_in_flight`
+
+### Key Methods on AppData
+
+#### Authentication
+- `login()` - Initiates login process
+- `apple_sign_in()` - iOS Apple Sign In
+- `handle_oauth_login_result()` - OAuth callback handler
+
+#### Session Management
+- `create_learner()` - Creates learner profile with topology
+- `start_session()` - Begins training session
+- `start_session_sync()` - Synchronous session start
+- `end_session()` - Ends active session
+- `end_session_sync()` - Synchronous session end
+
+#### Task Management
+- `generate_next_task()` - Creates next learning task
+- `submit_answer(answer_index)` - Submits user response
+- `submit_answer_internal()` - Internal submission logic
+- `continue_to_next_task()` - Advances to next task
+
+#### Intervention System
+- `request_hint()` - User requests hint
+- `check_struggle_and_provide_help()` - Automatic intervention
+
+#### Demo System
+- `demo_showcase()` - Runs demo with random seed
+- `demo_showcase_with_seed(seed)` - Deterministic demo
+- `demo_start()` - Starts guided tour
+- `demo_next_step()` - Advances demo
+- `demo_end()` - Exits demo
+
+#### Easter Eggs
+- `try_crab_triple_click()` - Triple-click detection
+- `check_crab_triggers()` - Other trigger checks
+
+#### Offline Support
+- `init_offline_storage()` - Initialize SQLite storage
+- `trigger_sync()` - Manual sync trigger
+- `check_connectivity()` - Update online status
+- `save_session_offline()` - Save to local DB
+- `save_response_offline()` - Save response locally
+
+#### Protocol Versioning
+- `load_protocol_versions(experiment_id)` - Load versions
+- `compare_protocol_versions()` - Compare two versions
+- `create_protocol_version()` - Create new version
+- `set_current_protocol_version()` - Set active version
+- `save_protocol_version()` - Save form data
+- `validate_protocol_form()` - Validate inputs
+
+### Domain Creation
+
+```rust
+fn create_topology_for_domain(&self) -> Topology
+```
+Creates topology based on selected domain:
+- **Alphabet**: Linear A-Z
+- **DaysOfWeek**: Cyclic Monday-Sunday
+- **Music**: Linear C-B notes
+- **Mathematics**: Linear 0-19
+- **Custom**: Generic linear items
+
+## state.rs - Application State
+
+### AppData Structure
+
+Central state containing:
+
+#### UI State
+- `current_screen: Screen` - Active screen
+- `error_message: Option<String>` - Error display
+- `success_message: Option<String>` - Success display
+
+#### Authentication State
+- `current_user: Option<User>` - Logged in user
+- `username_input, password_input, email_input` - Form inputs
+- `oauth_login_in_flight` - OAuth processing flag
+
+#### Learning State
+- `current_learner: Option<Learner>` - Active learner
+- `current_session: Option<Session>` - Active session
+- `selected_domain: Domain` - Learning domain
+- `topology: Option<Topology>` - Domain structure
+
+#### Core Integration
+- `adaptive_scheduler: Option<AdaptiveScheduler>`
+- `task_generator: Option<TaskGenerator>`
+- `intervention_system: Option<InterventionSystem>`
+- `task_session: Option<TaskSession>`
+
+#### Training State
+- `current_task: Option<UITask>` - Active task
+- `selected_answer: Option<String>` - User's answer
+- `show_feedback: bool` - Display feedback
+- `current_hint: Option<String>` - Active hint
+
+#### Services
+- `api_client: Arc<AdaptiveApiClient>` - API client
+- `offline_storage: Option<Arc<OfflineStorage>>` - Local DB
+- `connectivity_monitor: Arc<ConnectivityMonitor>` - Network
+- `runtime: Arc<tokio::runtime::Runtime>` - Async runtime
+
+#### Research Features
+- `research_controller: Option<ResearchController>`
+- `federation_network: Option<FederationNetwork>`
+- `protocol_versions: Vec<ProtocolVersion>`
+- `irb_form_data: IRBFormData`
+
+### IRBFormData Structure
+```rust
+pub struct IRBFormData {
+    pub study_title: String,
+    pub principal_investigator: String,
+    pub institution: String,
+    pub study_purpose: String,
+    pub participant_population: String,
+    pub data_collection_methods: String,
+    pub risks: String,
+    pub benefits: String,
+    pub procedures: String,
+}
+```
+
+## models.rs - Data Models
+
+### User Model
+```rust
+pub struct User {
+    pub id: String,
+    pub username: String,
+    pub email: String,
+    pub password_hash: String, // Skipped in serialization
+    pub apple_user_id: Option<String>,
+    pub github_user_id: Option<String>,
+    pub oauth_provider_id: Option<String>,
+    pub auth_provider: String,
+    pub is_private_email: Option<bool>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+```
+
+### Learner Model
+```rust
+pub struct Learner {
+    pub id: String,
+    pub user_id: Option<String>,
+    pub display_name: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub core_model: CoreLearnerModel, // From abcdeez-core
+    pub metadata: Option<serde_json::Value>,
+}
+```
+
+### Session Model
+```rust
+pub struct Session {
+    pub id: String,
+    pub learner_id: String,
+    pub topology_type: String,
+    pub topology: Option<Topology>,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub status: String, // active, completed, paused, cancelled
+    pub summary: Option<serde_json::Value>,
+    pub responses: Vec<CoreTaskResponse>,
+}
+```
+
+### Domain Enum
+```rust
+pub enum Domain {
+    Alphabet,
+    DaysOfWeek,
+    Music,
+    Mathematics,
+    Custom(String),
+}
+```
+Methods:
+- `as_str()` - String representation
+- `display_name()` - User-friendly name
+- `description()` - Domain description
+- `to_topology_type()` - Core topology type
+
+### UITask Model
+```rust
+pub struct UITask {
+    pub core_task: CoreTask,
+    pub display_prompt: String,
+    pub display_options: Vec<String>,
+    pub hint: Option<String>,
+    pub feedback_message: Option<String>,
+}
+```
+
+### Performance Metrics
+```rust
+pub struct PerformanceMetrics {
+    pub core_metrics: Option<CoreLearnerMetrics>,
+    pub total_responses: usize,
+    pub correct_responses: usize,
+    pub average_response_time_ms: f64,
+    pub accuracy_rate: f64,
+    pub recent_accuracy: f64,
+    pub improvement_rate: f64,
+    pub streak_count: usize,
+    pub best_streak: usize,
+}
+```
+
+### Protocol Versioning Models
+
+#### ProtocolVersion
+```rust
+pub struct ProtocolVersion {
+    pub id: String,
+    pub experiment_id: String,
+    pub version: String,
+    pub commit_hash: String,
+    pub author: String,
+    pub message: String,
+    pub created_at: DateTime<Utc>,
+    pub protocol_content: ProtocolContent,
+    pub is_current: bool,
+    pub is_draft: bool,
+}
+```
+
+#### ProtocolContent
+Contains experiment design, data collection plan, analysis plan, and compliance requirements.
+
+## components.rs - UI Components
+
+### Reusable Components
+
+#### Card Component
+```rust
+pub fn card<T, V>(title: &str, content: V) -> impl WidgetView<T>
+```
+Generic container with title and content.
+
+#### Progress Bar
+```rust
+pub fn progress_bar(progress: f64, label_text: String) -> impl WidgetView<AppData>
+```
+Text-based progress visualization.
+
+#### Metric Display
+```rust
+pub fn metric_display(label_text: &str, value: String, color: Color) -> impl WidgetView<AppData>
+```
+Displays labeled metric with color.
+
+#### Task Card
+```rust
+pub fn task_card(task: &UITask) -> impl WidgetView<AppData>
+```
+Displays learning task with prompt and hint.
+
+#### Answer Options
+```rust
+pub fn answer_options(options: Vec<String>, on_select: Arc<dyn Fn>) -> impl WidgetView<AppData>
+```
+Clickable answer buttons.
+
+#### Performance Chart
+```rust
+pub fn performance_chart(metrics: &PerformanceMetrics) -> impl WidgetView<AppData>
+```
+Text-based performance overview.
+
+### Demo Components
+
+#### Highlighted Component
+```rust
+pub fn highlighted<V>(element_id: &str, content: V, app_data: &AppData) -> impl WidgetView<AppData>
+```
+Adds demo highlighting and tooltips.
+
+#### Demo Button
+```rust
+pub fn demo_button(element_id: &str, text: &str, app_data: &AppData) -> impl WidgetView<AppData>
+```
+Button with demo support.
+
+### Navigation Components
+
+#### Navigation Bar
+```rust
+pub fn nav_bar(title: &str) -> impl WidgetView<AppData>
+```
+Top navigation with title and actions.
+
+#### Error Message
+```rust
+pub fn error_message(message: Option<String>) -> impl WidgetView<AppData>
+```
+Displays error messages.
+
+#### Success Message
+```rust
+pub fn success_message(message: Option<String>) -> impl WidgetView<AppData>
+```
+Displays success messages.
+
+## config.rs - Configuration Management
+
+### AppConfig Structure
+```rust
+pub struct AppConfig {
+    pub api: ApiConfig,
+    pub ui: UiConfig,
+    pub demo: DemoConfig,
+    pub data: DataConfig,
+}
+```
+
+### ApiConfig
+```rust
+pub struct ApiConfig {
+    pub base_url: String,
+    pub timeout_seconds: u64,
+    pub retry_attempts: u32,
+    pub fallback_to_mock: bool,
+    pub auth_token: Option<String>,
+}
+```
+
+### ConfigManager
+
+#### Initialization
+```rust
+pub fn new() -> Result<Self>
+pub fn with_config_file<P: AsRef<Path>>(path: P) -> Result<Self>
+```
+
+#### Loading Priority
+1. Environment variables (highest)
+2. Config file (TOML)
+3. Defaults (lowest)
+
+#### Environment Variables
+- `ABCDEEZ_API_URL` - API base URL
+- `ABCDEEZ_API_TIMEOUT` - Timeout seconds
+- `ABCDEEZ_API_RETRIES` - Retry attempts
+- `ABCDEEZ_API_FALLBACK_TO_MOCK` - Enable mock fallback
+- `ABCDEEZ_API_TOKEN` - Auth token
+- `ABCDEEZ_UI_SHOW_ADVANCED` - Show advanced metrics
+- `ABCDEEZ_UI_ENABLE_ANIMATIONS` - Enable animations
+- `ABCDEEZ_DATA_ANONYMOUS` - Anonymous export
+- `ABCDEEZ_DATA_STORAGE_PATH` - Storage path
+
+#### Methods
+- `load()` - Load from all sources
+- `save()` - Save to file
+- `validate()` - Validate configuration
+- `reset_to_defaults()` - Reset configuration
+- `export_as_json()` - Export as JSON
+
+### Platform-Specific Paths
+- **Windows**: `%APPDATA%\abcdeez\`
+- **macOS**: `~/Library/Application Support/abcdeez/`
+- **Linux**: `$XDG_CONFIG_HOME/abcdeez/` or `~/.config/abcdeez/`</file>

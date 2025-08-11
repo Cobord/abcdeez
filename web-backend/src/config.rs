@@ -58,21 +58,29 @@ pub enum Environment {
 }
 
 impl Config {
-    fn require_in_production(var_name: &str) -> String {
-        env::var(var_name).unwrap_or_else(|_| {
-            if env::var("ENVIRONMENT")
+    fn require_in_production(var_name: &str) -> Result<String, String> {
+        env::var(var_name).or_else(|_| {
+            let env = env::var("ENVIRONMENT")
                 .unwrap_or_else(|_| "development".to_string())
-                .to_lowercase()
-                == "production"
-            {
-                panic!("{} must be set in production environment", var_name);
+                .to_lowercase();
+            if env == "production" {
+                Err(format!("{} must be set in production environment", var_name))
+            } else {
+                Ok(String::new())
             }
-            String::new()
         })
     }
 
     pub fn from_env() -> Result<Self, env::VarError> {
         dotenvy::dotenv().ok();
+
+        // Helper to unwrap or provide empty string when using require_in_production
+        let require_or_empty = |name: &str| -> String {
+            match Self::require_in_production(name) {
+                Ok(v) => v,
+                Err(_) => String::new(),
+            }
+        };
 
         Ok(Config {
             database_url: env::var("DATABASE_URL")
@@ -98,18 +106,17 @@ impl Config {
                 .parse()
                 .expect("Invalid environment"),
             log_level: env::var("LOG_LEVEL").unwrap_or_else(|_| "debug".to_string()),
-            cors_origin: env::var("CORS_ORIGIN").unwrap_or_else(|_| {
+            cors_origin: env::var("CORS_ORIGIN").or_else(|_| {
                 // Default to localhost in development, require explicit configuration otherwise
-                if env::var("ENVIRONMENT")
+                let env = env::var("ENVIRONMENT")
                     .unwrap_or_else(|_| "development".to_string())
-                    .to_lowercase()
-                    == "development"
-                {
-                    "http://localhost:3000".to_string()
+                    .to_lowercase();
+                if env == "development" {
+                    Ok("http://localhost:3000".to_string())
                 } else {
-                    panic!("CORS_ORIGIN must be explicitly set in non-development environments");
+                    Err(env::VarError::NotPresent)
                 }
-            }),
+            })?,
             rate_limit_requests: env::var("RATE_LIMIT_REQUESTS")
                 .unwrap_or_else(|_| "100".to_string())
                 .parse()
@@ -162,16 +169,16 @@ impl Config {
 
             // OAuth Providers configuration
             // These values are optional in development but required in production
-            apple_client_id: Self::require_in_production("APPLE_CLIENT_ID"),
-            apple_team_id: Self::require_in_production("APPLE_TEAM_ID"),
-            apple_key_id: Self::require_in_production("APPLE_KEY_ID"),
-            apple_private_key_path: Self::require_in_production("APPLE_PRIVATE_KEY_PATH"),
-            apple_redirect_uri: Self::require_in_production("APPLE_REDIRECT_URI"),
+            apple_client_id: require_or_empty("APPLE_CLIENT_ID"),
+            apple_team_id: require_or_empty("APPLE_TEAM_ID"),
+            apple_key_id: require_or_empty("APPLE_KEY_ID"),
+            apple_private_key_path: require_or_empty("APPLE_PRIVATE_KEY_PATH"),
+            apple_redirect_uri: require_or_empty("APPLE_REDIRECT_URI"),
 
             // GitHub OAuth configuration
-            github_client_id: Self::require_in_production("GITHUB_CLIENT_ID"),
-            github_client_secret: Self::require_in_production("GITHUB_CLIENT_SECRET"),
-            github_redirect_uri: Self::require_in_production("GITHUB_REDIRECT_URI"),
+            github_client_id: require_or_empty("GITHUB_CLIENT_ID"),
+            github_client_secret: require_or_empty("GITHUB_CLIENT_SECRET"),
+            github_redirect_uri: require_or_empty("GITHUB_REDIRECT_URI"),
 
             // TLS/SSL configuration
             tls_enabled: env::var("TLS_ENABLED")

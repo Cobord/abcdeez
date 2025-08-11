@@ -28,7 +28,8 @@ use crate::{
     services::{AdaptationService, AnalyticsService, LearnerService},
     state::AppState,
 };
-use abcdeez_core::{HintLevel, InterventionAction, Task};
+use abcdeez_core::Task;
+use crate::services::adaptation_service::{HintLevel, InterventionAction};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -734,7 +735,10 @@ async fn get_session_info(
     .await?;
 
     let learner_id_bytes: Vec<u8> = row.try_get("learner_id")?;
-    let learner_id = Uuid::from_bytes(learner_id_bytes.try_into().unwrap_or_default());
+    let learner_id = learner_id_bytes.as_slice().try_into()
+        .ok()
+        .and_then(|bytes: [u8; 16]| Some(Uuid::from_bytes(bytes)))
+        .ok_or_else(|| sqlx::Error::Decode("Invalid learner ID UUID bytes".into()))?;
     let topology_type: String = row.try_get("topology_type")?;
 
     Ok(SessionInfo {
@@ -768,10 +772,20 @@ async fn authenticate_websocket(
     receiver: &mut futures_util::stream::SplitStream<WebSocket>,
     state: &Arc<AppState>,
 ) -> Result<Claims, String> {
-    // Wait for the first message which must be authentication
-    if let Some(msg) = receiver.next().await {
-        match msg {
-            Ok(Message::Text(text)) => {
+    // Wait for the first message which must be authentication (with 30 second timeout)
+    let auth_timeout = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        receiver.next()
+    ).await;
+    
+    let msg = match auth_timeout {
+        Ok(Some(msg)) => msg,
+        Ok(None) => return Err("Connection closed before authentication".to_string()),
+        Err(_) => return Err("Authentication timeout - no message received within 30 seconds".to_string()),
+    };
+
+    match msg {
+        Ok(Message::Text(text)) => {
                 let client_msg: ClientMessage = serde_json::from_str(&text)
                     .map_err(|_| "Invalid message format".to_string())?;
 
@@ -795,11 +809,8 @@ async fn authenticate_websocket(
                     _ => Err("First message must be authentication".to_string()),
                 }
             }
-            Ok(Message::Close(_)) => Err("Connection closed before authentication".to_string()),
-            _ => Err("Invalid message type for authentication".to_string()),
-        }
-    } else {
-        Err("No authentication message received".to_string())
+        Ok(Message::Close(_)) => Err("Connection closed before authentication".to_string()),
+        _ => Err("Invalid message type for authentication".to_string()),
     }
 }
 

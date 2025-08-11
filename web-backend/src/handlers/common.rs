@@ -1,5 +1,5 @@
 use crate::error::{AppError, AppResult};
-use sqlx::{MySql, Pool};
+use crate::db::DbPool;
 use std::sync::Arc;
 
 /// Common database operations and error handling helpers
@@ -8,12 +8,12 @@ pub struct DbHelper;
 impl DbHelper {
     /// Execute a database query with consistent error handling
     pub async fn execute_query<F, T>(
-        pool: &Pool<MySql>,
+        pool: &DbPool,
         operation_name: &str,
         query_fn: F,
     ) -> AppResult<T>
     where
-        F: FnOnce(&mut sqlx::Transaction<'_, MySql>) -> Result<T, sqlx::Error> + Send,
+        F: for<'a> FnOnce(&'a mut sqlx::Transaction<'static, sqlx::Sqlite>) -> Result<T, sqlx::Error> + Send,
         T: Send,
     {
         let mut tx = pool
@@ -36,8 +36,8 @@ impl DbHelper {
 
     /// Acquire a connection with consistent error handling
     pub async fn acquire_connection(
-        pool: &Pool<MySql>,
-    ) -> AppResult<sqlx::pool::PoolConnection<MySql>> {
+        pool: &DbPool,
+    ) -> AppResult<sqlx::pool::PoolConnection<sqlx::Sqlite>> {
         pool.acquire()
             .await
             .map_err(AppError::DatabaseError)
@@ -45,7 +45,7 @@ impl DbHelper {
 
     /// Check if a resource exists by ID with consistent error handling
     pub async fn resource_exists(
-        pool: &Pool<MySql>,
+        pool: &DbPool,
         table: &str,
         id_column: &str,
         id_value: &str,

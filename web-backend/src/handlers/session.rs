@@ -145,18 +145,32 @@ pub async fn get(
 
     // Check permissions
     if let Some(user_id_bytes) = session_row.get::<Option<Vec<u8>>, _>("user_id") {
-        let user_id = Uuid::from_bytes(user_id_bytes.try_into().unwrap_or_default());
+        let user_id = user_id_bytes
+            .as_slice()
+            .try_into()
+            .ok()
+            .and_then(|bytes: [u8; 16]| Some(Uuid::from_bytes(bytes)))
+            .ok_or(AppError::InternalServerError)?;
         if user_id != claims.sub {
             return Err(AppError::Forbidden);
         }
     }
 
     let learner_id_bytes: Vec<u8> = session_row.get("learner_id");
-    let learner_id = Uuid::from_bytes(learner_id_bytes.try_into().unwrap_or_default());
+    let learner_id = learner_id_bytes
+        .as_slice()
+        .try_into()
+        .ok()
+        .and_then(|bytes: [u8; 16]| Some(Uuid::from_bytes(bytes)))
+        .ok_or(AppError::InternalServerError)?;
 
     let topology_data_str: String = session_row.get("topology_data");
     let topology_data: serde_json::Value =
-        serde_json::from_str(&topology_data_str).unwrap_or(serde_json::json!({}));
+        serde_json::from_str(&topology_data_str)
+            .unwrap_or_else(|e| {
+                tracing::warn!("Failed to parse topology data: {}", e);
+                serde_json::json!({})
+            });
 
     let session = Session {
         id,
@@ -264,7 +278,11 @@ pub async fn submit_response(
 
     // Extract topology from session data for Bayesian updates
     let topology: Topology =
-        serde_json::from_value(session.topology_data).unwrap_or_else(|_| Topology::alphabet());
+        serde_json::from_value(session.topology_data)
+            .unwrap_or_else(|e| {
+                tracing::warn!("Failed to parse topology from session: {}", e);
+                Topology::alphabet()
+            });
 
     let mut learner_service_mut = learner_service.clone();
     learner_service_mut
@@ -286,7 +304,10 @@ pub async fn submit_response(
     .bind(next_sequence - 5)
     .fetch_one(&mut *conn)
     .await
-    .unwrap_or(0);
+    .unwrap_or_else(|e| {
+        tracing::warn!("Failed to get recent error count: {}", e);
+        0
+    });
     let recent_errors = recent_errors as usize;
 
     let intervention = adaptation_service
@@ -496,18 +517,28 @@ async fn get_session_with_permission(
 
     // Check permissions
     if let Some(user_id_bytes) = session_row.get::<Option<Vec<u8>>, _>("user_id") {
-        let user_id = Uuid::from_bytes(user_id_bytes.try_into().unwrap_or_default());
+        let user_id = user_id_bytes.as_slice().try_into()
+            .ok()
+            .and_then(|bytes: [u8; 16]| Some(Uuid::from_bytes(bytes)))
+            .ok_or(AppError::InternalServerError)?;
         if user_id != claims.sub {
             return Err(AppError::Forbidden);
         }
     }
 
     let learner_id_bytes: Vec<u8> = session_row.get("learner_id");
-    let learner_id = Uuid::from_bytes(learner_id_bytes.try_into().unwrap_or_default());
+    let learner_id = learner_id_bytes.as_slice().try_into()
+        .ok()
+        .and_then(|bytes: [u8; 16]| Some(Uuid::from_bytes(bytes)))
+        .ok_or(AppError::InternalServerError)?;
 
     let topology_data_str: String = session_row.get("topology_data");
     let topology_data: serde_json::Value =
-        serde_json::from_str(&topology_data_str).unwrap_or(serde_json::json!({}));
+        serde_json::from_str(&topology_data_str)
+            .unwrap_or_else(|e| {
+                tracing::warn!("Failed to parse topology data: {}", e);
+                serde_json::json!({})
+            });
 
     Ok(Session {
         id: session_id,

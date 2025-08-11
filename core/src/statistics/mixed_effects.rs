@@ -623,6 +623,13 @@ impl MixedEffectsAnalyzer {
     }
 
     fn update_variance_components(&self, model: &mut MixedEffectsModel, data: &MixedEffectsData) {
+        // Calculate residual variance from data
+        let overall_mean = data.observations.iter().sum::<f64>() / data.observations.len() as f64;
+        let residual_variance = data.observations
+            .iter()
+            .map(|x| (x - overall_mean).powi(2))
+            .sum::<f64>() / (data.observations.len() - 1) as f64;
+        
         for random_effect in &mut model.random_effects {
             if let Some(intercept_component) =
                 random_effect.variance_components.get_mut("Intercept")
@@ -644,6 +651,10 @@ impl MixedEffectsAnalyzer {
 
                     intercept_component.variance = between_variance.max(0.01); // Prevent negative variance
                     intercept_component.standard_deviation = intercept_component.variance.sqrt();
+                    
+                    // Update proportion of total variance
+                    let total_variance = between_variance + residual_variance;
+                    intercept_component.proportion_of_total = between_variance / total_variance;
 
                     // Simple confidence interval (would use likelihood profiling in practice)
                     intercept_component.confidence_interval = (

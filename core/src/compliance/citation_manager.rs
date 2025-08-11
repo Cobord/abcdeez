@@ -187,7 +187,6 @@ impl CitationManager {
     pub fn generate_methodology_report(&self, experiment_id: &str) -> MethodologyReport {
         let mut methods_used = Vec::new();
         let mut software_used = Vec::new();
-        let mut statistical_procedures = Vec::new();
         let mut all_reference_ids = HashSet::new();
 
         // Collect method citations
@@ -222,7 +221,7 @@ impl CitationManager {
         }
 
         // Collect statistical procedure citations
-        statistical_procedures = self.get_statistical_citations(&all_reference_ids);
+        let statistical_procedures = self.get_statistical_citations(&all_reference_ids);
 
         // Generate formatted bibliography
         let bibliography = self.format_bibliography(&all_reference_ids);

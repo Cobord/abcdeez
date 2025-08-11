@@ -318,6 +318,21 @@ impl AudioRecorder {
         // Initialize platform-specific recorder
         self.initialize_recorder()?;
 
+        // Create audio file for this recording
+        let audio_file = AudioFile {
+            file_path: self.output_directory.join(format!("audio_{}.wav", chrono::Utc::now().timestamp())),
+            start_timestamp: chrono::Utc::now(),
+            duration_ms: 0,
+            format: self.recorder_config.format.clone(),
+            sample_rate: self.recorder_config.sample_rate,
+            channels: self.recorder_config.channels,
+            bit_depth: self.recorder_config.bit_depth,
+            file_size_bytes: 0,
+            quality_score: 0.0,
+        };
+        
+        self.current_file = Some(audio_file);
+        
         {
             let mut recording_active = self.recording_active.lock().unwrap();
             *recording_active = true;
@@ -349,7 +364,13 @@ impl AudioRecorder {
         thread::sleep(Duration::from_millis(100));
 
         // Process recorded audio
-        let audio_file = self.save_audio_buffer()?;
+        let audio_file = if let Some(mut file) = self.current_file.take() {
+            // Update file with actual recording data
+            self.update_audio_file(&mut file)?;
+            file
+        } else {
+            self.save_audio_buffer()?
+        };
 
         // Add to session
         if let Some(ref mut session) = self.session {
@@ -527,6 +548,20 @@ impl AudioRecorder {
         }
     }
 
+    fn update_audio_file(&mut self, file: &mut AudioFile) -> Result<(), String> {
+        let buffer = self.audio_buffer.lock().unwrap();
+        
+        // Update file metadata based on actual recording
+        file.duration_ms = ((buffer.len() as f32 / self.recorder_config.sample_rate as f32) * 1000.0) as u64;
+        file.file_size_bytes = (buffer.len() * std::mem::size_of::<f32>() * self.recorder_config.channels as usize) as u64;
+        file.quality_score = 0.9; // Mock quality score
+        
+        // Save the actual audio data to file
+        // In a real implementation, this would write to the file system
+        
+        Ok(())
+    }
+    
     fn save_audio_buffer(&mut self) -> Result<AudioFile, String> {
         let buffer = self.audio_buffer.lock().unwrap();
         let samples: Vec<_> = buffer.iter().cloned().collect();

@@ -7,6 +7,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio_rustls::TlsAcceptor;
 use tracing::{debug, error, info, warn};
+use rustls::ServerConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls_pemfile;
 
 use crate::config::Config;
 
@@ -312,11 +315,35 @@ impl TlsManager {
     }
 
     async fn load_certificates(&self) -> Result<TlsAcceptor> {
-        // Placeholder for loading actual certificates
-        // In production, this would load certificates from files or certificate store
+        // Check if we're in development mode and should use self-signed certificates
+        if self.config.environment == crate::config::Environment::Development {
+            warn!("Using self-signed certificates for development - DO NOT USE IN PRODUCTION");
+            return self.create_self_signed_certificate().await;
+        }
+        
+        // In production, bail out and ask for proper certs (keep compile surface minimal)
         anyhow::bail!(
-            "Certificate loading not implemented - would load TLS certificates in production"
+            "TLS in non-development environments requires valid certificate files. Set TLS_CERT_PATH and TLS_KEY_PATH, or disable TLS."
         )
+    }
+
+    async fn create_self_signed_certificate(&self) -> Result<TlsAcceptor> {
+        // Generate a minimal self-signed cert using rcgen, then build rustls config
+        let domains = vec![self.config.server_name.clone(), "localhost".to_string()];
+        let certified = rcgen::generate_simple_self_signed(domains)?;
+        // rcgen 0.13 returns a CertifiedKey with cert and key_pair
+        let cert_der_vec: Vec<u8> = certified.cert.der().to_vec();
+        let key_der_vec: Vec<u8> = certified.key_pair.serialize_der();
+
+        let certs: Vec<CertificateDer<'static>> = vec![CertificateDer::from(cert_der_vec)];
+        let key: PrivateKeyDer<'static> = PrivateKeyDer::from(key_der_vec);
+
+        let tls_config = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .map_err(|e| anyhow::anyhow!("Failed to create TLS config: {}", e))?;
+
+        Ok(TlsAcceptor::from(Arc::new(tls_config)))
     }
 
     async fn get_certificate_status(&self) -> Result<CertificateStatus> {

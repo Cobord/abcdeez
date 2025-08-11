@@ -146,20 +146,16 @@ impl Topology {
         }
     }
 
+    fn get_node_index(&self, identifier: &str) -> Option<usize> {
+        self.node_map.get(identifier).copied().or_else(|| {
+            self.get_node_by_label(identifier)
+                .and_then(|n| self.node_map.get(&n.id).copied())
+        })
+    }
+
     pub fn get_distance(&self, from: &str, to: &str) -> Option<usize> {
-        // Accept either node IDs (e.g., "node_0") or labels (e.g., "Mon")
-        let from_idx = if let Some(idx) = self.node_map.get(from) {
-            *idx
-        } else {
-            self.get_node_by_label(from)
-                .and_then(|n| self.node_map.get(&n.id).copied())?
-        };
-        let to_idx = if let Some(idx) = self.node_map.get(to) {
-            *idx
-        } else {
-            self.get_node_by_label(to)
-                .and_then(|n| self.node_map.get(&n.id).copied())?
-        };
+        let from_idx = self.get_node_index(from)?;
+        let to_idx = self.get_node_index(to)?;
 
         match self.topology_type {
             TopologyType::Linear => Some((to_idx as i32 - from_idx as i32).abs() as usize),
@@ -409,24 +405,19 @@ impl Topology {
         let from_node = self.get_node_by_label(from)?;
         let to_node = self.get_node_by_label(to)?;
 
-        let mut distances = HashMap::new();
-        let mut previous = HashMap::new();
-        let mut unvisited = HashSet::new();
-
-        for node in &self.nodes {
-            distances.insert(node.id.clone(), f64::INFINITY);
-            unvisited.insert(node.id.clone());
-        }
+        let mut distances: HashMap<String, f64> = self.nodes
+            .iter()
+            .map(|node| (node.id.clone(), f64::INFINITY))
+            .collect();
         distances.insert(from_node.id.clone(), 0.0);
+        
+        let mut previous = HashMap::new();
+        let mut unvisited: HashSet<String> = self.nodes.iter().map(|n| n.id.clone()).collect();
 
         while !unvisited.is_empty() {
             let current = unvisited
                 .iter()
-                .min_by(|a, b| {
-                    distances[*a]
-                        .partial_cmp(&distances[*b])
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })?
+                .min_by_key(|id| distances[*id].to_bits())?
                 .clone();
 
             if current == to_node.id {

@@ -11,6 +11,7 @@ use crate::{
 
 /// Configuration for backend connection
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct BackendConfig {
     pub api_url: String,
     pub api_key: Option<String>,
@@ -89,14 +90,16 @@ impl BackendClient {
     /// Test connection to backend
     pub fn test_connection(&self) -> Result<bool> {
         let url = format!("{}/health", self.config.api_url);
+        let request = self.build_request(self.client.get(&url))?;
+        let response = request.send()?;
+        Ok(response.status().is_success())
+    }
 
-        let mut request = self.client.get(&url);
+    fn build_request(&self, mut request: reqwest::blocking::RequestBuilder) -> Result<reqwest::blocking::RequestBuilder> {
         if let Some(key) = &self.config.api_key {
             request = request.header("Authorization", format!("Bearer {}", key));
         }
-
-        let response = request.send()?;
-        Ok(response.status().is_success())
+        Ok(request)
     }
 
     /// Register a new participant
@@ -111,19 +114,14 @@ impl BackendClient {
             metadata: Default::default(),
         };
 
-        let mut request = self.client.post(&url).json(&registration);
-        if let Some(key) = &self.config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", key));
-        }
-
+        let request = self.build_request(self.client.post(&url).json(&registration))?;
         let response = request.send()?;
 
         if !response.status().is_success() {
             anyhow::bail!("Failed to register participant: {}", response.status());
         }
 
-        let token: SessionToken = response.json()?;
-        Ok(token)
+        response.json().context("Failed to parse session token")
     }
 
     /// Start a new session
@@ -135,18 +133,14 @@ impl BackendClient {
             timestamp: Utc::now(),
         };
 
-        let mut request = self.client.post(&url).json(&session_start);
-        if let Some(key) = &self.config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", key));
-        }
-
+        let request = self.build_request(self.client.post(&url).json(&session_start))?;
         let response = request.send()?;
 
         if !response.status().is_success() {
             anyhow::bail!("Failed to start session: {}", response.status());
         }
 
-        let session_response: SessionResponse = response.json()?;
+        let session_response: SessionResponse = response.json().context("Failed to parse session response")?;
         Ok(session_response.session_id)
     }
 
@@ -183,10 +177,13 @@ impl BackendClient {
                 std::thread::sleep(Duration::from_secs(2_u64.pow(attempt)));
             }
 
-            let mut request = self.client.post(&url).json(&batch);
-            if let Some(key) = &self.config.api_key {
-                request = request.header("Authorization", format!("Bearer {}", key));
-            }
+            let request = match self.build_request(self.client.post(&url).json(&batch)) {
+                Ok(r) => r,
+                Err(e) => {
+                    last_error = Some(e.to_string());
+                    continue;
+                }
+            };
 
             match request.send() {
                 Ok(response) if response.status().is_success() => {
@@ -220,12 +217,7 @@ impl BackendClient {
     /// Upload complete session data
     pub fn upload_session(&self, data: &LearnerDataExport) -> Result<()> {
         let url = format!("{}/sessions/complete", self.config.api_url);
-
-        let mut request = self.client.post(&url).json(&data);
-        if let Some(key) = &self.config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", key));
-        }
-
+        let request = self.build_request(self.client.post(&url).json(&data))?;
         let response = request.send()?;
 
         if !response.status().is_success() {
@@ -246,13 +238,9 @@ impl BackendClient {
             timestamp: Utc::now(),
         };
 
-        let mut request = self.client.post(&url).json(&update);
-        if let Some(key) = &self.config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", key));
+        if let Ok(request) = self.build_request(self.client.post(&url).json(&update)) {
+            let _ = request.send();
         }
-
-        // Fire and forget - don't wait for response
-        let _ = request.send();
 
         Ok(())
     }
@@ -269,13 +257,9 @@ impl BackendClient {
             timestamp: Utc::now(),
         };
 
-        let mut request = self.client.post(&url).json(&error_report);
-        if let Some(key) = &self.config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", key));
+        if let Ok(request) = self.build_request(self.client.post(&url).json(&error_report)) {
+            let _ = request.send();
         }
-
-        // Fire and forget
-        let _ = request.send();
     }
 
     /// Get pending tasks from backend (for yoked control)
@@ -287,11 +271,7 @@ impl BackendClient {
             experiment_id: self.config.experiment_id.clone(),
         };
 
-        let mut request = self.client.post(&url).json(&request_body);
-        if let Some(key) = &self.config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", key));
-        }
-
+        let request = self.build_request(self.client.post(&url).json(&request_body))?;
         let response = request.send()?;
 
         if response.status() == reqwest::StatusCode::NO_CONTENT {
@@ -302,7 +282,7 @@ impl BackendClient {
             anyhow::bail!("Failed to get next task: {}", response.status());
         }
 
-        let task: Task = response.json()?;
+        let task: Task = response.json().context("Failed to parse task")?;
         Ok(Some(task))
     }
 
@@ -313,19 +293,14 @@ impl BackendClient {
             self.config.api_url, self.config.experiment_id
         );
 
-        let mut request = self.client.get(&url);
-        if let Some(key) = &self.config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", key));
-        }
-
+        let request = self.build_request(self.client.get(&url))?;
         let response = request.send()?;
 
         if !response.status().is_success() {
             anyhow::bail!("Failed to get experiment config: {}", response.status());
         }
 
-        let config: ExperimentConfig = response.json()?;
-        Ok(config)
+        response.json().context("Failed to parse experiment config")
     }
 }
 

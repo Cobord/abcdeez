@@ -2,7 +2,6 @@ use crate::core::config::LearnerConfig;
 use super::design::{ExperimentalDesign, ParticipantAssignment};
 use crate::statistics::power_analysis::StatisticalTestType;
 use crate::core::topology::Topology;
-use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -287,6 +286,11 @@ impl MultiSessionManager {
         }
     }
 
+    /// Get the data directory path for an experiment
+    pub fn get_experiment_data_path(&self, experiment_id: &str) -> PathBuf {
+        self.data_directory.join(experiment_id)
+    }
+    
     /// Create a new multi-session experiment
     pub fn create_experiment(
         &mut self,
@@ -300,6 +304,10 @@ impl MultiSessionManager {
 
         // Validate experiment design
         self.validate_experiment_design(&design, &sessions)?;
+        
+        // Create data directory for this experiment
+        let exp_data_path = self.get_experiment_data_path(&experiment_id);
+        std::fs::create_dir_all(&exp_data_path).map_err(|e| format!("Failed to create data directory: {}", e))?;
 
         let experiment = MultiSessionExperiment {
             id: experiment_id.clone(),
@@ -510,7 +518,7 @@ impl MultiSessionManager {
         let mut session_means = Vec::new();
 
         // Collect data for each participant across sessions
-        for (participant_id, assignment) in &experiment.participant_assignments {
+        for (participant_id, _assignment) in &experiment.participant_assignments {
             if let Some(progress) = self.participant_progress.get(participant_id) {
                 let mut trajectory = Vec::new();
 
@@ -583,7 +591,7 @@ impl MultiSessionManager {
     // Helper methods
     fn validate_experiment_design(
         &self,
-        design: &ExperimentalDesign,
+        _design: &ExperimentalDesign,
         sessions: &[SessionPlan],
     ) -> Result<(), String> {
         if sessions.is_empty() {
@@ -867,7 +875,7 @@ impl ExperimentScheduler {
 
     pub fn find_available_slot(
         &self,
-        rules: &SchedulingRules,
+        _rules: &SchedulingRules,
         session: &SessionPlan,
         progress: &ParticipantProgress,
     ) -> Result<chrono::DateTime<chrono::Utc>, String> {

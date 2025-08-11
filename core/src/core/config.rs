@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 /// Removes hardcoded priors and allows population-specific adaptations
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct LearnerConfig {
     /// Initial uncertainty for new nodes (default: 1.0)
     /// Lower values indicate prior knowledge assumption
@@ -192,6 +193,7 @@ impl Default for LearnerConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AdaptiveSchedulingConfig {
     /// Initial exploration rate (default: 0.15)
     pub initial_epsilon: f64,
@@ -215,7 +217,8 @@ pub struct AdaptiveSchedulingConfig {
     pub use_eig: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ScoringWeights {
     pub difficulty: f64,
     pub uncertainty: f64,
@@ -316,7 +319,14 @@ impl AdaptiveSchedulingConfig {
     }
 }
 
+impl Default for AdaptiveSchedulingConfig {
+    fn default() -> Self {
+        Self::standard()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct HintInterventionConfig {
     /// Response time threshold for struggle (default: 5000ms)
     pub struggle_rt_threshold_ms: u64,
@@ -403,7 +413,14 @@ impl HintInterventionConfig {
     }
 }
 
+impl Default for HintInterventionConfig {
+    fn default() -> Self {
+        Self::standard()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DomainConfig {
     /// Domain-specific difficulty calibrations
     pub task_difficulties: TaskDifficultyConfig,
@@ -415,7 +432,8 @@ pub struct DomainConfig {
     pub baseline_rt_ms: ResponseTimeConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct TaskDifficultyConfig {
     pub successor: f64,
     pub predecessor: f64,
@@ -427,14 +445,16 @@ pub struct TaskDifficultyConfig {
     pub distance_difficulty_scale: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ChunkBoundaryConfig {
     pub name: String,
     pub positions: Vec<usize>,
     pub strength: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ResponseTimeConfig {
     pub simple_task: u64,
     pub moderate_task: u64,
@@ -547,8 +567,15 @@ impl DomainConfig {
     }
 }
 
+impl Default for DomainConfig {
+    fn default() -> Self {
+        Self::alphabet()
+    }
+}
+
 /// Complete configuration for a learning system
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SystemConfig {
     pub learner: LearnerConfig,
     pub adaptive: AdaptiveSchedulingConfig,
@@ -591,6 +618,12 @@ impl SystemConfig {
             hints,
             domain,
         }
+    }
+}
+
+impl Default for SystemConfig {
+    fn default() -> Self {
+        Self::preset(PopulationType::Adult, DomainType::Alphabet, LearningGoal::Standard)
     }
 }
 

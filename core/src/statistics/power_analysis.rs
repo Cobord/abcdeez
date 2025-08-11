@@ -124,14 +124,16 @@ impl PowerAnalyzer {
         effect_size: f64,
         power: f64,
     ) -> Result<usize, String> {
+        // Use instance beta if power not specified (when power is 0)
+        let effective_power = if power == 0.0 { 1.0 - self.beta } else { power };
         match test_type {
-            StatisticalTestType::OneSampleTTest => self.one_sample_t_test_n(effect_size, power),
-            StatisticalTestType::IndependentTTest => self.independent_t_test_n(effect_size, power),
-            StatisticalTestType::PairedTTest => self.paired_t_test_n(effect_size, power),
+            StatisticalTestType::OneSampleTTest => self.one_sample_t_test_n(effect_size, effective_power),
+            StatisticalTestType::IndependentTTest => self.independent_t_test_n(effect_size, effective_power),
+            StatisticalTestType::PairedTTest => self.paired_t_test_n(effect_size, effective_power),
             StatisticalTestType::OneWayANOVA => {
-                self.one_way_anova_n(effect_size, power, 3) // Default 3 groups
+                self.one_way_anova_n(effect_size, effective_power, 3) // Default 3 groups
             }
-            StatisticalTestType::Correlation => self.correlation_n(effect_size, power),
+            StatisticalTestType::Correlation => self.correlation_n(effect_size, effective_power),
             _ => Err(format!(
                 "Power analysis not implemented for {:?}",
                 test_type

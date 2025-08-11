@@ -173,9 +173,9 @@ pub async fn auth_middleware(
 ) -> Result<Response, AppError> {
     // Skip auth for certain paths
     let path = request.uri().path();
-    let public_paths = vec!["/api/auth/register", "/api/auth/login", "/api/auth/refresh"];
+    const PUBLIC_PATHS: &[&str] = &["/api/auth/register", "/api/auth/login", "/api/auth/refresh"];
 
-    if public_paths.contains(&path) || path.starts_with("/health/") {
+    if PUBLIC_PATHS.contains(&path) || path.starts_with("/health/") {
         return Ok(next.run(request).await);
     }
 
@@ -328,12 +328,12 @@ pub async fn security_headers(
     let headers = response.headers_mut();
 
     // Core security headers (always applied)
-    headers.insert("X-Content-Type-Options", "nosniff".parse().unwrap());
-    headers.insert("X-Frame-Options", "DENY".parse().unwrap());
-    headers.insert("X-XSS-Protection", "1; mode=block".parse().unwrap());
+    headers.insert("X-Content-Type-Options", HeaderValue::from_static("nosniff"));
+    headers.insert("X-Frame-Options", HeaderValue::from_static("DENY"));
+    headers.insert("X-XSS-Protection", HeaderValue::from_static("1; mode=block"));
     headers.insert(
         "Referrer-Policy",
-        "strict-origin-when-cross-origin".parse().unwrap(),
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
 
     // Conditional security headers based on environment
@@ -341,32 +341,28 @@ pub async fn security_headers(
         // Strict HSTS for production
         headers.insert(
             "Strict-Transport-Security",
-            "max-age=31536000; includeSubDomains; preload"
-                .parse()
-                .unwrap(),
+            HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
         );
 
         // Strict CSP for production
         headers.insert("Content-Security-Policy", 
-            "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; object-src 'none'; media-src 'self'; frame-src 'none'; sandbox allow-scripts allow-same-origin allow-forms; base-uri 'self';".parse().unwrap());
+            HeaderValue::from_static("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self'; font-src 'self'; object-src 'none'; media-src 'self'; frame-src 'none'; sandbox allow-scripts allow-same-origin allow-forms; base-uri 'self';"));
     } else {
         // Relaxed headers for development
-        headers.insert("Strict-Transport-Security", "max-age=0".parse().unwrap());
+        headers.insert("Strict-Transport-Security", HeaderValue::from_static("max-age=0"));
 
         headers.insert("Content-Security-Policy", 
-            "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: wss:;".parse().unwrap());
+            HeaderValue::from_static("default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: wss:;"));
     }
 
     // API-specific headers
     if path.starts_with("/api/") {
-        headers.insert("X-API-Version", "1.0".parse().unwrap());
+        headers.insert("X-API-Version", HeaderValue::from_static("1.0"));
         headers.insert(
             "Cache-Control",
-            "no-store, no-cache, must-revalidate, max-age=0"
-                .parse()
-                .unwrap(),
+            HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0"),
         );
-        headers.insert("Pragma", "no-cache".parse().unwrap());
+        headers.insert("Pragma", HeaderValue::from_static("no-cache"));
 
         // Remove server info for APIs
         headers.remove("server");
@@ -374,16 +370,16 @@ pub async fn security_headers(
 
     // Security headers for sensitive endpoints
     if path.starts_with("/api/admin/") || path.starts_with("/api/auth/") {
-        headers.insert("X-Permitted-Cross-Domain-Policies", "none".parse().unwrap());
-        headers.insert("X-DNS-Prefetch-Control", "off".parse().unwrap());
-        headers.insert("X-Download-Options", "noopen".parse().unwrap());
+        headers.insert("X-Permitted-Cross-Domain-Policies", HeaderValue::from_static("none"));
+        headers.insert("X-DNS-Prefetch-Control", HeaderValue::from_static("off"));
+        headers.insert("X-Download-Options", HeaderValue::from_static("noopen"));
 
         // Additional CSP for admin endpoints
         if let Some(csp) = headers.get_mut("Content-Security-Policy") {
             if let Ok(csp_str) = csp.to_str() {
-                *csp = format!("{}; require-trusted-types-for 'script';", csp_str)
-                    .parse()
-                    .unwrap();
+                if let Ok(new_csp) = HeaderValue::from_str(&format!("{}; require-trusted-types-for 'script';", csp_str)) {
+                    *csp = new_csp;
+                }
             }
         }
     }
@@ -571,20 +567,18 @@ pub async fn rate_limit(
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
 
-    headers.insert("X-RateLimit-Limit", limit.to_string().parse().unwrap());
-    headers.insert(
-        "X-RateLimit-Remaining",
-        (limit - current_count - 1)
-            .max(0)
-            .to_string()
-            .parse()
-            .unwrap(),
-    );
-    headers.insert("X-RateLimit-Window", window.to_string().parse().unwrap());
-    headers.insert(
-        "X-RateLimit-Global",
-        global_count.to_string().parse().unwrap(),
-    );
+    if let Ok(limit_header) = HeaderValue::from_str(&limit.to_string()) {
+        headers.insert("X-RateLimit-Limit", limit_header);
+    }
+    if let Ok(remaining_header) = HeaderValue::from_str(&((limit - current_count - 1).max(0).to_string())) {
+        headers.insert("X-RateLimit-Remaining", remaining_header);
+    }
+    if let Ok(window_header) = HeaderValue::from_str(&window.to_string()) {
+        headers.insert("X-RateLimit-Window", window_header);
+    }
+    if let Ok(global_header) = HeaderValue::from_str(&global_count.to_string()) {
+        headers.insert("X-RateLimit-Global", global_header);
+    }
 
     Ok(response)
 }

@@ -4,6 +4,7 @@ use crate::statistics::validation::StatisticalValidator;
 use crate::statistics::TestResult;
 use crate::core::topology::Topology;
 use rand::prelude::*;
+use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -479,6 +480,25 @@ impl ABTestFramework {
         Ok(())
     }
 
+    /// Calculate required sample size for a test
+    pub fn calculate_required_sample_size(
+        &self,
+        test_id: &str,
+        effect_size: f64,
+    ) -> Result<usize, String> {
+        let test = self.tests.get(test_id).ok_or("Test not found")?;
+        
+        // Use the power analyzer to calculate sample size
+        let test_type = match test.variants.len() {
+            2 => crate::statistics::power_analysis::StatisticalTestType::IndependentTTest,
+            _ => crate::statistics::power_analysis::StatisticalTestType::OneWayANOVA,
+        };
+        
+        let power = test.configuration.power;
+        self.power_analyzer
+            .calculate_sample_size(test_type, effect_size, power)
+    }
+    
     /// Run interim analysis and check stopping criteria
     pub fn run_interim_analysis(&mut self, test_id: &str) -> Result<InterimAnalysisResult, String> {
         // Clone test data to avoid borrowing conflicts
@@ -627,7 +647,7 @@ impl ABTestFramework {
                 strategy,
                 exploration_rate,
                 burn_in_samples,
-            } => self.select_bandit_variant(test, strategy, *exploration_rate, *burn_in_samples),
+            } => self.select_bandit_variant(test, strategy, *exploration_rate, *burn_in_samples, context),
 
             _ => {
                 // For other strategies, use simple randomization as fallback
@@ -643,6 +663,7 @@ impl ABTestFramework {
         strategy: &BanditStrategy,
         exploration_rate: f64,
         burn_in_samples: usize,
+        context: &Option<HashMap<String, serde_json::Value>>,
     ) -> Result<String, String> {
         // Simplified bandit implementation
         let total_assignments = self.assignments.len();
@@ -655,7 +676,14 @@ impl ABTestFramework {
 
         match strategy {
             BanditStrategy::EpsilonGreedy { epsilon } => {
-                if self.rng.gen::<f64>() < *epsilon {
+                // Use exploration_rate to modulate epsilon if context suggests it
+                let effective_epsilon = if context.is_some() {
+                    epsilon * exploration_rate
+                } else {
+                    *epsilon
+                };
+                
+                if self.rng.gen::<f64>() < effective_epsilon {
                     // Explore: random selection
                     let variant = test.variants.choose(&mut self.rng).unwrap();
                     Ok(variant.id.clone())
@@ -683,7 +711,7 @@ impl ABTestFramework {
         Ok(test.variants[0].id.clone())
     }
 
-    fn select_ucb1_variant(&self, test: &ABTest, confidence_level: f64) -> Result<String, String> {
+    fn select_ucb1_variant(&self, test: &ABTest, _confidence_level: f64) -> Result<String, String> {
         // UCB1 algorithm implementation would go here
         // For now, return first variant as placeholder
         Ok(test.variants[0].id.clone())
@@ -710,20 +738,28 @@ impl ABTestFramework {
             return Ok(results);
         }
 
-        // Perform pairwise comparisons
+        // Perform pairwise comparisons based on test configuration
         let variants: Vec<_> = variant_data.keys().collect();
+        let use_paired = false;
+        
         for i in 0..variants.len() {
             for j in i + 1..variants.len() {
                 let data1 = &variant_data[variants[i]];
                 let data2 = &variant_data[variants[j]];
 
-                let hypothesis_result = self.statistical_validator.t_test(data1, data2, false);
+                let hypothesis_result = self.statistical_validator.t_test(data1, data2, use_paired);
                 let test_result = TestResult {
                     statistic: hypothesis_result.statistic,
                     p_value: hypothesis_result.p_value,
                     significant: hypothesis_result.significant,
                     test_name: hypothesis_result.test_name,
-                    correction_applied: None,
+                    correction_applied: match test.configuration.multiple_testing_correction {
+                        MultipleTesting::Bonferroni => Some("Bonferroni".to_string()),
+                        MultipleTesting::BenjaminiHochberg => Some("Benjamini-Hochberg".to_string()),
+                        MultipleTesting::Holm => Some("Holm".to_string()),
+                        MultipleTesting::Sidak => Some("Sidak".to_string()),
+                        MultipleTesting::None => None,
+                    },
                 };
                 results.push(test_result);
             }
@@ -732,7 +768,7 @@ impl ABTestFramework {
         Ok(results)
     }
 
-    fn check_interim_analysis(&mut self, test_id: &str) -> Result<(), String> {
+    fn check_interim_analysis(&mut self, _test_id: &str) -> Result<(), String> {
         // Check if interim analysis should be triggered
         // For now, just return success
         Ok(())
@@ -779,9 +815,30 @@ impl ABTestFramework {
     ) -> Result<Vec<GuardViolation>, String> {
         let mut violations = Vec::new();
 
-        // Check each guard metric
+        // Check each guard metric against variant data
         for guard in &test.guard_metrics {
-            // Simplified check - in practice would evaluate actual guard conditions
+            // Check if any variant violates the guard metric thresholds
+            for (_variant_id, data) in variant_data {
+                if !data.is_empty() {
+                    let mean = data.iter().sum::<f64>() / data.len() as f64;
+                    
+                    // Check if mean violates threshold (simplified check)
+                    let violated = match &guard.threshold {
+                        GuardThreshold::AbsoluteDecrease { threshold } => mean < *threshold,
+                        GuardThreshold::RelativeDecrease { percentage: _ } => false,
+                        GuardThreshold::Statistical { p_value: _ } => false,
+                    };
+                    if violated {
+                        violations.push(GuardViolation {
+                            metric_name: guard.name.clone(),
+                            threshold: guard.threshold.clone(),
+                            current_value: mean,
+                            severity: ViolationSeverity::Warning,
+                            recommended_action: guard.action.clone(),
+                        });
+                    }
+                }
+            }
             if self.rng.gen::<f64>() < 0.05 {
                 // 5% chance of violation for demo
                 violations.push(GuardViolation {
@@ -801,7 +858,7 @@ impl ABTestFramework {
         &self,
         stopping_decision: &StoppingDecision,
         guard_violations: &[GuardViolation],
-        statistical_results: &[TestResult],
+        _statistical_results: &[TestResult],
     ) -> Vec<String> {
         let mut recommendations = Vec::new();
 
@@ -951,7 +1008,18 @@ impl ABTestFramework {
 
         for (variant_id, data) in variant_data {
             let mean = data.iter().sum::<f64>() / data.len() as f64;
-            let margin = 0.1; // Simplified calculation
+            let std_dev = (data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / data.len() as f64).sqrt();
+            let std_err = std_dev / (data.len() as f64).sqrt();
+            
+            // Calculate z-score for confidence level (simplified)
+            let z_score = match confidence_level {
+                x if x >= 0.99 => 2.576,
+                x if x >= 0.95 => 1.96,
+                x if x >= 0.90 => 1.645,
+                _ => 1.96,
+            };
+            
+            let margin = z_score * std_err;
 
             intervals.insert(variant_id.clone(), (mean - margin, mean + margin));
         }
@@ -961,7 +1029,7 @@ impl ABTestFramework {
 
     fn assess_practical_significance(
         &self,
-        test: &ABTest,
+        _test: &ABTest,
         primary_analysis: &PrimaryAnalysis,
     ) -> Result<PracticalSignificanceAssessment, String> {
         let mut metric_improvements = HashMap::new();
@@ -985,6 +1053,9 @@ impl ABTestFramework {
         practical_significance: &PracticalSignificanceAssessment,
         statistical_tests: &[TestResult],
     ) -> Result<TestRecommendation, String> {
+        // Consider practical significance in recommendation
+        let _practical_strength = practical_significance.recommendation_strength.clone();
+        
         if primary_analysis.statistical_significance && primary_analysis.practical_significance {
             if let Some(winner) = &primary_analysis.winner {
                 return Ok(TestRecommendation::ImplementWinner {

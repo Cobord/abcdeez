@@ -205,6 +205,8 @@ pub enum SearchStrategy {
     Random,
     Systematic,
     Heuristic,
+    Direct,
+    Exploratory,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,7 +234,7 @@ pub enum CognitiveLoadLevel {
     Overload,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PatternContext {
     pub task_phase: Option<String>,
     pub difficulty_level: Option<f64>,
@@ -792,8 +794,38 @@ impl PatternDetector {
     }
 
     fn analyze_recent_events(&mut self, events: &[InteractionEvent]) {
-        // Analyze events for patterns
-        // Implementation would include sophisticated pattern recognition
+        // Analyze interaction events for pattern detection
+        for event in events {
+            match event {
+                InteractionEvent::Keystroke(keystroke) => {
+                    // Track typing patterns
+                    if keystroke.context.is_correction {
+                        // Pattern: frequent corrections might indicate difficulty
+                        self.detected_patterns.retain(|p| {
+                            !matches!(p.pattern_type, PatternType::CorrectionBehavior { .. })
+                        });
+                    }
+                }
+                InteractionEvent::Mouse(mouse_event) => {
+                    // Track mouse movement patterns
+                    if matches!(mouse_event.event_type, MouseEventType::Click) {
+                        // Pattern: rapid clicking might indicate frustration
+                    }
+                }
+                InteractionEvent::Focus(focus_event) => {
+                    // Track focus patterns
+                    if matches!(focus_event.event_type, FocusEventType::Blur) {
+                        // Pattern: frequent focus loss might indicate distraction
+                    }
+                }
+                InteractionEvent::Scroll(scroll_event) => {
+                    // Track scrolling patterns
+                    if scroll_event.scroll_delta.abs() > 100.0 {
+                        // Pattern: rapid scrolling might indicate scanning behavior
+                    }
+                }
+            }
+        }
     }
 
     fn detect_all_patterns(
@@ -802,8 +834,150 @@ impl PatternDetector {
         mouse_events: &[MouseEvent],
         focus_events: &[FocusEvent],
     ) -> Vec<BehavioralPattern> {
-        // Comprehensive pattern detection across all event types
+        self.detected_patterns.clear();
+        
+        // Detect hesitation patterns from keystroke events
+        self.detect_hesitation_patterns(keystroke_events);
+        
+        // Detect correction behaviors
+        self.detect_correction_patterns(keystroke_events);
+        
+        // Detect focus patterns
+        self.detect_focus_patterns(focus_events);
+        
+        // Detect mouse movement patterns
+        self.detect_mouse_patterns(mouse_events);
+        
         self.detected_patterns.clone()
+    }
+    
+    fn detect_hesitation_patterns(&mut self, keystroke_events: &[KeystrokeEvent]) {
+        let mut last_timestamp = None;
+        
+        for event in keystroke_events {
+            if let Some(last) = last_timestamp {
+                let interval = event.timestamp.signed_duration_since(last);
+                if let Ok(duration) = interval.to_std() {
+                    if duration > Duration::from_millis(1000) {
+                        // Hesitation detected (>1 second pause)
+                        let pattern = BehavioralPattern {
+                            pattern_type: PatternType::Hesitation {
+                                location: HesitationLocation::DuringInput,
+                                duration,
+                            },
+                            start_time: last,
+                            end_time: event.timestamp,
+                            confidence: 0.8,
+                            evidence: vec![format!("Pause of {:.1}s detected", duration.as_secs_f64())],
+                            context: PatternContext::default(),
+                        };
+                        
+                        if pattern.confidence >= self.pattern_threshold {
+                            self.detected_patterns.push(pattern);
+                        }
+                    }
+                }
+            }
+            last_timestamp = Some(event.timestamp);
+        }
+    }
+    
+    fn detect_correction_patterns(&mut self, keystroke_events: &[KeystrokeEvent]) {
+        let corrections = keystroke_events.iter()
+            .filter(|e| e.context.is_correction)
+            .count();
+        
+        if keystroke_events.len() > 0 {
+            let correction_rate = corrections as f64 / keystroke_events.len() as f64;
+            
+            if correction_rate > 0.1 {
+                let pattern = BehavioralPattern {
+                    pattern_type: PatternType::CorrectionBehavior {
+                        correction_rate,
+                        strategy: CorrectionStrategy::ImmediateBackspace,
+                    },
+                    start_time: keystroke_events.first().unwrap().timestamp,
+                    end_time: keystroke_events.last().unwrap().timestamp,
+                    confidence: 0.75,
+                    evidence: vec![format!("Correction rate: {:.1}%", correction_rate * 100.0)],
+                    context: PatternContext::default(),
+                };
+                
+                if pattern.confidence >= self.pattern_threshold {
+                    self.detected_patterns.push(pattern);
+                }
+            }
+        }
+    }
+    
+    fn detect_focus_patterns(&mut self, focus_events: &[FocusEvent]) {
+        if focus_events.is_empty() {
+            return;
+        }
+        
+        let focus_switches = focus_events.iter()
+            .filter(|e| matches!(e.event_type, FocusEventType::Focus))
+            .count();
+        
+        let total_duration = focus_events.last().unwrap().timestamp
+            .signed_duration_since(focus_events.first().unwrap().timestamp);
+        
+        if let Ok(duration) = total_duration.to_std() {
+            if focus_switches > 0 {
+                let avg_attention_span = duration / focus_switches as u32;
+                
+                let pattern = BehavioralPattern {
+                    pattern_type: PatternType::FocusPattern {
+                        attention_span: avg_attention_span,
+                        focus_switches,
+                    },
+                    start_time: focus_events.first().unwrap().timestamp,
+                    end_time: focus_events.last().unwrap().timestamp,
+                    confidence: 0.7,
+                    evidence: vec![format!("{} focus switches detected", focus_switches)],
+                    context: PatternContext::default(),
+                };
+                
+                if pattern.confidence >= self.pattern_threshold {
+                    self.detected_patterns.push(pattern);
+                }
+            }
+        }
+    }
+    
+    fn detect_mouse_patterns(&mut self, mouse_events: &[MouseEvent]) {
+        // Analyze mouse movement efficiency
+        let click_events = mouse_events.iter()
+            .filter(|e| matches!(e.event_type, MouseEventType::Click))
+            .count();
+        
+        let move_events = mouse_events.iter()
+            .filter(|e| matches!(e.event_type, MouseEventType::Move))
+            .count();
+        
+        if move_events > 0 && click_events > 0 {
+            let efficiency = click_events as f64 / move_events as f64;
+            
+            if !mouse_events.is_empty() {
+                let pattern = BehavioralPattern {
+                    pattern_type: PatternType::SearchPattern {
+                        strategy: if efficiency > 0.1 {
+                            SearchStrategy::Direct
+                        } else {
+                            SearchStrategy::Exploratory
+                        },
+                        efficiency,
+                    },
+                    start_time: mouse_events.first().unwrap().timestamp,
+                    end_time: mouse_events.last().unwrap().timestamp,
+                    confidence: 0.65,
+                    evidence: vec![format!("Mouse efficiency: {:.2}", efficiency)],
+                    context: PatternContext::default(),
+                };
+                
+                self.detected_patterns.push(pattern);
+            }
+        }
     }
 }
 
@@ -830,7 +1004,94 @@ impl TypingAnalyzer {
         event_type: &KeyEventType,
         timestamp: chrono::DateTime<chrono::Utc>,
     ) {
-        // Analyze keystroke for typing patterns
+        // Store keystroke with key information for analysis
+        let is_correction = key == "Backspace" || key == "Delete";
+        let correction_type = if key == "Backspace" {
+            Some(CorrectionType::Backspace)
+        } else if key == "Delete" {
+            Some(CorrectionType::Delete)
+        } else {
+            None
+        };
+        
+        let keystroke = KeystrokeEvent {
+            timestamp,
+            event_type: event_type.clone(),
+            key: key.to_string(),
+            key_code: None,
+            dwell_time: None,
+            inter_key_interval: None,
+            context: KeystrokeContext {
+                task_id: None,
+                input_field: None,
+                cursor_position: None,
+                text_length: None,
+                is_correction,
+                correction_type,
+            },
+        };
+
+        // Add to recent keystrokes buffer
+        self.recent_keystrokes.push_back(keystroke);
+        if self.recent_keystrokes.len() > 100 {
+            self.recent_keystrokes.pop_front();
+        }
+        
+        // Update typing rhythm if this is a key press
+        if matches!(event_type, KeyEventType::KeyPress) {
+            if let Some(last) = self.recent_keystrokes.iter().rev().nth(1) {
+                let interval = timestamp.signed_duration_since(last.timestamp);
+                if let Ok(duration) = interval.to_std() {
+                    self.typing_rhythm_buffer.push_back(duration);
+                    if self.typing_rhythm_buffer.len() > 50 {
+                        self.typing_rhythm_buffer.pop_front();
+                    }
+                }
+            }
+        }
+        
+        // Detect errors based on correction keys
+        let is_error = key == "Backspace" || key == "Delete";
+        self.error_history.push_back(is_error);
+        if self.error_history.len() > 100 {
+            self.error_history.pop_front();
+        }
+        
+        // Update typing speed based on non-correction keystrokes
+        if !is_error && matches!(event_type, KeyEventType::KeyPress) {
+            self.update_typing_speed();
+        }
+    }
+    
+    fn update_typing_speed(&mut self) {
+        // Calculate typing speed from recent keystrokes
+        if self.recent_keystrokes.len() < 10 {
+            return;
+        }
+        
+        let non_correction_keystrokes: Vec<_> = self.recent_keystrokes.iter()
+            .filter(|k| !k.context.is_correction)
+            .collect();
+        
+        if non_correction_keystrokes.len() >= 2 {
+            let first = non_correction_keystrokes.first().unwrap();
+            let last = non_correction_keystrokes.last().unwrap();
+            let time_span = last.timestamp.signed_duration_since(first.timestamp);
+            
+            if let Ok(duration) = time_span.to_std() {
+                let minutes = duration.as_secs_f64() / 60.0;
+                if minutes > 0.0 {
+                    // Assume average word length of 5 characters
+                    let words = non_correction_keystrokes.len() as f64 / 5.0;
+                    let wpm = words / minutes;
+                    
+                    self.typing_speed_history.push_back(wpm);
+                    if self.typing_speed_history.len() > 20 {
+                        self.typing_speed_history.pop_front();
+                    }
+                }
+            }
+        }
     }
 
     fn get_current_wpm(&self) -> f64 {
@@ -913,7 +1174,7 @@ impl MouseAnalyzer {
     fn calculate_movement_metrics(
         &mut self,
         position: &Position,
-        timestamp: chrono::DateTime<chrono::Utc>,
+        _timestamp: chrono::DateTime<chrono::Utc>,
     ) -> (Option<f64>, Option<f64>, Option<f64>) {
         // Calculate velocity, acceleration, and smoothness
         self.recent_positions.push_back(position.clone());
@@ -922,11 +1183,46 @@ impl MouseAnalyzer {
             self.recent_positions.pop_front();
         }
 
-        // Placeholder calculations
-        (Some(100.0), Some(5.0), Some(0.8))
+        // Calculate velocity if we have at least 2 positions
+        let velocity = if self.recent_positions.len() >= 2 {
+            let prev = &self.recent_positions[self.recent_positions.len() - 2];
+            let dist = ((position.x - prev.x).powi(2) + (position.y - prev.y).powi(2)).sqrt();
+            // Assuming ~60Hz sampling rate for now
+            Some(dist * 60.0)
+        } else {
+            None
+        };
+        
+        // Store velocity in history
+        if let Some(v) = velocity {
+            self.movement_history.push_back(v);
+            if self.movement_history.len() > 100 {
+                self.movement_history.pop_front();
+            }
+        }
+        
+        // Calculate acceleration from velocity history
+        let acceleration = if self.movement_history.len() >= 2 {
+            let recent: Vec<_> = self.movement_history.iter().rev().take(2).cloned().collect();
+            Some((recent[0] - recent[1]) * 60.0)
+        } else {
+            None
+        };
+        
+        // Calculate smoothness (lower variation = smoother)
+        let smoothness = if self.movement_history.len() >= 5 {
+            let recent: Vec<_> = self.movement_history.iter().rev().take(5).cloned().collect();
+            let mean = recent.iter().sum::<f64>() / recent.len() as f64;
+            let variance = recent.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / recent.len() as f64;
+            Some(1.0 / (1.0 + variance.sqrt()))
+        } else {
+            None
+        };
+
+        (velocity, acceleration, smoothness)
     }
 
-    fn update_movement_patterns(&mut self, timestamp: chrono::DateTime<chrono::Utc>) {
+    fn update_movement_patterns(&mut self, _timestamp: chrono::DateTime<chrono::Utc>) {
         // Update movement pattern analysis
     }
 }
@@ -1001,6 +1297,23 @@ impl HesitationDetector {
             .take(5)
             .map(|h| h.duration.as_millis())
             .collect::<Vec<_>>();
+        
+        // Check if hesitations are becoming less frequent at certain locations
+        let recent_contexts = self.hesitation_contexts.iter()
+            .rev()
+            .take(5)
+            .collect::<Vec<_>>();
+        
+        // Count hesitations at task boundaries vs during input
+        let boundary_hesitations = recent_contexts.iter()
+            .filter(|h| matches!(h.location, HesitationLocation::TaskTransition))
+            .count();
+        
+        let recent_triggers: Vec<_> = recent_contexts.iter()
+            .filter_map(|h| h.trigger.as_ref())
+            .collect();
+        
+        let location_improvement = boundary_hesitations < 2 && recent_triggers.len() < 3;
 
         if recent_hesitations.is_empty() || earlier_hesitations.is_empty() {
             return false;
@@ -1011,7 +1324,8 @@ impl HesitationDetector {
         let earlier_avg: f64 =
             earlier_hesitations.iter().sum::<u128>() as f64 / earlier_hesitations.len() as f64;
 
-        recent_avg < earlier_avg
+        // Consider both duration improvement and location-based improvement
+        recent_avg < earlier_avg || location_improvement
     }
 
     fn finalize_analysis(&self) -> HesitationAnalysis {
@@ -1022,13 +1336,25 @@ impl HesitationDetector {
         &self,
         timestamp: chrono::DateTime<chrono::Utc>,
     ) -> HesitationLocation {
-        // Classify based on context - placeholder
+        // Classify based on when the hesitation occurred
+        if let Some(last_context) = self.hesitation_contexts.last() {
+            let time_since_last = timestamp.signed_duration_since(last_context.timestamp);
+            if time_since_last.num_seconds() < 2 {
+                return HesitationLocation::AfterError;
+            }
+        }
         HesitationLocation::DuringInput
     }
 
     fn identify_hesitation_trigger(&self, duration: Duration) -> Option<TriggerType> {
-        // Identify what triggered the hesitation - placeholder
-        Some(TriggerType::UncertainResponse)
+        // Identify trigger based on duration patterns
+        if duration.as_secs() > 5 {
+            Some(TriggerType::NewInformation)
+        } else if duration.as_secs() > 2 {
+            Some(TriggerType::UncertainResponse)
+        } else {
+            None
+        }
     }
 }
 

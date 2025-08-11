@@ -2,6 +2,7 @@ use super::bayesian::{BayesianLearnerModel, ResponseData};
 use super::learner::LearnerModel;
 use crate::tasks::{Task, TaskGenerator, TaskType};
 use crate::core::topology::Topology;
+use crate::core::config::AdaptiveSchedulingConfig;
 use rand::Rng;
 use tracing::{debug, info, instrument, span, warn, Level};
 
@@ -16,6 +17,7 @@ pub struct AdaptiveScheduler {
     trials_completed: usize,
     exploration_decay: f64,
     rng: rand::rngs::StdRng,
+    config: AdaptiveSchedulingConfig,
 }
 
 impl AdaptiveScheduler {
@@ -30,16 +32,18 @@ impl AdaptiveScheduler {
         let bayesian_model = BayesianLearnerModel::new(&topology);
 
         use rand::SeedableRng;
+        let cfg = AdaptiveSchedulingConfig::standard();
         let scheduler = AdaptiveScheduler {
             learner_model,
             bayesian_model,
             topology: topology.clone(),
             task_generator,
-            epsilon: 0.15, // Start with higher exploration
-            use_eig: true,
+            epsilon: cfg.initial_epsilon,
+            use_eig: cfg.use_eig,
             trials_completed: 0,
-            exploration_decay: 0.995, // Decay epsilon over time
+            exploration_decay: cfg.epsilon_decay,
             rng: rand::rngs::StdRng::from_entropy(),
+            config: cfg,
         };
 
         debug!(
@@ -56,16 +60,41 @@ impl AdaptiveScheduler {
         let bayesian_model = BayesianLearnerModel::new(&topology);
 
         use rand::SeedableRng;
+        let cfg = AdaptiveSchedulingConfig::standard();
         AdaptiveScheduler {
             learner_model,
             bayesian_model,
             topology: topology.clone(),
             task_generator,
-            epsilon: 0.15, // Start with higher exploration
+            epsilon: cfg.initial_epsilon,
             use_eig,
             trials_completed: 0,
-            exploration_decay: 0.995, // Decay epsilon over time
+            exploration_decay: cfg.epsilon_decay,
             rng: rand::rngs::StdRng::from_entropy(),
+            config: cfg,
+        }
+    }
+
+    /// Create a scheduler with an explicit configuration
+    pub fn with_config(
+        learner_model: LearnerModel,
+        topology: Topology,
+        config: AdaptiveSchedulingConfig,
+    ) -> Self {
+        use rand::SeedableRng;
+        let task_generator = TaskGenerator::new(topology.clone());
+        let bayesian_model = BayesianLearnerModel::new(&topology);
+        AdaptiveScheduler {
+            learner_model,
+            bayesian_model,
+            topology: topology.clone(),
+            task_generator,
+            epsilon: config.initial_epsilon,
+            use_eig: config.use_eig,
+            trials_completed: 0,
+            exploration_decay: config.epsilon_decay,
+            rng: rand::rngs::StdRng::from_entropy(),
+            config,
         }
     }
 
@@ -77,7 +106,7 @@ impl AdaptiveScheduler {
         // Adaptive epsilon-greedy: decay exploration over time
         let current_epsilon =
             self.epsilon * self.exploration_decay.powi(self.trials_completed as i32);
-        let effective_epsilon = current_epsilon.max(0.01); // Minimum 1% exploration
+        let effective_epsilon = current_epsilon.max(self.config.min_epsilon);
 
         debug!(
             current_epsilon,
@@ -170,8 +199,8 @@ impl AdaptiveScheduler {
         let ranked = self.bayesian_model.rank_tasks_by_eig(candidates);
 
         // Filter by difficulty zone (70-80% success rate)
-        let p_correct_target = 0.75;
-        let tolerance = 0.15;
+            let p_correct_target = self.config.target_success_rate;
+            let tolerance = self.config.success_tolerance;
 
         let mut best_task = None;
         for (task, _eig) in &ranked {
@@ -282,7 +311,7 @@ impl AdaptiveScheduler {
             .learner_model
             .get_probability_correct(&task.operation, task.difficulty);
 
-        let target_difficulty = 0.75;
+        let target_difficulty = self.config.target_success_rate;
         let difficulty_score = 1.0 - (p_correct - target_difficulty).abs();
 
         let uncertainty_score = self.calculate_uncertainty_reduction(task);
@@ -291,10 +320,11 @@ impl AdaptiveScheduler {
 
         let weak_link_score = self.calculate_weak_link_score(task);
 
-        0.3 * difficulty_score
-            + 0.3 * uncertainty_score
-            + 0.2 * practice_score
-            + 0.2 * weak_link_score
+        let w = &self.config.scoring_weights;
+        (w.difficulty * difficulty_score)
+            + (w.uncertainty * uncertainty_score)
+            + (w.practice_need * practice_score)
+            + (w.weak_link * weak_link_score)
     }
 
     fn calculate_uncertainty_reduction(&self, task: &Task) -> f64 {

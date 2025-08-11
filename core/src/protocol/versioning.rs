@@ -4,7 +4,7 @@ use crate::experiments::multi_session::MultiSessionExperiment;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use std::io::Write;
+// std::io::Write not used in this module
 use std::path::PathBuf;
 
 /// Version Control System for Experimental Protocols
@@ -598,7 +598,7 @@ impl ProtocolVersionControl {
 
     // Helper methods
 
-    fn create_initial_commit(&mut self, repo_id: &str) -> Result<(), String> {
+    fn create_initial_commit(&mut self, _repo_id: &str) -> Result<(), String> {
         // Create minimal experiment for initial commit
         use crate::core::topology::Topology;
 

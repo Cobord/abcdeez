@@ -405,31 +405,52 @@ pub async fn list_preregistrations(
     State(state): State<AppState>,
     Query(params): Query<ListPreRegistrationsQuery>,
 ) -> Result<Json<Vec<PreRegistrationResponse>>, AppError> {
-    let mut query = String::from("SELECT * FROM preregistrations WHERE 1=1");
+    // Build parameterized query to prevent SQL injection
+    let mut sql = String::from(
+        "SELECT * FROM preregistrations WHERE 1=1"
+    );
+    let mut bindings: Vec<String> = Vec::new();
+    let mut param_count = 0;
 
     if let Some(exp_id) = params.experiment_id {
-        query.push_str(&format!(" AND experiment_id = '{}'", exp_id));
+        param_count += 1;
+        sql.push_str(&format!(" AND experiment_id = ?{}", param_count));
+        bindings.push(exp_id);
     }
 
     if let Some(researcher_id) = params.researcher_id {
-        query.push_str(&format!(" AND researcher_id = '{}'", researcher_id));
+        param_count += 1;
+        sql.push_str(&format!(" AND researcher_id = ?{}", param_count));
+        bindings.push(researcher_id);
     }
 
     if let Some(status) = params.status {
-        query.push_str(&format!(" AND status = '{}'", status));
+        param_count += 1;
+        sql.push_str(&format!(" AND status = ?{}", param_count));
+        bindings.push(status);
     }
 
-    query.push_str(" ORDER BY created_at DESC");
+    sql.push_str(" ORDER BY created_at DESC");
 
-    if let Some(limit) = params.limit {
-        query.push_str(&format!(" LIMIT {}", limit));
+    // Add pagination with bounds checking
+    let limit = params.limit.unwrap_or(100).min(1000).max(1);
+    let offset = params.offset.unwrap_or(0).max(0);
+    
+    param_count += 1;
+    sql.push_str(&format!(" LIMIT ?{}", param_count));
+    bindings.push(limit.to_string());
+    
+    param_count += 1;
+    sql.push_str(&format!(" OFFSET ?{}", param_count));
+    bindings.push(offset.to_string());
+
+    // Execute with parameterized query
+    let mut query = sqlx::query_as::<_, PreRegistrationDb>(&sql);
+    for binding in bindings {
+        query = query.bind(binding);
     }
-
-    if let Some(offset) = params.offset {
-        query.push_str(&format!(" OFFSET {}", offset));
-    }
-
-    let preregistrations = sqlx::query_as::<_, PreRegistrationDb>(&query)
+    
+    let preregistrations = query
         .fetch_all(&state.db_pool)
         .await?;
 

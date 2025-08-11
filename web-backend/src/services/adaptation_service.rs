@@ -1,4 +1,5 @@
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -6,9 +7,39 @@ use crate::error::AppError;
 use crate::services::LearnerService;
 use crate::utils::math;
 use abcdeez_core::{
-    HintLevel, InterventionAction, InterventionSystem, StruggleLevel, AdaptiveScheduler, Task,
-    Topology,
+    AdaptiveScheduler, Task, Topology,
 };
+
+// TODO: These types need to be implemented in abcdeez_core
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum HintLevel {
+    // Legacy names used by websocket handlers
+    Confirmation,
+    Partial,
+    Scaffold,
+    Worked,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum InterventionAction {
+    ProvideHint(HintLevel),
+    ProvideWorkedExample(String),
+    IncreaseDifficulty,
+    DecreaseDifficulty,
+    SuggestBreak,
+    SkipTask,
+}
+
+#[derive(Debug)]
+pub struct InterventionSystem;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StruggleLevel {
+    None,
+    Mild,
+    Moderate,
+    Severe,
+}
 
 #[derive(Clone)]
 pub struct AdaptationService {
@@ -83,7 +114,7 @@ impl AdaptationService {
     ) -> Result<Option<InterventionAction>> {
         let learner_model = self.learner_service.get_learner_model(learner_id).await?;
 
-        // Create intervention system with default topology
+        // Create intervention system with default topology (placeholder)
         let topology = Topology::alphabet();
         let _intervention_system = InterventionSystem::new(topology);
 
@@ -118,11 +149,11 @@ impl AdaptationService {
         if should_intervene {
             // Determine intervention type
             let intervention = if recent_errors > 3 {
-                InterventionAction::ProvideHint("Strong hint".to_string())
+                InterventionAction::ProvideHint(HintLevel::Worked)
             } else if recent_errors > 1 {
-                InterventionAction::ProvideHint("Mild hint".to_string())
+                InterventionAction::ProvideHint(HintLevel::Partial)
             } else if elapsed_ms > 25000 {
-                InterventionAction::ProvideHint("Mild hint".to_string())
+                InterventionAction::ProvideHint(HintLevel::Partial)
             } else {
                 InterventionAction::DecreaseDifficulty
             };
@@ -428,5 +459,11 @@ impl AdaptationService {
         .map_err(|e| AppError::DatabaseError(e))?;
 
         Ok(())
+    }
+}
+
+impl InterventionSystem {
+    pub fn new(_topology: Topology) -> Self {
+        InterventionSystem
     }
 }

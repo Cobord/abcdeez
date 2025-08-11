@@ -497,7 +497,7 @@ impl BatchJobService {
             // In a real implementation, you might want to inject the AppState or modify the OAuth service
             let dummy_app_state = crate::state::AppState::new(
                 (*self.db).clone(),
-                self.redis.clone(),
+                self.cache.clone(),
                 self.config.clone(),
             );
 

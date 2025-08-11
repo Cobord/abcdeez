@@ -25,14 +25,18 @@ pub async fn tracing_middleware(mut request: Request, next: Next) -> Response {
     let request_id = Uuid::new_v4().to_string();
 
     // Add trace context to request headers for downstream services
-    request.headers_mut().insert(
-        HeaderName::from_static(TRACE_ID_HEADER),
-        HeaderValue::from_str(&trace_id).unwrap(),
-    );
-    request.headers_mut().insert(
-        HeaderName::from_static(REQUEST_ID_HEADER),
-        HeaderValue::from_str(&request_id).unwrap(),
-    );
+    if let Ok(trace_header) = HeaderValue::from_str(&trace_id) {
+        request.headers_mut().insert(
+            HeaderName::from_static(TRACE_ID_HEADER),
+            trace_header,
+        );
+    }
+    if let Ok(request_header) = HeaderValue::from_str(&request_id) {
+        request.headers_mut().insert(
+            HeaderName::from_static(REQUEST_ID_HEADER),
+            request_header,
+        );
+    }
 
     // Create span for this request
     let span = tracing::span!(
@@ -61,14 +65,18 @@ pub async fn tracing_middleware(mut request: Request, next: Next) -> Response {
         let status = response.status();
 
         // Add correlation headers to response
-        response.headers_mut().insert(
-            HeaderName::from_static(TRACE_ID_HEADER),
-            HeaderValue::from_str(&trace_id).unwrap(),
-        );
-        response.headers_mut().insert(
-            HeaderName::from_static(REQUEST_ID_HEADER),
-            HeaderValue::from_str(&request_id).unwrap(),
-        );
+        if let Ok(trace_header) = HeaderValue::from_str(&trace_id) {
+            response.headers_mut().insert(
+                HeaderName::from_static(TRACE_ID_HEADER),
+                trace_header,
+            );
+        }
+        if let Ok(request_header) = HeaderValue::from_str(&request_id) {
+            response.headers_mut().insert(
+                HeaderName::from_static(REQUEST_ID_HEADER),
+                request_header,
+            );
+        }
 
         // Log response with metrics based on status
         if status.is_success() {

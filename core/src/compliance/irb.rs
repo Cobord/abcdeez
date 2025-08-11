@@ -814,7 +814,7 @@ impl IRBComplianceGenerator {
 
     fn generate_risk_benefit_analysis(
         &self,
-        experiment: &MultiSessionExperiment,
+        _experiment: &MultiSessionExperiment,
     ) -> Result<RiskBenefitAnalysis, String> {
         let mut identified_risks = Vec::new();
 
@@ -870,7 +870,7 @@ impl IRBComplianceGenerator {
 
     fn generate_subject_selection(
         &self,
-        experiment: &MultiSessionExperiment,
+        _experiment: &MultiSessionExperiment,
     ) -> Result<SubjectSelection, String> {
         Ok(SubjectSelection {
             inclusion_criteria: vec![
@@ -908,10 +908,17 @@ impl IRBComplianceGenerator {
         &self,
         experiment: &MultiSessionExperiment,
     ) -> Result<ConsentProcess, String> {
+        // Customize consent based on experiment duration and sessions
+        let consent_timing = if experiment.sessions.len() > 1 {
+            format!("Before first session of {} total sessions", experiment.sessions.len())
+        } else {
+            "Before any study procedures begin".to_string()
+        };
+        
         Ok(ConsentProcess {
             consent_required: true,
             consent_type: ConsentType::Electronic,
-            consent_timing: "Before any study procedures begin".to_string(),
+            consent_timing,
             consent_location: "Online platform or research laboratory".to_string(),
             consent_personnel: vec![self.principal_investigator.name.clone()],
             language_provisions: vec!["English language consent form".to_string()],
@@ -964,10 +971,18 @@ impl IRBComplianceGenerator {
         &self,
         experiment: &MultiSessionExperiment,
     ) -> Result<StudyMonitoringPlan, String> {
+        // Customize monitoring based on experiment complexity
+        let monitoring_approach = MonitoringApproach::SelfMonitoring;
+        
+        let reporting_schedule = format!(
+            "Reports after each of {} sessions, final report at study completion",
+            experiment.sessions.len()
+        );
+        
         Ok(StudyMonitoringPlan {
-            monitoring_approach: MonitoringApproach::SelfMonitoring,
+            monitoring_approach,
             monitoring_personnel: vec![self.principal_investigator.name.clone()],
-            reporting_schedule: "Quarterly progress reports to IRB".to_string(),
+            reporting_schedule,
             safety_monitoring: vec![
                 "Continuous monitoring for adverse events".to_string(),
                 "Regular review of participant feedback".to_string(),
@@ -985,7 +1000,7 @@ impl IRBComplianceGenerator {
 
         documents.push(SupportingDocument {
             document_type: DocumentType::ConsentForm,
-            document_name: "Informed Consent Form".to_string(),
+            document_name: format!("Informed Consent Form - {}", experiment.name),
             version: "1.0".to_string(),
             date_created: chrono::Utc::now().naive_utc().date(),
             file_path: None,
