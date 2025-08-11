@@ -70,7 +70,6 @@ impl Rarity {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct UserGamification {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub level: i32,
     pub experience: i32,
@@ -86,9 +85,7 @@ pub struct UserGamification {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Achievement {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub id: Uuid,
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub achievement_id: String,
     pub name: String,
@@ -104,9 +101,7 @@ pub struct Achievement {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct LeaderboardEntry {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub id: Uuid,
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub username: Option<String>, // Joined from users table
     pub leaderboard_type: String,
@@ -122,9 +117,7 @@ pub struct LeaderboardEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Badge {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub id: Uuid,
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub badge_id: String,
     pub name: String,
@@ -136,9 +129,7 @@ pub struct Badge {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct WeeklyGoal {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub id: Uuid,
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub week_number: i32,
     pub year: i32,
@@ -155,9 +146,7 @@ pub struct WeeklyGoal {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct PowerUp {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub id: Uuid,
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub power_up_type: String,
     pub quantity: i32,
@@ -167,9 +156,7 @@ pub struct PowerUp {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct XpTransaction {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub id: Uuid,
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub amount: i32,
     pub reason: String,
@@ -188,7 +175,6 @@ pub struct UnlockAchievementRequest {
 
 #[derive(Debug, Serialize)]
 pub struct GamificationProfile {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub display_name: String,
     pub avatar_url: Option<String>,

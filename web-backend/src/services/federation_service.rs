@@ -388,9 +388,10 @@ impl FederationService {
 
     fn generate_api_key(&self) -> String {
         use rand::Rng;
+        use base64::{engine::general_purpose::STANDARD, Engine};
         let mut rng = rand::thread_rng();
         let bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
-        base64::encode(&bytes)
+        STANDARD.encode(&bytes)
     }
 
     fn get_our_public_key(&self) -> String {

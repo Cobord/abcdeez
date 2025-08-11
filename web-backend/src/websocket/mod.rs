@@ -14,6 +14,15 @@ use std::sync::Arc;
 use tokio::time::{interval, Duration};
 use uuid::Uuid;
 
+// WebSocket timing constants
+const HEARTBEAT_INTERVAL_SECONDS: u64 = 30;
+const ANALYTICS_BROADCAST_INTERVAL_SECONDS: u64 = 5;
+const JWT_LEEWAY_SECONDS: u64 = 60;
+const RECENT_ERRORS_BUFFER_SIZE: usize = 10;
+
+// Default predicted response time for tasks
+const DEFAULT_PREDICTED_RESPONSE_TIME_MS: f64 = 2000.0;
+
 use crate::{
     middleware::Claims,
     services::{AdaptationService, AnalyticsService, LearnerService},
@@ -299,7 +308,7 @@ async fn handle_session_socket_internal(
     let adaptation_service = AdaptationService::new(learner_service.clone());
 
     // Set up heartbeat
-    let mut heartbeat_interval = interval(Duration::from_secs(30));
+    let mut heartbeat_interval = interval(Duration::from_secs(HEARTBEAT_INTERVAL_SECONDS));
 
     // Session state tracking
     let mut current_task: Option<Task> = None;
@@ -433,8 +442,8 @@ async fn handle_analytics_socket(socket: WebSocket, state: Arc<AppState>) {
         state.config.clone(),
     );
 
-    // Set up broadcast interval (every 5 seconds)
-    let mut broadcast_interval = interval(Duration::from_secs(5));
+    // Set up broadcast interval
+    let mut broadcast_interval = interval(Duration::from_secs(ANALYTICS_BROADCAST_INTERVAL_SECONDS));
 
     loop {
         tokio::select! {
@@ -514,7 +523,7 @@ async fn handle_client_message(
                 .select_next_task(learner_id, &topology)
                 .await?;
 
-            let predicted_rt = 2000.0; // Would be calculated from learner model
+            let predicted_rt = DEFAULT_PREDICTED_RESPONSE_TIME_MS; // Would be calculated from learner model
 
             let task_message = TaskMessage {
                 task: task.clone(),
@@ -546,7 +555,7 @@ async fn handle_client_message(
 
             // Update recent errors
             recent_errors.push(is_correct);
-            if recent_errors.len() > 10 {
+            if recent_errors.len() > RECENT_ERRORS_BUFFER_SIZE {
                 recent_errors.remove(0);
             }
 
@@ -772,7 +781,7 @@ async fn authenticate_websocket(
                         let mut validation = Validation::new(Algorithm::HS256);
                         validation.validate_exp = true;
                         validation.validate_nbf = true;
-                        validation.leeway = 60;
+                        validation.leeway = JWT_LEEWAY_SECONDS;
 
                         let token_data = decode::<Claims>(
                             &token,

@@ -51,21 +51,21 @@ impl JobType {
 
 pub struct BatchJobService {
     db: Arc<DbPool>,
-    redis: ConnectionManager,
+    cache: ConnectionManager,
     analytics_service: AnalyticsService,
     learner_service: Arc<LearnerService>,
     config: Arc<Config>,
 }
 
 impl BatchJobService {
-    pub fn new(db: Arc<DbPool>, redis: ConnectionManager, config: Arc<Config>) -> Self {
+    pub fn new(db: Arc<DbPool>, cache: ConnectionManager, config: Arc<Config>) -> Self {
         let analytics_service =
-            AnalyticsService::new_with_config(db.clone(), Arc::new(redis.clone()), config.clone());
-        let learner_service = Arc::new(LearnerService::new(db.clone(), redis.clone()));
+            AnalyticsService::new_with_config(db.clone(), Arc::new(cache.clone()), config.clone());
+        let learner_service = Arc::new(LearnerService::new(db.clone(), cache.clone()));
 
         Self {
             db,
-            redis: redis.clone(),
+            cache,
             analytics_service,
             learner_service,
             config,
@@ -180,7 +180,7 @@ impl BatchJobService {
 
         // Cache the updated stats
         let stats_json = serde_json::to_string(&stats)?;
-        let mut conn = self.redis.clone();
+        let mut conn = self.cache.clone();
         crate::cache::cmd("SETEX")
             .arg("cached_population_stats")
             .arg(3600) // 1 hour TTL
@@ -282,7 +282,7 @@ impl BatchJobService {
             .collect();
         let practice_leaderboard = practice_leaderboard?;
 
-        let mut conn = self.redis.clone();
+        let mut conn = self.cache.clone();
         crate::cache::cmd("SETEX")
             .arg("leaderboard_accuracy")
             .arg(3600) // 1 hour TTL
@@ -393,7 +393,7 @@ impl BatchJobService {
 
         // Warmup population statistics
         let stats = self.analytics_service.population_stats().await?;
-        let mut conn = self.redis.clone();
+        let mut conn = self.cache.clone();
         crate::cache::cmd("SETEX")
             .arg("warmed_population_stats")
             .arg(1800) // 30 minutes TTL
@@ -673,7 +673,7 @@ impl BatchJobService {
 
                 // Cache the cleanup stats for admin dashboard
                 let stats_json = serde_json::to_string(&stats)?;
-                let mut conn = self.redis.clone();
+                let mut conn = self.cache.clone();
                 crate::cache::cmd("SETEX")
                     .arg("last_audit_cleanup_stats")
                     .arg(86400) // 24 hours TTL

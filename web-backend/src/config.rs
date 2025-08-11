@@ -58,6 +58,19 @@ pub enum Environment {
 }
 
 impl Config {
+    fn require_in_production(var_name: &str) -> String {
+        env::var(var_name).unwrap_or_else(|_| {
+            if env::var("ENVIRONMENT")
+                .unwrap_or_else(|_| "development".to_string())
+                .to_lowercase()
+                == "production"
+            {
+                panic!("{} must be set in production environment", var_name);
+            }
+            String::new()
+        })
+    }
+
     pub fn from_env() -> Result<Self, env::VarError> {
         dotenvy::dotenv().ok();
 
@@ -149,88 +162,16 @@ impl Config {
 
             // OAuth Providers configuration
             // These values are optional in development but required in production
-            apple_client_id: env::var("APPLE_CLIENT_ID").unwrap_or_else(|_| {
-                if env::var("ENVIRONMENT")
-                    .unwrap_or_else(|_| "development".to_string())
-                    .to_lowercase()
-                    == "production"
-                {
-                    panic!("APPLE_CLIENT_ID must be set in production environment");
-                }
-                String::new() // Empty string for non-production
-            }),
-            apple_team_id: env::var("APPLE_TEAM_ID").unwrap_or_else(|_| {
-                if env::var("ENVIRONMENT")
-                    .unwrap_or_else(|_| "development".to_string())
-                    .to_lowercase()
-                    == "production"
-                {
-                    panic!("APPLE_TEAM_ID must be set in production environment");
-                }
-                String::new()
-            }),
-            apple_key_id: env::var("APPLE_KEY_ID").unwrap_or_else(|_| {
-                if env::var("ENVIRONMENT")
-                    .unwrap_or_else(|_| "development".to_string())
-                    .to_lowercase()
-                    == "production"
-                {
-                    panic!("APPLE_KEY_ID must be set in production environment");
-                }
-                String::new()
-            }),
-            apple_private_key_path: env::var("APPLE_PRIVATE_KEY_PATH").unwrap_or_else(|_| {
-                if env::var("ENVIRONMENT")
-                    .unwrap_or_else(|_| "development".to_string())
-                    .to_lowercase()
-                    == "production"
-                {
-                    panic!("APPLE_PRIVATE_KEY_PATH must be set in production environment");
-                }
-                String::new()
-            }),
-            apple_redirect_uri: env::var("APPLE_REDIRECT_URI").unwrap_or_else(|_| {
-                if env::var("ENVIRONMENT")
-                    .unwrap_or_else(|_| "development".to_string())
-                    .to_lowercase()
-                    == "production"
-                {
-                    panic!("APPLE_REDIRECT_URI must be set in production environment");
-                }
-                String::new()
-            }),
+            apple_client_id: Self::require_in_production("APPLE_CLIENT_ID"),
+            apple_team_id: Self::require_in_production("APPLE_TEAM_ID"),
+            apple_key_id: Self::require_in_production("APPLE_KEY_ID"),
+            apple_private_key_path: Self::require_in_production("APPLE_PRIVATE_KEY_PATH"),
+            apple_redirect_uri: Self::require_in_production("APPLE_REDIRECT_URI"),
 
             // GitHub OAuth configuration
-            github_client_id: env::var("GITHUB_CLIENT_ID").unwrap_or_else(|_| {
-                if env::var("ENVIRONMENT")
-                    .unwrap_or_else(|_| "development".to_string())
-                    .to_lowercase()
-                    == "production"
-                {
-                    panic!("GITHUB_CLIENT_ID must be set in production environment");
-                }
-                String::new()
-            }),
-            github_client_secret: env::var("GITHUB_CLIENT_SECRET").unwrap_or_else(|_| {
-                if env::var("ENVIRONMENT")
-                    .unwrap_or_else(|_| "development".to_string())
-                    .to_lowercase()
-                    == "production"
-                {
-                    panic!("GITHUB_CLIENT_SECRET must be set in production environment");
-                }
-                String::new()
-            }),
-            github_redirect_uri: env::var("GITHUB_REDIRECT_URI").unwrap_or_else(|_| {
-                if env::var("ENVIRONMENT")
-                    .unwrap_or_else(|_| "development".to_string())
-                    .to_lowercase()
-                    == "production"
-                {
-                    panic!("GITHUB_REDIRECT_URI must be set in production environment");
-                }
-                String::new()
-            }),
+            github_client_id: Self::require_in_production("GITHUB_CLIENT_ID"),
+            github_client_secret: Self::require_in_production("GITHUB_CLIENT_SECRET"),
+            github_redirect_uri: Self::require_in_production("GITHUB_REDIRECT_URI"),
 
             // TLS/SSL configuration
             tls_enabled: env::var("TLS_ENABLED")

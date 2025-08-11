@@ -5,6 +5,39 @@ use axum::{
 };
 use serde_json::json;
 use std::fmt;
+use tracing::{error, warn, debug};
+
+/// Helper structure for consistent error logging with unique error IDs
+#[derive(Debug)]
+struct ErrorContext {
+    id: uuid::Uuid,
+    error_type: &'static str,
+    message: String,
+}
+
+impl ErrorContext {
+    fn new(error_type: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4(),
+            error_type,
+            message: message.into(),
+        }
+    }
+
+    fn log_and_format(&self, user_message: impl Into<String>) -> (StatusCode, String) {
+        error!(
+            error_id = %self.id,
+            error_type = self.error_type,
+            "{}",
+            self.message
+        );
+        debug!("Error details for {}: {}", self.id, self.message);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("{}. Error ID: {}", user_message.into(), self.id),
+        )
+    }
+}
 
 #[derive(Debug)]
 pub enum AppError {
@@ -13,11 +46,10 @@ pub enum AppError {
     Forbidden,
     NotFound(String),
     Conflict(String),
-    ConflictError(String),
     UnprocessableEntity(String),
     InternalServerError,
     DatabaseError(sqlx::Error),
-    RedisError(redis::RedisError),
+    CacheError(String),
     ValidationError(String),
     AuthenticationError(String),
     RateLimitExceeded,
@@ -47,11 +79,10 @@ impl fmt::Display for AppError {
             AppError::Forbidden => write!(f, "Forbidden"),
             AppError::NotFound(msg) => write!(f, "Not found: {}", msg),
             AppError::Conflict(msg) => write!(f, "Conflict: {}", msg),
-            AppError::ConflictError(msg) => write!(f, "Conflict: {}", msg),
             AppError::UnprocessableEntity(msg) => write!(f, "Unprocessable entity: {}", msg),
             AppError::InternalServerError => write!(f, "Internal server error"),
             AppError::DatabaseError(e) => write!(f, "Database error: {}", e),
-            AppError::RedisError(e) => write!(f, "Redis error: {}", e),
+            AppError::CacheError(e) => write!(f, "Cache error: {}", e),
             AppError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
             AppError::AuthenticationError(msg) => write!(f, "Authentication error: {}", msg),
             AppError::RateLimitExceeded => write!(f, "Rate limit exceeded"),
@@ -96,40 +127,18 @@ impl IntoResponse for AppError {
             AppError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden".to_string()),
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, msg),
-            AppError::ConflictError(msg) => (StatusCode::CONFLICT, msg),
             AppError::UnprocessableEntity(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
             AppError::InternalServerError => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal server error".to_string(),
             ),
             AppError::DatabaseError(e) => {
-                // Log sanitized error information
-                let error_id = uuid::Uuid::new_v4();
-                tracing::error!(
-                    error_id = %error_id,
-                    error_type = "database",
-                    "Database operation failed"
-                );
-                // Log full error details at debug level for troubleshooting
-                tracing::debug!("Database error details for {}: {:?}", error_id, e);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Database operation failed. Error ID: {}", error_id),
-                )
+                let ctx = ErrorContext::new("database", format!("Database operation failed: {:?}", e));
+                ctx.log_and_format("Database operation failed")
             }
-            AppError::RedisError(e) => {
-                // Log sanitized error information
-                let error_id = uuid::Uuid::new_v4();
-                tracing::error!(
-                    error_id = %error_id,
-                    error_type = "cache",
-                    "Cache operation failed"
-                );
-                tracing::debug!("Redis error details for {}: {:?}", error_id, e);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Cache operation failed. Error ID: {}", error_id),
-                )
+            AppError::CacheError(e) => {
+                let ctx = ErrorContext::new("cache", format!("Cache operation failed: {}", e));
+                ctx.log_and_format("Cache operation failed")
             }
             AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::AuthenticationError(msg) => (StatusCode::UNAUTHORIZED, msg),
@@ -140,57 +149,30 @@ impl IntoResponse for AppError {
 
             // Core library errors
             AppError::CoreError(e) => {
-                let error_id = uuid::Uuid::new_v4();
-                tracing::error!(
-                    error_id = %error_id,
-                    error_type = "core_library",
-                    "Core library operation failed"
-                );
-                tracing::debug!("Core library error details for {}: {:?}", error_id, e);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Internal operation failed. Error ID: {}", error_id),
-                )
+                let ctx = ErrorContext::new("core_library", format!("Core library operation failed: {:?}", e));
+                ctx.log_and_format("Internal operation failed")
             }
             AppError::TaskGenerationError(msg) => {
-                tracing::warn!("Task generation error: {}", msg);
+                warn!("Task generation error: {}", msg);
                 (
                     StatusCode::UNPROCESSABLE_ENTITY,
                     format!("Task generation failed: {}", msg),
                 )
             }
             AppError::NumericalError(msg) => {
-                let error_id = uuid::Uuid::new_v4();
-                tracing::error!(
-                    error_id = %error_id,
-                    error_type = "numerical",
-                    "Numerical computation failed"
-                );
-                tracing::debug!("Numerical error details for {}: {}", error_id, msg);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Computation failed. Error ID: {}", error_id),
-                )
+                let ctx = ErrorContext::new("numerical", format!("Numerical computation failed: {}", msg));
+                ctx.log_and_format("Computation failed")
             }
             AppError::StatisticalError(msg) => {
-                let error_id = uuid::Uuid::new_v4();
-                tracing::error!(
-                    error_id = %error_id,
-                    error_type = "statistical",
-                    "Statistical computation failed"
-                );
-                tracing::debug!("Statistical error details for {}: {}", error_id, msg);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Analysis failed. Error ID: {}", error_id),
-                )
+                let ctx = ErrorContext::new("statistical", format!("Statistical computation failed: {}", msg));
+                ctx.log_and_format("Analysis failed")
             }
             AppError::ConvergenceError {
                 iterations,
                 tolerance,
                 final_error,
             } => {
-                tracing::warn!(
+                warn!(
                     "Convergence failure: {} iterations, tolerance: {}, error: {}",
                     iterations,
                     tolerance,
@@ -228,9 +210,9 @@ impl From<sqlx::Error> for AppError {
     }
 }
 
-impl From<redis::RedisError> for AppError {
-    fn from(err: redis::RedisError) -> Self {
-        AppError::RedisError(err)
+impl From<crate::cache::CacheError> for AppError {
+    fn from(err: crate::cache::CacheError) -> Self {
+        AppError::CacheError(err.to_string())
     }
 }
 

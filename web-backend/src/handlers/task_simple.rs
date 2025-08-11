@@ -3,43 +3,56 @@ use axum::{
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
+    handlers::common::{ResponseHelper, ValidationHelper},
     middleware::Claims,
     state::AppState,
 };
 
 use abcdeez_core::{TaskGenerator, Topology};
 
+// Task difficulty constants
+const DIFFICULTY_PAIRWISE_ORDER: f64 = 0.3;
+const DIFFICULTY_SUCCESSOR: f64 = 0.4;
+const DIFFICULTY_PREDECESSOR: f64 = 0.4;
+const DIFFICULTY_K_JUMP: f64 = 0.6;
+const DIFFICULTY_SEGMENT: f64 = 0.5;
+const DIFFICULTY_INDEX: f64 = 0.7;
+const DEFAULT_RECOMMENDED_DIFFICULTY: f64 = 0.5;
+
 /// Simple task generation endpoint that works with current Axum version
 pub async fn generate_simple(
-    State(state): State<Arc<AppState>>,
-    claims: Extension<Claims>,
+    State(_state): State<Arc<AppState>>,
+    _claims: Extension<Claims>,
     Query(params): Query<SimpleTaskRequest>,
 ) -> AppResult<Json<SimpleTaskResponse>> {
-    // Get topology type
-    let topology_type = params
-        .topology_type
-        .unwrap_or_else(|| "alphabet".to_string());
+    // Get topology type with validation
+    let topology_type = params.topology_type.unwrap_or_else(|| "alphabet".to_string());
+    ValidationHelper::validate_not_empty(&topology_type, "topology_type")?;
 
     // Create topology from type
     let topology = create_topology_from_string(&topology_type)?;
-    let mut task_generator = TaskGenerator::new(topology.clone());
+    let mut task_generator = TaskGenerator::new(topology);
 
     // Generate a task
-    let task = task_generator.generate_task(None);
+    let task = task_generator
+        .generate_task(params.difficulty)
+        .map_err(|_| AppError::TaskGenerationError("Failed to generate task".to_string()))?;
 
-    Ok(Json(SimpleTaskResponse {
+    let response = SimpleTaskResponse {
         task_type: format!("{:?}", task.task_type),
         prompt: task.prompt,
         options: task.options,
         correct_answer: task.correct_answer,
         difficulty: task.difficulty,
         operation: format!("{:?}", task.operation),
-    }))
+    };
+
+    ResponseHelper::ok_response(response)
 }
 
 /// Get task difficulty analysis
@@ -48,19 +61,15 @@ pub async fn get_difficulty(
     _claims: Extension<Claims>,
     Query(params): Query<DifficultyQuery>,
 ) -> AppResult<Json<DifficultyResponse>> {
-    // Base difficulties for different task types
-    let mut task_type_difficulties = std::collections::HashMap::new();
-    task_type_difficulties.insert("PairwiseOrder".to_string(), 0.3);
-    task_type_difficulties.insert("Successor".to_string(), 0.4);
-    task_type_difficulties.insert("Predecessor".to_string(), 0.4);
-    task_type_difficulties.insert("KJump".to_string(), 0.6);
-    task_type_difficulties.insert("Segment".to_string(), 0.5);
-    task_type_difficulties.insert("Index".to_string(), 0.7);
+    // Base difficulties for different task types using constants
+    let task_type_difficulties = get_task_difficulty_map();
 
-    Ok(Json(DifficultyResponse {
+    let response = DifficultyResponse {
         task_type_difficulties,
-        recommended_difficulty: params.learner_id.map(|_| 0.5),
-    }))
+        recommended_difficulty: params.learner_id.map(|_| DEFAULT_RECOMMENDED_DIFFICULTY),
+    };
+
+    ResponseHelper::ok_response(response)
 }
 
 /// Simple hint generation endpoint
@@ -69,7 +78,34 @@ pub async fn generate_hint(
     _claims: Extension<Claims>,
     Query(params): Query<HintRequest>,
 ) -> AppResult<Json<HintResponse>> {
-    let hint_text = match params.task_type.as_str() {
+    ValidationHelper::validate_not_empty(&params.task_type, "task_type")?;
+
+    let hint_text = get_hint_for_task_type(&params.task_type);
+
+    let response = HintResponse {
+        hint_text,
+        hint_level: params.hint_level.unwrap_or(1),
+        hint_type: "conceptual".to_string(),
+        timestamp: chrono::Utc::now(),
+    };
+
+    ResponseHelper::ok_response(response)
+}
+
+// Helper functions
+fn get_task_difficulty_map() -> HashMap<String, f64> {
+    let mut task_type_difficulties = HashMap::new();
+    task_type_difficulties.insert("PairwiseOrder".to_string(), DIFFICULTY_PAIRWISE_ORDER);
+    task_type_difficulties.insert("Successor".to_string(), DIFFICULTY_SUCCESSOR);
+    task_type_difficulties.insert("Predecessor".to_string(), DIFFICULTY_PREDECESSOR);
+    task_type_difficulties.insert("KJump".to_string(), DIFFICULTY_K_JUMP);
+    task_type_difficulties.insert("Segment".to_string(), DIFFICULTY_SEGMENT);
+    task_type_difficulties.insert("Index".to_string(), DIFFICULTY_INDEX);
+    task_type_difficulties
+}
+
+fn get_hint_for_task_type(task_type: &str) -> String {
+    match task_type {
         "PairwiseOrder" => "Think about the alphabetical order of the letters.",
         "Successor" => "What letter comes immediately after this one in the alphabet?",
         "Predecessor" => "What letter comes immediately before this one in the alphabet?",
@@ -77,17 +113,10 @@ pub async fn generate_hint(
         "Segment" => "List the letters in sequence starting from the given position.",
         "Index" => "Count the position of this letter in the alphabet (A=1, B=2, etc.).",
         _ => "Break down the problem into smaller steps.",
-    };
-
-    Ok(Json(HintResponse {
-        hint_text: hint_text.to_string(),
-        hint_level: 1,
-        hint_type: "conceptual".to_string(),
-        timestamp: chrono::Utc::now(),
-    }))
+    }
+    .to_string()
 }
 
-// Helper functions
 fn create_topology_from_string(topology_type: &str) -> AppResult<Topology> {
     match topology_type {
         "alphabet" => Ok(Topology::alphabet()),

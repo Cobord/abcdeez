@@ -79,6 +79,36 @@ impl Database {
     }
 }
 
+// Helper function to get pool configuration from env vars
+fn get_pool_config() -> (u32, u32, u64, u64, u64) {
+    let max_connections = std::env::var("DB_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(50);
+    
+    let min_connections = std::env::var("DB_MIN_CONNECTIONS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(5);
+    
+    let acquire_timeout_secs = std::env::var("DB_ACQUIRE_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+    
+    let max_lifetime_secs = std::env::var("DB_MAX_LIFETIME_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1800); // 30 minutes
+    
+    let idle_timeout_secs = std::env::var("DB_IDLE_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(600); // 10 minutes
+    
+    (max_connections, min_connections, acquire_timeout_secs, max_lifetime_secs, idle_timeout_secs)
+}
+
 #[cfg(feature = "sqlite")]
 pub async fn init_pool(database_url: &str) -> Result<DbPool, sqlx::Error> {
     // Ensure database URL is for SQLite
@@ -94,37 +124,14 @@ pub async fn init_pool(database_url: &str) -> Result<DbPool, sqlx::Error> {
         database_url
     };
 
+    let (max_conn, min_conn, acquire_timeout, max_lifetime, idle_timeout) = get_pool_config();
+
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
-        .max_connections(
-            std::env::var("DB_MAX_CONNECTIONS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(50),
-        )
-        .min_connections(
-            std::env::var("DB_MIN_CONNECTIONS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(5),
-        )
-        .acquire_timeout(Duration::from_secs(
-            std::env::var("DB_ACQUIRE_TIMEOUT_SECS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(10),
-        ))
-        .max_lifetime(Duration::from_secs(
-            std::env::var("DB_MAX_LIFETIME_SECS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(1800), // 30 minutes
-        ))
-        .idle_timeout(Duration::from_secs(
-            std::env::var("DB_IDLE_TIMEOUT_SECS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(600), // 10 minutes
-        ))
+        .max_connections(max_conn)
+        .min_connections(min_conn)
+        .acquire_timeout(Duration::from_secs(acquire_timeout))
+        .max_lifetime(Duration::from_secs(max_lifetime))
+        .idle_timeout(Duration::from_secs(idle_timeout))
         .connect(db_url)
         .await?;
 
@@ -138,37 +145,14 @@ pub async fn init_pool(database_url: &str) -> Result<DbPool, sqlx::Error> {
 
 #[cfg(feature = "postgres")]
 pub async fn init_pool(database_url: &str) -> Result<DbPool, sqlx::Error> {
+    let (max_conn, min_conn, acquire_timeout, max_lifetime, idle_timeout) = get_pool_config();
+
     let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(
-            std::env::var("DB_MAX_CONNECTIONS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(50),
-        )
-        .min_connections(
-            std::env::var("DB_MIN_CONNECTIONS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(5),
-        )
-        .acquire_timeout(Duration::from_secs(
-            std::env::var("DB_ACQUIRE_TIMEOUT_SECS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(10),
-        ))
-        .max_lifetime(Duration::from_secs(
-            std::env::var("DB_MAX_LIFETIME_SECS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(1800), // 30 minutes
-        ))
-        .idle_timeout(Duration::from_secs(
-            std::env::var("DB_IDLE_TIMEOUT_SECS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(600), // 10 minutes
-        ))
+        .max_connections(max_conn)
+        .min_connections(min_conn)
+        .acquire_timeout(Duration::from_secs(acquire_timeout))
+        .max_lifetime(Duration::from_secs(max_lifetime))
+        .idle_timeout(Duration::from_secs(idle_timeout))
         .connect(database_url)
         .await?;
 

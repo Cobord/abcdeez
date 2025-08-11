@@ -16,11 +16,100 @@ use crate::{
     state::AppState,
 };
 
+// Rate limiting constants
+const GLOBAL_RATE_MULTIPLIER: i64 = 100;
+const IP_RATE_MULTIPLIER: i64 = 5;
+const AUTHENTICATED_USER_RATE_MULTIPLIER: i64 = 2;
+const RATE_LIMIT_BURST_WINDOW: i64 = 60; // seconds
+const GLOBAL_RATE_LIMIT_WINDOW: i64 = 60; // seconds
+const AUTO_BLOCK_DURATION: i64 = 300; // 5 minutes
+const ERROR_COUNT_THRESHOLD: i64 = 50;
+const AUTO_BLOCK_DURATION_ERRORS: i64 = 3600; // 1 hour
+
+// Content validation constants
+const MAX_UPLOAD_SIZE: u64 = 10_000_000; // 10MB
+const MAX_API_REQUEST_SIZE: u64 = 1_000_000; // 1MB
+
+// JWT validation constants
+const JWT_LEEWAY_SECONDS: u64 = 60;
+
+// Cache key prefixes
+const CACHE_KEY_GLOBAL_RATE: &str = "global_rate_limit:total";
+const CACHE_KEY_IP_GLOBAL: &str = "ip_global_rate";
+const CACHE_KEY_USER_RATE: &str = "user_rate_limit";
+const CACHE_KEY_RATE_LIMIT: &str = "rate_limit";
+const CACHE_KEY_BURST_LIMIT: &str = "burst_limit";
+const CACHE_KEY_AUTO_BLOCK: &str = "auto_block";
+const CACHE_KEY_BLOCKED_IP: &str = "blocked_ip";
+const CACHE_KEY_IP_ERRORS: &str = "ip_errors";
+const CACHE_KEY_DOS_EVENTS: &str = "dos_events:global_rate_limit";
+const CACHE_KEY_BLACKLIST_SESSION: &str = "blacklist:session";
+
 /// Request correlation ID for tracing requests across the system
 #[derive(Debug, Clone)]
 pub struct CorrelationId(pub String);
 
 pub mod tracing;
+
+/// Helper for consistent cache operations in middleware
+struct CacheHelper;
+
+impl CacheHelper {
+    async fn get_count(conn: &mut crate::cache::ConnectionManager, key: &str) -> i64 {
+        crate::cache::cmd("GET")
+            .arg(key)
+            .query_async::<String>(conn)
+            .await
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0)
+    }
+
+    async fn increment_with_expiry(
+        conn: &mut crate::cache::ConnectionManager,
+        key: &str,
+        expiry: i64,
+    ) -> Result<(), ()> {
+        crate::cache::cmd("INCR")
+            .arg(key)
+            .query_async::<String>(conn)
+            .await
+            .map_err(|_| ())?;
+        
+        crate::cache::cmd("EXPIRE")
+            .arg(key)
+            .arg(expiry)
+            .query_async::<()>(conn)
+            .await
+            .map_err(|_| ())
+    }
+
+    async fn set_with_expiry(
+        conn: &mut crate::cache::ConnectionManager,
+        key: &str,
+        value: &str,
+        expiry: i64,
+    ) -> Result<(), ()> {
+        crate::cache::cmd("SETEX")
+            .arg(key)
+            .arg(expiry)
+            .arg(value)
+            .query_async::<String>(conn)
+            .await
+            .map_err(|_| ())
+            .map(|_| ())
+    }
+
+    async fn exists(conn: &mut crate::cache::ConnectionManager, key: &str) -> bool {
+        crate::cache::cmd("EXISTS")
+            .arg(key)
+            .query_async::<String>(conn)
+            .await
+            .ok()
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0) > 0
+    }
+}
 
 /// Correlation ID middleware that generates or extracts correlation IDs for request tracing
 pub async fn correlation_id_middleware(mut request: Request, next: Next) -> Response {
@@ -105,7 +194,7 @@ pub async fn auth_middleware(
     let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = true;
     validation.validate_nbf = true;
-    validation.leeway = 60; // Allow 60 seconds clock skew
+    validation.leeway = JWT_LEEWAY_SECONDS; // Allow clock skew
     validation.algorithms = vec![Algorithm::HS256]; // Only allow HS256
 
     let token_data = decode::<Claims>(
@@ -119,18 +208,12 @@ pub async fn auth_middleware(
     })?;
 
     // Check if token is in blacklist (for logout/revocation)
-    if let Some(session_id) = &token_data.claims.session_id.clone() {
-        let blacklist_key = format!("blacklist:session:{}", session_id);
+    if let Some(session_id) = &token_data.claims.session_id {
+        let blacklist_key = format!("{}:{}", CACHE_KEY_BLACKLIST_SESSION, session_id);
         let mut conn = state.cache_conn.clone();
-        if let Ok(blacklisted) = crate::cache::cmd("EXISTS")
-            .arg(&blacklist_key)
-            .query_async::<String>(&mut conn)
-            .await
-        {
-            if blacklisted.parse::<i64>().unwrap_or(0) > 0 {
-                ::tracing::warn!("Attempted use of blacklisted session: {}", session_id);
-                return Err(AppError::Unauthorized);
-            }
+        if CacheHelper::exists(&mut conn, &blacklist_key).await {
+            ::tracing::warn!("Attempted use of blacklisted session: {}", session_id);
+            return Err(AppError::Unauthorized);
         }
     }
 
@@ -160,31 +243,21 @@ pub async fn auth_middleware(
     }
 
     // Rate limiting per user (in addition to global rate limiting)
-    let user_rate_key = format!("user_rate_limit:{}", token_data.claims.sub);
+    let user_rate_key = format!("{}:{}", CACHE_KEY_USER_RATE, token_data.claims.sub);
     let mut conn = state.cache_conn.clone();
-    let current_requests: i64 = crate::cache::cmd("GET")
-        .arg(&user_rate_key)
-        .query_async::<String>(&mut conn)
-        .await
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
+    let current_requests = CacheHelper::get_count(&mut conn, &user_rate_key).await;
 
-    if current_requests > (state.config.rate_limit_requests * 2) as i64 {
-        // Higher limit for authenticated users
+    let user_limit = (state.config.rate_limit_requests as i64) * AUTHENTICATED_USER_RATE_MULTIPLIER;
+    if current_requests > user_limit {
         return Err(AppError::RateLimitExceeded);
     }
 
     // Increment user-specific counter
-    let _: Result<(), _> = crate::cache::cmd("INCR")
-        .arg(&user_rate_key)
-        .query_async(&mut conn)
-        .await;
-    let _: Result<(), _> = crate::cache::cmd("EXPIRE")
-        .arg(&user_rate_key)
-        .arg(state.config.rate_limit_window_seconds as i64)
-        .query_async(&mut conn)
-        .await;
+    let _ = CacheHelper::increment_with_expiry(
+        &mut conn,
+        &user_rate_key,
+        state.config.rate_limit_window_seconds as i64,
+    ).await;
 
     // Add user info to request extensions
     request.extensions_mut().insert(token_data.claims);

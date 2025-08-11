@@ -59,9 +59,7 @@ pub enum SyncStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SyncMetadata {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub id: Uuid,
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub device_id: String,
     pub device_name: Option<String>,
@@ -75,9 +73,7 @@ pub struct SyncMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SyncQueueItem {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub id: Uuid,
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub device_id: String,
     pub entity_type: String,
@@ -94,9 +90,7 @@ pub struct SyncQueueItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SyncConflict {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub id: Uuid,
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub entity_type: String,
     pub entity_id: String,
@@ -112,9 +106,7 @@ pub struct SyncConflict {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct RegisteredDevice {
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub id: Uuid,
-    #[serde(serialize_with = "crate::utils::serialize_uuid_as_string")]
     pub user_id: Uuid,
     pub device_id: String,
     pub device_name: String,

@@ -1,15 +1,57 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 use tokio_rustls::TlsAcceptor;
 use tracing::{debug, error, info, warn};
 
 use crate::config::Config;
+
+/// Default configuration constants
+const DEFAULT_RENEWAL_THRESHOLD_DAYS: u32 = 30;
+const DEFAULT_MAX_RETRY_ATTEMPTS: u32 = 5;
+const DEFAULT_RETRY_BACKOFF_HOURS: u32 = 6;
+const DEFAULT_ALERT_THRESHOLD_DAYS: u32 = 7;
+const DEFAULT_FORCE_RENEWAL_DAYS: u32 = 1;
+const DEFAULT_CERT_PATH: &str = "certs/cert.pem";
+const DEFAULT_KEY_PATH: &str = "certs/key.pem";
+const MOCK_CERT_VALIDITY_DAYS: i64 = 90;
+
+/// Helper for consistent certificate error logging and storage
+struct CertificateLogger {
+    retry_count: u32,
+}
+
+impl CertificateLogger {
+    fn new(retry_count: u32) -> Self {
+        Self { retry_count }
+    }
+
+    fn log_error(&self, error_type: &str, message: &str, severity: ErrorSeverity) -> CertificateError {
+        let error = CertificateError {
+            timestamp: Utc::now(),
+            error_type: error_type.to_string(),
+            message: message.to_string(),
+            retry_count: self.retry_count,
+            severity: severity.clone(),
+        };
+
+        // Log with appropriate level
+        match severity {
+            ErrorSeverity::Warning => warn!("Certificate {}: {}", error_type, message),
+            ErrorSeverity::Error => error!("Certificate {}: {}", error_type, message),
+            ErrorSeverity::Critical => {
+                error!("CRITICAL Certificate {}: {}", error_type, message);
+                // TODO: Send alerts to monitoring systems
+            }
+        }
+
+        error
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CertificateStatus {
@@ -54,11 +96,11 @@ impl Default for RenewalConfiguration {
     fn default() -> Self {
         Self {
             enabled: true,
-            renewal_threshold_days: 30,
-            max_retry_attempts: 5,
-            retry_backoff_hours: 6,
-            alert_threshold_days: 7,
-            force_renewal_days: 1,
+            renewal_threshold_days: DEFAULT_RENEWAL_THRESHOLD_DAYS,
+            max_retry_attempts: DEFAULT_MAX_RETRY_ATTEMPTS,
+            retry_backoff_hours: DEFAULT_RETRY_BACKOFF_HOURS,
+            alert_threshold_days: DEFAULT_ALERT_THRESHOLD_DAYS,
+            force_renewal_days: DEFAULT_FORCE_RENEWAL_DAYS,
         }
     }
 }
@@ -318,20 +360,20 @@ impl TlsManager {
         self.config
             .tls_cert_path
             .clone()
-            .unwrap_or_else(|| "certs/cert.pem".to_string())
+            .unwrap_or_else(|| DEFAULT_CERT_PATH.to_string())
     }
 
     fn get_private_key_path(&self) -> String {
         self.config
             .tls_key_path
             .clone()
-            .unwrap_or_else(|| "certs/key.pem".to_string())
+            .unwrap_or_else(|| DEFAULT_KEY_PATH.to_string())
     }
 
     async fn parse_certificate_expiry(&self, _cert_path: &str) -> Result<DateTime<Utc>> {
-        // Placeholder - in production would parse actual certificate file
+        // TODO: In production, parse actual certificate file using rustls or openssl
         // Return a mock expiry date for testing
-        Ok(Utc::now() + chrono::Duration::days(90))
+        Ok(Utc::now() + chrono::Duration::days(MOCK_CERT_VALIDITY_DAYS))
     }
 
     async fn log_certificate_error(
@@ -340,86 +382,75 @@ impl TlsManager {
         message: &str,
         severity: ErrorSeverity,
     ) {
-        let error = CertificateError {
-            timestamp: Utc::now(),
-            error_type: error_type.to_string(),
-            message: message.to_string(),
-            retry_count: self.get_current_retry_count().await,
-            severity,
-        };
-
-        // Log to system logs
-        match error.severity {
-            ErrorSeverity::Warning => warn!("Certificate {}: {}", error_type, message),
-            ErrorSeverity::Error => error!("Certificate {}: {}", error_type, message),
-            ErrorSeverity::Critical => {
-                error!("CRITICAL Certificate {}: {}", error_type, message);
-                // Would send alerts to monitoring systems in production
-            }
-        }
-
-        // Store error for tracking and dashboard display
+        let logger = CertificateLogger::new(self.get_current_retry_count().await);
+        let error = logger.log_error(error_type, message, severity);
         self.store_certificate_error(error).await;
     }
 
     async fn store_certificate_error(&self, _error: CertificateError) {
-        // Would store in database or file system for tracking
-        // Placeholder implementation
+        // TODO: Store in database or file system for tracking
     }
 
     async fn get_recent_renewal_errors(&self) -> Vec<CertificateError> {
-        // Would retrieve from storage - placeholder returns empty vec
+        // TODO: Retrieve from storage
         Vec::new()
     }
 
     async fn get_current_retry_count(&self) -> u32 {
-        // Calculate current retry count from recent errors
         self.get_recent_renewal_errors().await.len() as u32
     }
 
+    async fn update_renewal_metadata(&self, success: bool) {
+        // TODO: Update renewal attempt/success timestamp in persistent storage
+        if success {
+            debug!("Updated renewal success timestamp");
+        } else {
+            debug!("Updated renewal attempt timestamp");
+        }
+    }
+
     async fn update_last_renewal_attempt(&self) {
-        // Would update timestamp in persistent storage
+        self.update_renewal_metadata(false).await;
     }
 
     async fn log_renewal_success(&self) {
-        // Would update success timestamp and clear error count
+        self.update_renewal_metadata(true).await;
+    }
+
+    async fn get_renewal_metadata(&self, success: bool) -> Option<DateTime<Utc>> {
+        // TODO: Retrieve from persistent storage
+        // For now return None to indicate no previous attempts
+        let _ = success; // Suppress unused parameter warning
+        None
     }
 
     async fn get_last_renewal_attempt(&self) -> Option<DateTime<Utc>> {
-        // Would retrieve from persistent storage
-        None
+        self.get_renewal_metadata(false).await
     }
 
     async fn get_last_renewal_success(&self) -> Option<DateTime<Utc>> {
-        // Would retrieve from persistent storage
-        None
+        self.get_renewal_metadata(true).await
     }
 
     /// Get comprehensive certificate health information for monitoring
     pub async fn get_certificate_health(&self) -> CertificateStatus {
-        match self.get_certificate_status().await {
-            Ok(status) => status,
-            Err(e) => {
-                error!("Failed to get certificate status: {}", e);
-                CertificateStatus {
-                    is_valid: false,
-                    expires_at: None,
-                    days_until_expiry: None,
-                    issuer: None,
-                    subject: None,
-                    last_renewal_attempt: None,
-                    last_renewal_success: None,
-                    renewal_errors: vec![CertificateError {
-                        timestamp: Utc::now(),
-                        error_type: "status_check_failure".to_string(),
-                        message: e.to_string(),
-                        retry_count: 0,
-                        severity: ErrorSeverity::Error,
-                    }],
-                    auto_renewal_enabled: self.renewal_config.enabled,
-                }
+        self.get_certificate_status().await.unwrap_or_else(|e| {
+            error!("Failed to get certificate status: {}", e);
+            let logger = CertificateLogger::new(0);
+            let error = logger.log_error("status_check_failure", &e.to_string(), ErrorSeverity::Error);
+            
+            CertificateStatus {
+                is_valid: false,
+                expires_at: None,
+                days_until_expiry: None,
+                issuer: None,
+                subject: None,
+                last_renewal_attempt: None,
+                last_renewal_success: None,
+                renewal_errors: vec![error],
+                auto_renewal_enabled: self.renewal_config.enabled,
             }
-        }
+        })
     }
 
     /// Force certificate renewal (bypass retry limits and backoff)

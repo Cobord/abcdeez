@@ -8,6 +8,24 @@ use std::sync::{
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
 
+// Histogram bucket bounds for response time tracking (in milliseconds)
+const HISTOGRAM_BUCKET_BOUNDS: &[f64] = &[
+    1.0,    // 1ms
+    5.0,    // 5ms
+    10.0,   // 10ms
+    25.0,   // 25ms
+    50.0,   // 50ms
+    100.0,  // 100ms
+    250.0,  // 250ms
+    500.0,  // 500ms
+    1000.0, // 1s
+    2500.0, // 2.5s
+    5000.0, // 5s
+    10000.0, // 10s
+];
+
+const DATABASE_QUERIES_ENDPOINT: &str = "database_queries";
+
 pub mod business;
 pub mod database;
 pub mod health;
@@ -69,24 +87,10 @@ impl Default for ResponseTimeHistogram {
 
 impl ResponseTimeHistogram {
     pub fn new() -> Self {
-        // Create buckets for response times: 1ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s, +Inf
-        let bucket_bounds = vec![
-            1.0,
-            5.0,
-            10.0,
-            25.0,
-            50.0,
-            100.0,
-            250.0,
-            500.0,
-            1000.0,
-            2500.0,
-            5000.0,
-            10000.0,
-            f64::INFINITY,
-        ];
+        let mut bounds = HISTOGRAM_BUCKET_BOUNDS.to_vec();
+        bounds.push(f64::INFINITY);
 
-        let buckets = bucket_bounds
+        let buckets = bounds
             .into_iter()
             .map(|bound| HistogramBucket {
                 upper_bound_ms: bound,
@@ -306,7 +310,7 @@ impl MetricsCollector {
         self.database_queries.fetch_add(1, Ordering::Relaxed);
 
         // Track database queries as a special endpoint for response time percentiles
-        self.record_request("database_queries", duration_ms, false)
+        self.record_request(DATABASE_QUERIES_ENDPOINT, duration_ms, false)
             .await;
     }
 

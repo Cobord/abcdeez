@@ -83,7 +83,7 @@ pub async fn register(
         .map_err(|e| AppError::DatabaseError(e))?;
 
     if existing.is_some() {
-        return Err(AppError::ConflictError(
+        return Err(AppError::Conflict(
             "Username or email already exists".to_string(),
         ));
     }
