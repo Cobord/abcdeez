@@ -1,8 +1,13 @@
 // High-level component library for ABCDEEZ app
 // These components abstract over platform differences
 
+mod builders;
+
 use crate::state::AppState;
 use crate::models::Task;
+
+// Re-export builders for convenience
+pub use builders::*;
 
 // Component trait that all platforms must implement
 pub trait Component: Sized {
@@ -39,6 +44,8 @@ pub trait AppComponents {
     // Basic building blocks (for task visuals that need custom layouts)
     fn simple_label(text: String) -> Self::Output;
     fn simple_flex_column(items: Vec<Self::Output>) -> Self::Output;
+    fn simple_flex_row(items: Vec<Self::Output>) -> Self::Output;
+    fn simple_button(text: &str, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
     
     // Form components
     fn auth_form(
@@ -62,6 +69,56 @@ pub trait AppComponents {
     fn loading_spinner(message: Option<&str>) -> Self::Output;
     fn empty_state(icon: &str, title: &str, message: &str, action: Option<Self::Output>) -> Self::Output;
     fn error_banner(message: &str, on_dismiss: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
+    
+    // Additional ported components from old app
+    
+    // Basic UI components
+    fn card<V>(title: &str, content: V) -> Self::Output where V: Component<Output = Self::Output>;
+    fn progress_bar(progress: f64, label: &str) -> Self::Output;
+    fn metric_display(label: &str, value: &str, color: AppColor) -> Self::Output;
+    
+    // Interactive components
+    fn checkbox(checked: bool, label: &str, on_toggle: impl Fn(&mut AppState, bool) + Send + Sync + 'static) -> Self::Output;
+    fn labeled_input(label: &str, value: String, on_change: impl Fn(&mut AppState, String) + Send + Sync + 'static) -> Self::Output;
+    fn toast_notification(message: &str, is_success: bool) -> Self::Output;
+    fn loading_overlay(message: &str) -> Self::Output;
+    
+    // Navigation
+    fn nav_bar(current_screen: &str) -> Self::Output;
+    
+    // Messages
+    fn error_message(message: Option<String>) -> Self::Output;
+    fn success_message(message: Option<String>) -> Self::Output;
+    
+    // Demo-aware components
+    fn highlighted<V>(element_id: &str, content: V, has_highlight: bool, tooltip: Option<String>) -> Self::Output 
+        where V: Component<Output = Self::Output>;
+    fn demo_button(element_id: &str, text: &str, has_highlight: bool, tooltip: Option<String>) -> Self::Output;
+    fn demo_card<V>(element_id: &str, title: &str, content: V, has_highlight: bool, tooltip: Option<String>) -> Self::Output
+        where V: Component<Output = Self::Output>;
+    
+    // Modals
+    fn confirm_modal(
+        title: &str,
+        message: &str,
+        on_confirm: impl Fn(&mut AppState) + Send + Sync + 'static,
+        on_cancel: impl Fn(&mut AppState) + Send + Sync + 'static,
+    ) -> Self::Output;
+    
+    // Visualization components
+    fn response_time_histogram(response_times: &[u128]) -> Self::Output;
+    fn learning_curve_display(responses: &[crate::models::Response]) -> Self::Output;
+    fn error_analysis_display(responses: &[crate::models::Response]) -> Self::Output;
+    fn strategy_analysis_display(strategies: Vec<(&str, f64)>) -> Self::Output;
+    
+    // Domain-specific
+    fn domain_card(domain: &str, description: &str, selected: bool) -> Self::Output;
+    fn session_info(session_id: &str, status: &str, duration: &str, domain: &str) -> Self::Output;
+    
+    // Task-specific
+    fn task_card_display(prompt: &str, hint: Option<&str>) -> Self::Output;
+    fn answer_options_display(options: Vec<String>, on_select: impl Fn(&mut AppState, usize) + Send + Sync + 'static) -> Self::Output;
+    fn performance_chart(accuracy: f64, total_responses: usize, correct: usize, avg_time: f64) -> Self::Output;
 }
 
 // App-specific enums that abstract platform differences

@@ -1,0 +1,6 @@
+- RUSTFLAGS=-Awarnings cargo check -p abcdeez-core
+- RUSTFLAGS=-Awarnings cargo check -p web-backend
+- RUSTFLAGS=-Awarnings cargo check -p abcdeez-app
+- RUSTFLAGS=-Awarnings cargo check -p abcdeez-web
+
+

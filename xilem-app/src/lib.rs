@@ -2,12 +2,14 @@
 
 pub mod app;
 pub mod components;
+pub mod demo;
 pub mod models;
 pub mod platform;
 pub mod services;
 pub mod state;
 pub mod utils;
 pub mod views;
+pub mod viz;
 
 // Keep the old run function for backward compatibility when using xilem-native
 #[cfg(feature = "xilem-native")]
@@ -24,7 +26,7 @@ pub fn run(ev: xilem::EventLoopBuilder) -> Result<(), winit::error::EventLoopErr
         initial_state,
         |state| {
             use crate::components::Component;
-            crate::app::app_logic(state).build()
+            crate::app::app_logic(state).build().0
         },
         xilem::WindowOptions::new("ABCDEEZ Learning")
             .with_initial_inner_size(winit::dpi::LogicalSize::new(1024.0, 768.0))

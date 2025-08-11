@@ -2,11 +2,14 @@
 
 use abcdeez_core::learning::learner::LearnerModel;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 use crate::models::{PendingResponse, Task};
 use crate::services::AdaptiveLearningService;
 use crate::state::{SessionState, Theme, ThemeMode, UserState};
+use crate::utils::easter_egg::EasterEggManager;
+use crate::demo::DemoController;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LoadingKey {
@@ -16,7 +19,7 @@ pub enum LoadingKey {
     Analytics,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Screen {
     // Auth Flow
     Login,
@@ -26,10 +29,14 @@ pub enum Screen {
     // Main App
     Dashboard,
     Learning,
+    Welcome,
+    DomainSelection,
+    Training,
 
     // Analytics
     Progress,
     Analytics,
+    Visualizations,
 
     // Social
     Leaderboard,
@@ -44,6 +51,7 @@ pub enum Screen {
     Loading,
     Error(String),
     Logout,
+    WidgetGallery,  // Hidden screen
 }
 
 impl Screen {
@@ -53,8 +61,12 @@ impl Screen {
             Screen::Signup => "Sign Up",
             Screen::Dashboard => "Dashboard",
             Screen::Learning => "Learning Session",
+            Screen::Welcome => "Welcome",
+            Screen::DomainSelection => "Select Domain",
+            Screen::Training => "Training",
             Screen::Progress => "Progress",
             Screen::Analytics => "Analytics",
+            Screen::Visualizations => "Visualizations",
             Screen::Leaderboard => "Leaderboard",
             Screen::Challenges => "Challenges",
             Screen::Friends => "Friends",
@@ -62,6 +74,8 @@ impl Screen {
             Screen::Profile => "Profile",
             Screen::Loading => "Loading",
             Screen::Error(_) => "Error",
+            Screen::Logout => "Logout",
+            Screen::WidgetGallery => "Widget Gallery",
             _ => "",
         }
     }
@@ -124,6 +138,10 @@ pub struct AppState {
 
     // Cache
     pub task_cache: HashMap<String, Task>,
+    
+    // Fun features
+    pub easter_egg_manager: EasterEggManager,
+    pub demo_controller: Option<DemoController>,
 }
 
 impl Default for AppState {
@@ -153,6 +171,8 @@ impl Default for AppState {
             frame_times: Vec::with_capacity(60),
             response_times: Vec::with_capacity(100),
             task_cache: HashMap::new(),
+            easter_egg_manager: EasterEggManager::new(),
+            demo_controller: Some(DemoController::new()),
         }
     }
 }

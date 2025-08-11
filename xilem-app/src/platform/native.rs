@@ -39,5 +39,5 @@ fn app_logic(state: &mut AppState) -> Box<AnyWidgetView<AppState>> {
     // Call the main app logic from app.rs and build it for native
     use crate::components::Component;
     let component = crate::app::app_logic(state);
-    component.build()
+    component.build().0
 }
