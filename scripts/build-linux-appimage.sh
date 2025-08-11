@@ -19,7 +19,7 @@ mkdir -p "$APP_DIR/usr/share/applications"
 mkdir -p "$APP_DIR/usr/share/icons/hicolor/256x256/apps"
 
 # Copy binary
-cp target/release/xilem_example_desktop "$APP_DIR/usr/bin/$APP_NAME"
+cp target/release/xilem_abcdeez_desktop "$APP_DIR/usr/bin/$APP_NAME"
 
 # Create desktop entry
 cat > "$APP_DIR/usr/share/applications/$APP_NAME.desktop" << EOF

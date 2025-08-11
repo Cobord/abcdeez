@@ -29,7 +29,7 @@
 
 /* Begin PBXFileReference section */
 		160DB77300A3F1806F024D47 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
-		55EAC02897847195D2F44C15 /* xilem_example_mobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = xilem_example_mobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		55EAC02897847195D2F44C15 /* xilem_abcdeez_mobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = xilem_abcdeez_mobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		57CD6305253C7A940098CD4A /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
 		8EE7F1E3B0303533925D7E33 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		96A1E5B62F48B379829E8A0D /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
@@ -62,7 +62,7 @@
 		321F7D6A765B38E746C35105 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				55EAC02897847195D2F44C15 /* xilem_example_mobile.app */,
+				55EAC02897847195D2F44C15 /* xilem_abcdeez_mobile.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -121,9 +121,9 @@
 /* End PBXLegacyTarget section */
 
 /* Begin PBXNativeTarget section */
-		3BDB8152E4962373181B4FE5 /* xilem_example_mobile */ = {
+		3BDB8152E4962373181B4FE5 /* xilem_abcdeez_mobile */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E714A1AEAAE517C348B5BD27 /* Build configuration list for PBXNativeTarget "xilem_example_mobile" */;
+			buildConfigurationList = E714A1AEAAE517C348B5BD27 /* Build configuration list for PBXNativeTarget "xilem_abcdeez_mobile" */;
 			buildPhases = (
 				9F13800790AD9DBC2BC0F116 /* Sources */,
 				D5A822CB2D6847BA8800BE4C /* Frameworks */,
@@ -134,9 +134,9 @@
 			dependencies = (
 				19D4B9C22ADC6705B5132B4C /* PBXTargetDependency */,
 			);
-			name = xilem_example_mobile;
-			productName = xilem_example_mobile;
-			productReference = 55EAC02897847195D2F44C15 /* xilem_example_mobile.app */;
+			name = xilem_abcdeez_mobile;
+			productName = xilem_abcdeez_mobile;
+			productReference = 55EAC02897847195D2F44C15 /* xilem_abcdeez_mobile.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -148,7 +148,7 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1640;
 			};
-			buildConfigurationList = 9D43D41707A5C30B227B83F9 /* Build configuration list for PBXProject "xilem_example_mobile" */;
+			buildConfigurationList = 9D43D41707A5C30B227B83F9 /* Build configuration list for PBXProject "xilem_abcdeez_mobile" */;
 			compatibilityVersion = "Xcode 10.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -160,7 +160,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				3BDB8152E4962373181B4FE5 /* xilem_example_mobile */,
+				3BDB8152E4962373181B4FE5 /* xilem_abcdeez_mobile */,
 				D08AEBE0B1A9C9A7B8C7B33F /* cargo_ios */,
 			);
 		};
@@ -297,12 +297,21 @@
 					"$(inherited)",
 					"./target/x86_64-apple-ios/release",
 				);
+				// For Mac Catalyst (iPad app running on Mac)
+				"LIBRARY_SEARCH_PATHS[sdk=macosx*][arch=arm64]" = (
+					"$(inherited)",
+					"./target/aarch64-apple-ios-macabi/release",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=macosx*][arch=x86_64]" = (
+					"$(inherited)",
+					"./target/x86_64-apple-ios-macabi/release",
+				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-lxilem_example_mobile",
+					"-lxilem_abcdeez_mobile",
 					"-lc++abi",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.xilem.example;
+				PRODUCT_BUNDLE_IDENTIFIER = online.fg-goose.abcdeez;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -408,12 +417,20 @@
 					"$(inherited)",
 					"./target/x86_64-apple-ios/debug",
 				);
+				"LIBRARY_SEARCH_PATHS[sdk=macosx*][arch=arm64]" = (
+					"$(inherited)",
+					"./target/aarch64-apple-ios-macabi/debug",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=macosx*][arch=x86_64]" = (
+					"$(inherited)",
+					"./target/x86_64-apple-ios-macabi/debug",
+				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
-					"-lxilem_example_mobile",
+					"-lxilem_abcdeez_mobile",
 					"-lc++abi",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.xilem.example;
+				PRODUCT_BUNDLE_IDENTIFIER = online.fg-goose.abcdeez;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -436,7 +453,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		9D43D41707A5C30B227B83F9 /* Build configuration list for PBXProject "xilem_example_mobile" */ = {
+		9D43D41707A5C30B227B83F9 /* Build configuration list for PBXProject "xilem_abcdeez_mobile" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				4AD7BC6FDD56FF18FA6DA7D7 /* Debug */,
@@ -454,7 +471,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		E714A1AEAAE517C348B5BD27 /* Build configuration list for PBXNativeTarget "xilem_example_mobile" */ = {
+		E714A1AEAAE517C348B5BD27 /* Build configuration list for PBXNativeTarget "xilem_abcdeez_mobile" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A2D5B73DD30D562B6F366526 /* Debug */,

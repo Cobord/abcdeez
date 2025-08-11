@@ -6,16 +6,40 @@ description = "Desktop application for graph learning"
 license = "MIT OR Apache-2.0"
 authors.workspace = true
 
+[[bin]]
+name = "abcdeez"
+path = "src/main.rs"
+
 # Distribution metadata
 [package.metadata.dist]
 # Specify this binary should be distributed
 dist = true
 
+# Windows-specific metadata
 [package.metadata.wix]
 upgrade-guid = "A2B3C4D5-E6F7-8901-2345-678901234567"
 path-guid = "B3C4D5E6-F789-0123-4567-890123456789"
 license = false
 eula = false
+
+# macOS bundle metadata
+[package.metadata.bundle]
+name = "ABCDeez"
+identifier = "online.fg-goose.abcdeez"
+icon = ["icons/icon.icns"]
+category = "public.app-category.education"
+short_description = "Adaptive graph-coded learning system"
+long_description = "ABCDeez is an adaptive graph-coded learning system for cognitive modeling"
+
+# Linux desktop entry
+[package.metadata.deb]
+depends = "$auto"
+section = "education"
+priority = "optional"
+assets = [
+    ["target/release/abcdeez", "/usr/bin/", "755"],
+    ["README.md", "/usr/share/doc/abcdeez/", "644"],
+]
 
 [dependencies]
 abcdeez-app = { path = "../../xilem-app" }

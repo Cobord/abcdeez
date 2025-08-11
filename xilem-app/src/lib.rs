@@ -1,5 +1,7 @@
 // Library module for xilem-app
 
+use xilem::EventLoopBuilder;
+
 pub mod app;
 pub mod components;
 pub mod models;
@@ -8,7 +10,7 @@ pub mod state;
 pub mod utils;
 pub mod views;
 
-pub fn run() -> Result<(), winit::error::EventLoopError> {
+pub fn run(ev: EventLoopBuilder) -> Result<(), winit::error::EventLoopError> {
     // Initialize tracing for debugging
     tracing_subscriber::fmt::init();
     tracing::info!("Starting ABCDEEZ Learning App");
@@ -27,6 +29,6 @@ pub fn run() -> Result<(), winit::error::EventLoopError> {
     );
 
     // Run the application
-    app.run_in(winit::event_loop::EventLoop::with_user_event())?;
+    app.run_in(ev)?;
     Ok(())
 }

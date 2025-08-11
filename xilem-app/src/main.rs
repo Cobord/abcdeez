@@ -2,5 +2,5 @@
 // Main entry point for the ABCDEEZ Xilem learning application
 
 fn main() {
-    abcdeez_app::run().expect("App exited with error");
+    abcdeez_app::run(winit::event_loop::EventLoop::with_user_event()).expect("App exited with error");
 }

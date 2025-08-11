@@ -1,5 +1,5 @@
 use abcdeez_app::run;
 
 pub fn main() {
-    run().expect("App exited with error");
+    run(winit::event_loop::EventLoop::with_user_event()).expect("App exited with error");
 }

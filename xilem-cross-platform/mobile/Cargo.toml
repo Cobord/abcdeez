@@ -17,7 +17,7 @@ winit.workspace = true
 pollster = "0.3.0"
 
 [package.metadata.android]
-package = "org.xilem.abcdeez"
+package = "online.fg-goose.abcdeez"
 apk_name = "xilemabcdeez"
 # This strips debug symbols from the shared libraries, drastically reducing APK
 # size. If you need them, remove the option.

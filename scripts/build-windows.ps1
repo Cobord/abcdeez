@@ -11,7 +11,7 @@ $distDir = "..\..\dist\windows"
 New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 
 # Copy executable
-Copy-Item "target\release\xilem_example_desktop.exe" "$distDir\GraphLearning.exe"
+Copy-Item "target\release\xilem_abcdeez_desktop.exe" "$distDir\GraphLearning.exe"
 
 # Check if WiX Toolset is installed
 $wixPath = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin"

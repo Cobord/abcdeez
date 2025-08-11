@@ -18,7 +18,7 @@ mkdir -p "$BUNDLE_DIR/Contents/MacOS"
 mkdir -p "$BUNDLE_DIR/Contents/Resources"
 
 # Copy binary
-cp target/release/xilem_example_desktop "$BUNDLE_DIR/Contents/MacOS/$APP_NAME"
+cp target/release/xilem_abcdeez_desktop "$BUNDLE_DIR/Contents/MacOS/$APP_NAME"
 
 # Create Info.plist
 cat > "$BUNDLE_DIR/Contents/Info.plist" << EOF
