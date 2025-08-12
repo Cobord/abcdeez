@@ -1,10 +1,12 @@
 // Enhanced dashboard view with live metrics, gamification, and analytics
 
 use crate::state::{AppState, Screen};
-use crate::components::{Components, AppComponents, AppColor, ComponentOutput};
+use crate::components::{Components, AppComponents, AppColor, ComponentOutput, responsive, SpacerSize};
+use crate::components::layout::{dashboard_grid, page_layout};
+use crate::components::cards::{stat_card_with_trend, Trend, metric_card, achievement_card};
 use chrono::Utc;
 
-pub fn dashboard_view(state: &mut AppState) -> ComponentOutput {
+pub fn dashboard_view(state: &mut AppState, window_width: f64) -> ComponentOutput {
     // Build the enhanced dashboard with live metrics
     let username = state.user.as_ref()
         .map(|u| u.username.as_str())
@@ -178,11 +180,14 @@ pub fn dashboard_view(state: &mut AppState) -> ComponentOutput {
         vec![]
     };
     
-    // Build sections
-    let stats_section = Components::settings_section(
-        "Live Metrics",
-        session_metrics
-    );
+    // Build responsive grid layout for stats
+    let all_stats = [
+        session_metrics,
+        gamification_stats,
+        cognitive_metrics,
+    ].concat();
+    
+    let stats_grid = dashboard_grid(all_stats, window_width);
     
     let gamification_section = Components::settings_section(
         "Gamification",
@@ -239,23 +244,44 @@ pub fn dashboard_view(state: &mut AppState) -> ComponentOutput {
         }
     );
     
-    // Combine everything into the app scaffold
-    let content = Components::settings_section(
-        "",
-        vec![
-            welcome,
-            stats_section,
-            gamification_section,
-            cognitive_section,
-            goals_section,
-            quick_actions,
-            achievements_section,
-            powerups_section,
-        ]
+    // Build main content with responsive layout
+    let mut content_items = vec![
+        welcome,
+        Components::spacer(SpacerSize::Medium),
+        stats_grid,
+        Components::spacer(SpacerSize::Large),
+    ];
+    
+    // Add sections if not empty
+    if !weekly_goals.is_empty() {
+        content_items.push(Components::settings_section("Weekly Goals", weekly_goals));
+    }
+    if !recent_achievements.is_empty() {
+        content_items.push(Components::settings_section("Recent Achievements", recent_achievements));
+    }
+    if !active_powerups.is_empty() {
+        content_items.push(Components::settings_section("Active Power-ups", active_powerups));
+    }
+    
+    // Add quick actions
+    content_items.push(quick_actions);
+
+    // Append Little Crab card if active
+    if state.easter_egg_manager.crab.active {
+        content_items.push(render_little_crab(state));
+    }
+
+    let content = Components::simple_flex_column(content_items);
+    
+    // Use page layout for consistent structure
+    let page_content = page_layout(
+        "ABCDEEZ Dashboard",
+        Some(&format!("Welcome back, {}!", username)),
+        content
     );
     
     // Fill screen; center content with max-width in components
-    Components::app_scaffold(header, content, Some(bottom_nav))
+    Components::app_scaffold(header, page_content, Some(bottom_nav))
 }
 
 // Helper functions
@@ -301,7 +327,7 @@ fn format_time_ago(time: chrono::DateTime<chrono::Utc>) -> String {
 }
 
 // Render the Little Crab overlay
-fn render_little_crab(state: &AppState) -> ComponentOutput {
+pub fn render_little_crab(state: &AppState) -> ComponentOutput {
     let crab = &state.easter_egg_manager.crab;
     
     if !crab.active {

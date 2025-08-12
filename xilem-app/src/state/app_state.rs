@@ -150,10 +150,18 @@ pub struct AppState {
     pub session: Option<SessionState>,
     pub learner_model: Option<LearnerModel>,
     pub adaptive_service: Option<AdaptiveLearningService>,
+    pub current_task_start_time: Option<std::time::Instant>,
 
     // Navigation
     pub current_screen: Screen,
     pub navigation_stack: Vec<Screen>,
+    
+    // UI State - tab positions for each screen
+    pub tab_states: HashMap<String, usize>,  // screen_name -> current_tab_index
+    pub form_states: HashMap<String, String>,  // form_field_id -> value
+    pub selected_domain: Option<String>,  // Currently selected domain in leaderboard
+    pub search_query: String,  // Current search query in sidebar/friends
+    pub settings_toggles: HashMap<String, bool>,  // settings_key -> enabled
 
     // UI State
     pub loading: HashSet<LoadingKey>,
@@ -163,6 +171,8 @@ pub struct AppState {
     // Responsive UI metrics
     pub ui_scale: f64,
     pub safe_area_insets: SafeAreaInsets,
+    pub window_width: f64,
+    pub window_height: f64,
 
     // Sync & Offline
     pub sync_queue: Vec<PendingResponse>,
@@ -218,14 +228,22 @@ impl Default for AppState {
             session: None,
             learner_model: None,
             adaptive_service: None,
+            current_task_start_time: None,
             current_screen: Screen::Welcome,
             navigation_stack: Vec::new(),
+            tab_states: HashMap::new(),
+            form_states: HashMap::new(),
+            selected_domain: None,
+            search_query: String::new(),
+            settings_toggles: HashMap::new(),
             loading: HashSet::new(),
             errors: Vec::new(),
             theme: Theme::default(),
             theme_mode: ThemeMode::Light,
             ui_scale: 1.0,
             safe_area_insets: SafeAreaInsets::zero(),
+            window_width: 1024.0,  // Default desktop width
+            window_height: 768.0,  // Default desktop height
             sync_queue: Vec::new(),
             last_sync: None,
             connection_status: ConnectionStatus::Disconnected,
@@ -288,17 +306,62 @@ impl AppState {
         }
     }
     
+    // Tab state management
+    pub fn get_tab_state(&self, screen_key: &str) -> usize {
+        self.tab_states.get(screen_key).copied().unwrap_or(0)
+    }
+    
+    pub fn set_tab_state(&mut self, screen_key: String, index: usize) {
+        self.tab_states.insert(screen_key, index);
+    }
+    
+    // Form state management
+    pub fn get_form_value(&self, field_id: &str) -> String {
+        self.form_states.get(field_id).cloned().unwrap_or_default()
+    }
+    
+    pub fn set_form_value(&mut self, field_id: String, value: String) {
+        self.form_states.insert(field_id, value);
+    }
+    
     // Authentication methods
     pub fn login(&mut self) {
+        tracing::info!("Login initiated for user: {}", self.username_input);
+        
+        if self.username_input.is_empty() || self.password_input.is_empty() {
+            tracing::error!("Login failed: empty credentials");
+            self.add_error("Username and password are required".to_string(), true);
+            return;
+        }
+        
         self.login_request_in_flight = true;
-        // TODO: Implement actual login logic
-        // For now, just simulate successful login
+        
+        // TODO: Implement actual login logic with backend
+        // For now, simulate successful login
+        tracing::info!("Simulating successful login for demo");
+        
+        // Create mock user
+        self.user = Some(UserState {
+            id: uuid::Uuid::new_v4(),
+            username: self.username_input.clone(),
+            email: format!("{}@example.com", self.username_input),
+            display_name: Some(self.username_input.clone()),
+            created_at: chrono::Utc::now(),
+            learner_id: Some(uuid::Uuid::new_v4()),
+            level: 1,
+            xp: 0,
+            streak: 0,
+            achievements: Vec::new(),
+        });
+        
+        self.current_user = self.user.clone(); // Compatibility
+        self.password_input.clear(); // Clear sensitive data
         self.login_request_in_flight = false;
         self.current_screen = Screen::Dashboard;
     }
     
     pub fn apple_sign_in(&mut self) {
-        println!("APPLE_SIGN_IN CALLED!");  // Direct println to ensure we see it
+        tracing::info!("Apple Sign In initiated");
         tracing::info!("Starting Apple Sign In flow");
         self.oauth_login_in_flight = true;
         
@@ -311,7 +374,7 @@ impl AppState {
                 // Clone the sender for the background thread
                 let sender = self.auth_event_sender.clone();
                 
-                println!("About to use simpler approach - calling async directly!");
+                tracing::debug!("Using simpler approach for iOS - calling async directly");
                 
                 // Try a much simpler approach - just block on the future directly
                 // Use futures::executor::block_on instead of tokio
@@ -396,7 +459,8 @@ impl AppState {
         // Create a new learner model for guest or authenticated user
         // Note: In a real implementation, we'd need topology and learner ID
         // For now, we'll skip this as it requires proper initialization
-        println!("Creating new learner model (placeholder)");
+        tracing::info!("Creating new learner model for {} mode", if self.is_guest_mode { "guest" } else { "authenticated" });
+        // TODO: Actually create learner model with proper topology
     }
     
     // Easter egg methods
@@ -421,27 +485,28 @@ impl AppState {
         if self.triple_click_count >= 3 {
             self.easter_egg_manager.crab.activate(crate::utils::easter_egg::CrabTrigger::TripleClick);
             self.triple_click_count = 0;
-            println!("🦀 Little Crab activated!");
+            tracing::info!("🦀 Little Crab easter egg activated via triple-click!");
+            self.add_error("🦀 You found Little Crab! He'll help you learn!".to_string(), true);
         }
     }
     
     // Demo methods
     pub fn demo_start(&mut self) {
-        println!("Starting Quick Tour demo");
+        tracing::info!("Starting interactive Quick Tour demo");
         if let Some(ref mut demo) = self.demo_controller {
             let _ = demo.start_scenario("quick_tour");
         }
     }
     
     pub fn demo_start_training(&mut self) {
-        println!("Starting Training Demo");
+        tracing::info!("Starting Training Demo scenario");
         if let Some(ref mut demo) = self.demo_controller {
             let _ = demo.start_scenario("training_demo");
         }
     }
     
     pub fn demo_showcase(&mut self) {
-        println!("Running Demo Showcase");
+        tracing::info!("Running Demo Showcase with sample data");
         if let Some(ref mut demo) = self.demo_controller {
             let _ = demo.start_scenario("showcase");
             // Populate dashboard with demo data

@@ -2,6 +2,13 @@
 // These components abstract over platform differences
 
 mod builders;
+pub mod navigation;
+pub mod responsive;
+pub mod sidebar;
+pub mod layout;
+pub mod cards;
+pub mod forms;
+pub mod feedback;
 
 use crate::state::{AppState, Screen};
 use crate::models::Task;
@@ -15,21 +22,27 @@ pub trait Component: Sized {
     fn build(self) -> Self::Output;
 }
 
-// High-level app-specific components
+// Core app components grouped by functionality
 pub trait AppComponents {
     type Output: Component;
+    
+    // Core utility components
+    fn empty() -> Self::Output;
+    fn spacer(size: SpacerSize) -> Self::Output;
+    fn divider(orientation: Orientation) -> Self::Output;
     
     // Card components - used throughout the app
     fn stat_card(title: &str, value: &str, accent_color: AppColor) -> Self::Output;
     fn welcome_card(username: &str, message: &str, on_start: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
     fn activity_card(title: &str, time: &str, highlighted: bool) -> Self::Output;
     fn action_button(text: &str, color: AppColor, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
-    fn empty() -> Self::Output;
     
     // Navigation components
     fn header_bar(title: &str, on_settings: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
     fn bottom_nav_bar(current_screen: Screen, on_navigate: impl Fn(&mut AppState, Screen) + Send + Sync + 'static) -> Self::Output;
     fn nav_button(label: &str, screen: Screen, is_active: bool, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
+    fn sidebar_nav(current_screen: Screen, on_navigate: impl Fn(&mut AppState, Screen) + Send + Sync + 'static) -> Self::Output;
+    fn tab_bar(tabs: Vec<TabItem>, current_index: usize, on_select: impl Fn(&mut AppState, usize) + Send + Sync + 'static) -> Self::Output;
     
     // Learning components
     fn task_presenter(task: &Task, on_answer: impl Fn(&mut AppState, String) + Send + Sync + 'static) -> Self::Output;
@@ -66,6 +79,10 @@ pub trait AppComponents {
     fn app_scaffold(header: Self::Output, content: Self::Output, footer: Option<Self::Output>) -> Self::Output;
     fn centered_container(max_width: f64, child: Self::Output) -> Self::Output;
     fn stats_grid(stats: Vec<Self::Output>) -> Self::Output;
+    fn split_pane(left: Self::Output, right: Self::Output, split_ratio: f64) -> Self::Output;
+    fn scrollable(content: Self::Output) -> Self::Output;
+    fn grid_layout(items: Vec<Self::Output>, cols: usize) -> Self::Output;
+    fn stack(items: Vec<Self::Output>, spacing: f64) -> Self::Output;
     
     // Feedback components
     fn loading_spinner(message: Option<&str>) -> Self::Output;
@@ -125,7 +142,28 @@ pub trait AppComponents {
     fn performance_chart(accuracy: f64, total_responses: usize, correct: usize, avg_time: f64) -> Self::Output;
 }
 
-// App-specific enums that abstract platform differences
+// Design system enums and structs
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SpacerSize {
+    Small,   // 8px
+    Medium,  // 16px 
+    Large,   // 24px
+    XLarge,  // 32px
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Orientation {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Debug, Clone)]
+pub struct TabItem {
+    pub label: String,
+    pub icon: Option<String>,
+    pub badge_count: Option<u32>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AppColor {
     Primary,

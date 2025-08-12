@@ -2,7 +2,7 @@
 use std::ffi::CString;
 use std::os::raw::c_char;
 use tracing::{Event, Level, Metadata, Subscriber};
-use tracing_subscriber::{layer::Context, Layer, EnvFilter};
+use tracing_subscriber::{layer::Context, Layer};
 
 // FFI bindings to the native logging bridge
 #[repr(C)]
@@ -120,6 +120,7 @@ impl tracing::field::Visit for MessageVisitor {
 /// Initialize Apple platform logging
 pub fn init_apple_logging() {
     use tracing_subscriber::prelude::*;
+    use tracing_subscriber::EnvFilter;
     
     // Initialize the native logging system
     let subsystem = CString::new("com.abcdeez.app").unwrap();

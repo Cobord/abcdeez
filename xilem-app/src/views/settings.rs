@@ -1,51 +1,41 @@
 // Enhanced settings view with advanced configurations
 
 use crate::state::{AppState, Screen, ThemeMode};
-use crate::components::{Components, AppComponents, AppTheme, AppColor, ComponentOutput};
+use crate::components::{Components, AppComponents, AppTheme, AppColor, ComponentOutput, SpacerSize, TabItem};
+use crate::components::layout::{page_layout, tab_layout_with_state, two_column_layout};
+use crate::components::forms::{toggle_switch, slider, dropdown, radio_group};
+use crate::components::cards::{metric_card};
+use crate::components::feedback::{confirmation_dialog};
 
-pub fn settings_view(state: &mut AppState) -> ComponentOutput {
-    let header = Components::header_bar("Settings", |state| {
-        state.navigate_back();
-    });
+pub fn settings_view(state: &mut AppState, window_width: f64) -> ComponentOutput {
+    // Create tabbed settings interface
+    let tabs = vec![
+        ("General", general_settings_tab(state)),
+        ("Learning", learning_settings_tab(state)),
+        ("Appearance", appearance_settings_tab(state)),
+        ("Privacy", privacy_settings_tab(state)),
+        ("Advanced", advanced_settings_tab(state)),
+    ];
     
-    let profile_section = enhanced_profile_section(state);
-    let learning_section = learning_preferences_section(state);
-    let gamification_section = gamification_settings_section(state);
-    let demo_section = demo_preferences_section(state);
-    let appearance_section = appearance_section(state);
-    let accessibility_section = accessibility_section(state);
-    let notifications_section = notifications_section(state);
-    let advanced_section = advanced_settings_section(state);
-    let account_section = account_management_section(state);
-    let about_section = about_section(state);
+    let tabbed_content = tab_layout_with_state(state, "settings", tabs);
     
-    let content = Components::settings_section(
-        "",
-        vec![
-            profile_section,
-            learning_section,
-            gamification_section,
-            demo_section,
-            appearance_section,
-            accessibility_section,
-            notifications_section,
-            advanced_section,
-            account_section,
-            about_section,
-        ]
-    );
+    // Profile header at top
+    let profile_header = profile_header_section(state, window_width);
     
-    let bottom_nav = Components::bottom_nav_bar(
-        Screen::Settings,
-        |state, screen| {
-            state.navigate(screen);
-        }
-    );
+    let content = Components::simple_flex_column(vec![
+        profile_header,
+        Components::spacer(SpacerSize::Medium),
+        tabbed_content,
+    ]);
     
-    Components::app_scaffold(header, content, Some(bottom_nav))
+    page_layout(
+        "Settings",
+        Some("Customize your experience"),
+        content
+    )
 }
 
-fn enhanced_profile_section(state: &AppState) -> ComponentOutput {
+fn profile_header_section(state: &AppState, window_width: f64) -> ComponentOutput {
     let profile = state.get_current_user_profile();
     let username = state.user.as_ref()
         .map(|u| u.username.as_str())
@@ -85,15 +75,39 @@ fn enhanced_profile_section(state: &AppState) -> ComponentOutput {
         "View Achievements",
         AppColor::Success,
         |state| {
-            // TODO: Navigate to achievements screen
+            tracing::info!("Navigating to achievements (via Profile for now)");
             state.navigate(Screen::Profile);
         }
     );
     
-    Components::settings_section(
-        "Profile",
-        vec![avatar, xp_progress, edit_button, view_achievements]
-    )
+    let profile_content = Components::simple_flex_column(vec![
+        avatar,
+        Components::spacer(SpacerSize::Small),
+        xp_progress,
+        Components::spacer(SpacerSize::Medium),
+        Components::simple_flex_row(vec![edit_button, view_achievements]),
+    ]);
+    
+    if window_width > 768.0 {
+        // Show stats on the side for larger screens
+        let stats = if let Some(profile) = state.get_current_user_profile() {
+            vec![
+                metric_card("🏆", "Achievements", &profile.achievements.len().to_string(), None, AppColor::Warning),
+                metric_card("🔥", "Streak", &format!("{} days", profile.streak.current), None, AppColor::Success),
+                metric_card("⭐", "Rank", &profile.rank.title, Some(&format!("Tier {}", profile.rank.tier)), AppColor::Primary),
+            ]
+        } else {
+            vec![]
+        };
+        
+        two_column_layout(
+            profile_content,
+            Components::simple_flex_column(stats),
+            window_width
+        )
+    } else {
+        profile_content
+    }
 }
 
 fn learning_preferences_section(_state: &mut AppState) -> ComponentOutput {
@@ -104,8 +118,9 @@ fn learning_preferences_section(_state: &mut AppState) -> ComponentOutput {
             "Normal",
             Screen::Settings,
             false,
-            |_state| {
-                // TODO: Show speed selector
+            |state| {
+                tracing::error!("Learning speed selector not implemented");
+                state.add_error("Learning speed selector coming soon!".to_string(), true);
             }
         )
     );
@@ -117,18 +132,20 @@ fn learning_preferences_section(_state: &mut AppState) -> ComponentOutput {
             "Adaptive",
             Screen::Settings,
             false,
-            |_state| {
-                // TODO: Show difficulty selector
+            |state| {
+                tracing::error!("Difficulty selector not implemented");
+                state.add_error("Difficulty selector coming soon!".to_string(), true);
             }
         )
     );
     
     // Hint preferences
+    let hints_enabled = _state.settings_toggles.get("hints_enabled").copied().unwrap_or(true);
     let hints = Components::checkbox(
-        true,
+        hints_enabled,
         "Enable Hints",
-        |_state, _checked| {
-            // TODO: Update hint preference
+        |state, checked| {
+            state.settings_toggles.insert("hints_enabled".to_string(), checked);
         }
     );
     
@@ -159,11 +176,12 @@ fn learning_preferences_section(_state: &mut AppState) -> ComponentOutput {
     );
     
     // Spaced repetition
+    let spaced_rep_enabled = _state.settings_toggles.get("spaced_repetition").copied().unwrap_or(true);
     let spaced_rep = Components::checkbox(
-        true,
+        spaced_rep_enabled,
         "Enable Spaced Repetition",
-        |_state, _checked| {
-            // TODO: Toggle spaced repetition
+        |state, checked| {
+            state.settings_toggles.insert("spaced_repetition".to_string(), checked);
         }
     );
     
@@ -176,11 +194,12 @@ fn learning_preferences_section(_state: &mut AppState) -> ComponentOutput {
 fn gamification_settings_section(_state: &mut AppState) -> ComponentOutput {
     let profile = _state.get_current_user_profile();
     // Streak notifications
+    let streak_enabled = _state.settings_toggles.get("streak_reminders").copied().unwrap_or(true);
     let streak_notifications = Components::checkbox(
-        true,
+        streak_enabled,
         "Streak Reminders",
-        |_state, _checked| {
-            // TODO: Toggle streak notifications
+        |state, checked| {
+            state.settings_toggles.insert("streak_reminders".to_string(), checked);
         }
     );
     
@@ -247,8 +266,9 @@ fn demo_preferences_section(_state: &mut AppState) -> ComponentOutput {
             "Normal (1.0x)",
             Screen::Settings,
             false,
-            |_state| {
-                // TODO: Show speed selector
+            |state| {
+                tracing::error!("Demo speed selector not implemented");
+                state.add_error("Demo speed selector coming soon!".to_string(), true);
             }
         )
     );
@@ -360,8 +380,9 @@ fn appearance_section(state: &mut AppState) -> ComponentOutput {
     let animations = Components::checkbox(
         true,
         "Enable Animations",
-        |_state, _checked| {
-            // TODO: Toggle animations
+        |state, checked| {
+            state.settings_toggles.insert("animations_enabled".to_string(), checked);
+            tracing::info!("Animations: {}", if checked { "enabled" } else { "disabled" });
         }
     );
     
@@ -369,8 +390,9 @@ fn appearance_section(state: &mut AppState) -> ComponentOutput {
     let reduce_motion = Components::checkbox(
         false,
         "Reduce Motion",
-        |_state, _checked| {
-            // TODO: Toggle reduced motion
+        |state, checked| {
+            state.settings_toggles.insert("reduce_motion".to_string(), checked);
+            tracing::info!("Reduce motion: {}", if checked { "enabled" } else { "disabled" });
         }
     );
     
@@ -570,8 +592,9 @@ fn account_management_section(_state: &mut AppState) -> ComponentOutput {
     let export_button = Components::action_button(
         "Export All Data",
         AppColor::Primary,
-        |_state| {
-            // TODO: Export user data
+        |state| {
+            tracing::error!("Export user data not implemented");
+            state.add_error("Data export feature coming soon!".to_string(), true);
         }
     );
     
@@ -620,8 +643,9 @@ fn account_management_section(_state: &mut AppState) -> ComponentOutput {
     // Delete account
     let delete_button = Components::error_banner(
         "Delete Account",
-        |_state| {
-            // TODO: Confirm and delete account
+        |state| {
+            tracing::error!("Account deletion not implemented");
+            state.add_error("Please contact support to delete your account".to_string(), true);
         }
     );
     
@@ -710,4 +734,81 @@ fn map_app_theme_to_theme_mode(theme: AppTheme) -> ThemeMode {
         AppTheme::Dark => ThemeMode::Dark,
         AppTheme::Auto => ThemeMode::Auto,
     }
+}
+
+// New tab-based settings functions
+fn general_settings_tab(state: &mut AppState) -> ComponentOutput {
+    let mut items = vec![];
+    
+    // Learning preferences
+    items.push(Components::label("Learning Preferences"));
+    items.push(Components::spacer(SpacerSize::Small));
+    items.push(learning_preferences_section(state));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Gamification
+    items.push(Components::label("Gamification"));
+    items.push(Components::spacer(SpacerSize::Small));
+    items.push(gamification_settings_section(state));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Notifications
+    items.push(Components::label("Notifications"));
+    items.push(Components::spacer(SpacerSize::Small));
+    items.push(notifications_section(state));
+    
+    Components::simple_flex_column(items)
+}
+
+fn learning_settings_tab(state: &mut AppState) -> ComponentOutput {
+    let mut items = vec![];
+    
+    items.push(learning_preferences_section(state));
+    items.push(Components::spacer(SpacerSize::Large));
+    items.push(demo_preferences_section(state));
+    
+    Components::simple_flex_column(items)
+}
+
+fn appearance_settings_tab(state: &mut AppState) -> ComponentOutput {
+    let mut items = vec![];
+    
+    items.push(appearance_section(state));
+    items.push(Components::spacer(SpacerSize::Large));
+    items.push(accessibility_section(state));
+    
+    Components::simple_flex_column(items)
+}
+
+fn privacy_settings_tab(state: &mut AppState) -> ComponentOutput {
+    let mut items = vec![];
+    
+    items.push(account_management_section(state));
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Privacy specific settings
+    items.push(Components::card(
+        "Data Privacy",
+        Components::simple_flex_column(vec![
+            toggle_switch("Share Analytics", true, |_state, _checked| {}),
+            Components::spacer(SpacerSize::Small),
+            toggle_switch("Personalized Recommendations", true, |_state, _checked| {}),
+            Components::spacer(SpacerSize::Small),
+            toggle_switch("Usage Statistics", false, |_state, _checked| {}),
+        ])
+    ));
+    
+    Components::simple_flex_column(items)
+}
+
+fn advanced_settings_tab(state: &mut AppState) -> ComponentOutput {
+    let mut items = vec![];
+    
+    items.push(advanced_settings_section(state));
+    items.push(Components::spacer(SpacerSize::Large));
+    items.push(about_section(state));
+    
+    Components::simple_flex_column(items)
 }

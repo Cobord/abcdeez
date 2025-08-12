@@ -6,13 +6,13 @@ use xilem_web::interfaces::Element;
 use wasm_bindgen::JsCast;
 use crate::state::{AppState, Screen};
 use crate::models::Task;
-use super::{AppComponents, Component, AppColor, AppTheme};
+use super::{AppComponents, Component, AppColor, AppTheme, SpacerSize, Orientation, TabItem};
 
 // Type alias for type-erased web views
 type WebDomView = Box<AnyDomView<AppState>>;
 
 // Web component wrapper using xilem_web's AnyDomView
-pub struct WebComponent(WebDomView);
+pub struct WebComponent(pub WebDomView);
 
 impl Component for WebComponent {
     type Output = WebComponent;
@@ -53,6 +53,31 @@ impl AppComponents for WebComponents {
     
     fn empty() -> Self::Output {
         WebComponent(Box::new(el::div("")))
+    }
+    
+    fn spacer(size: SpacerSize) -> Self::Output {
+        let height = match size {
+            SpacerSize::Small => "8px",
+            SpacerSize::Medium => "16px",
+            SpacerSize::Large => "24px",
+            SpacerSize::XLarge => "32px",
+        };
+        WebComponent(Box::new(
+            el::div("")
+                .attr("style", format!("height: {}; width: 100%;", height))
+        ))
+    }
+    
+    fn divider(orientation: Orientation) -> Self::Output {
+        let style = match orientation {
+            Orientation::Horizontal => "width: 100%; height: 1px; background: #e0e0e0;",
+            Orientation::Vertical => "width: 1px; height: 100%; background: #e0e0e0;",
+        };
+        WebComponent(Box::new(
+            el::div("")
+                .attr("style", style)
+                .attr("class", "divider")
+        ))
     }
     
     fn action_button(text: &str, color: AppColor, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
@@ -114,6 +139,62 @@ impl AppComponents for WebComponents {
                 .on_click(move |state: &mut AppState, _| {
                     on_click(state);
                 })
+        ))
+    }
+    
+    fn sidebar_nav(current_screen: Screen, on_navigate: impl Fn(&mut AppState, Screen) + Send + Sync + 'static) -> Self::Output {
+        use crate::components::sidebar::{sidebar_navigation, SidebarConfig};
+        
+        // Create a placeholder sidebar for web
+        let items = vec![
+            Self::nav_button("Dashboard", Screen::Dashboard, current_screen == Screen::Dashboard, {
+                let on_nav = on_navigate.clone();
+                move |state| on_nav(state, Screen::Dashboard)
+            }),
+            Self::nav_button("Learning", Screen::Learning, current_screen == Screen::Learning, {
+                let on_nav = on_navigate.clone();
+                move |state| on_nav(state, Screen::Learning)
+            }),
+        ];
+        
+        WebComponent(Box::new(
+            el::nav(items.into_iter().map(|item| item.0).collect::<Vec<_>>())
+                .attr("class", "sidebar-nav")
+        ))
+    }
+    
+    fn tab_bar(tabs: Vec<TabItem>, current_index: usize, on_select: impl Fn(&mut AppState, usize) + Send + Sync + 'static) -> Self::Output {
+        let on_select = std::sync::Arc::new(on_select);
+        
+        let tab_buttons: Vec<WebDomView> = tabs.into_iter()
+            .enumerate()
+            .map(|(idx, tab)| {
+                let is_active = idx == current_index;
+                let class = if is_active { "tab active" } else { "tab" };
+                let on_select_clone = on_select.clone();
+                
+                let mut label_parts = vec![];
+                if let Some(icon) = tab.icon {
+                    label_parts.push(icon);
+                }
+                label_parts.push(tab.label);
+                if let Some(count) = tab.badge_count {
+                    label_parts.push(format!("({})", count));
+                }
+                
+                Box::new(
+                    el::button(label_parts.join(" "))
+                        .attr("class", class)
+                        .on_click(move |state: &mut AppState, _| {
+                            on_select_clone(state, idx);
+                        })
+                ) as WebDomView
+            })
+            .collect();
+        
+        WebComponent(Box::new(
+            el::div(tab_buttons)
+                .attr("class", "tab-bar")
         ))
     }
     
@@ -405,6 +486,55 @@ impl AppComponents for WebComponents {
         
         WebComponent(Box::new(
             el::div(views).attr("class", "stats-grid")
+        ))
+    }
+    
+    fn split_pane(left: Self::Output, right: Self::Output, split_ratio: f64) -> Self::Output {
+        let left_width = (split_ratio * 100.0) as u32;
+        let right_width = 100 - left_width;
+        
+        WebComponent(Box::new(
+            el::div((
+                el::div(left.0)
+                    .attr("class", "split-left")
+                    .attr("style", format!("width: {}%;", left_width)),
+                el::div(right.0)
+                    .attr("class", "split-right")
+                    .attr("style", format!("width: {}%;", right_width)),
+            ))
+            .attr("class", "split-pane")
+        ))
+    }
+    
+    fn scrollable(content: Self::Output) -> Self::Output {
+        WebComponent(Box::new(
+            el::div(content.0)
+                .attr("class", "scrollable")
+                .attr("style", "overflow-y: auto; height: 100%;")
+        ))
+    }
+    
+    fn grid_layout(items: Vec<Self::Output>, cols: usize) -> Self::Output {
+        let views: Vec<WebDomView> = items.into_iter()
+            .map(|item| item.0)
+            .collect();
+        
+        WebComponent(Box::new(
+            el::div(views)
+                .attr("class", "grid-layout")
+                .attr("style", format!("display: grid; grid-template-columns: repeat({}, 1fr); gap: 16px;", cols))
+        ))
+    }
+    
+    fn stack(items: Vec<Self::Output>, spacing: f64) -> Self::Output {
+        let views: Vec<WebDomView> = items.into_iter()
+            .map(|item| item.0)
+            .collect();
+        
+        WebComponent(Box::new(
+            el::div(views)
+                .attr("class", "stack")
+                .attr("style", format!("display: flex; flex-direction: column; gap: {}px;", spacing))
         ))
     }
     

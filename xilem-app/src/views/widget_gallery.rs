@@ -1,411 +1,690 @@
-use crate::components::{Component, ComponentOutput, Components, AppComponents, AppColor, AppTheme};
+// Exhaustive widget gallery showcasing ALL components in the new component library
+
+use crate::components::{Component, ComponentOutput, Components, AppComponents, AppColor, AppTheme, SpacerSize, Orientation, TabItem};
+use crate::components::layout::{page_layout, dashboard_grid, tab_layout, two_column_layout, content_container, with_fab};
+use crate::components::cards::{stat_card_with_trend, Trend, metric_card, achievement_card, leaderboard_card, challenge_card, ChallengeDifficulty, session_summary_card, feature_card, domain_card_enhanced, DomainStats};
+use crate::components::forms::{form_field, FieldType, toggle_switch, slider, radio_group, dropdown, date_picker, time_picker, multi_select, file_upload, color_picker, form_with_validation, FormField};
+use crate::components::feedback::{toast, ToastType, progress_indicator, skeleton_loader, alert, AlertType, AlertAction, confirmation_dialog, snackbar, status_badge, StatusType, loading_overlay_with_progress, help_tooltip, inline_error, success_indicator, step_indicator};
 use crate::state::{AppState, Screen};
-use crate::viz::{sparkline, progress_ring_chart};
 use crate::models::Response;
 
-/// Comprehensive hidden widget gallery showcasing all components
-pub fn widget_gallery() -> ComponentOutput {
-    let mut sections = vec![];
+/// Exhaustive widget gallery showcasing ALL components
+pub fn widget_gallery(window_width: f64) -> ComponentOutput {
+    let tabs = vec![
+        ("Core", core_components_tab(window_width)),
+        ("Layout", layout_components_tab(window_width)),
+        ("Cards", cards_components_tab()),
+        ("Forms", forms_components_tab()),
+        ("Feedback", feedback_components_tab()),
+        ("Navigation", navigation_components_tab()),
+        ("Learning", learning_components_tab()),
+        ("Visualization", visualization_components_tab()),
+        ("Advanced", advanced_components_tab()),
+    ];
     
-    // Header
-    sections.push(Components::simple_label("🎨 Widget Gallery - Component Showcase".to_string()));
-    sections.push(Components::simple_label("Hidden testing page for all UI components".to_string()));
+    let tabbed_content = tab_layout(tabs, 0);
     
-    // 1. Basic UI Components
-    sections.push(basic_components_section());
-    
-    // 2. Form Controls
-    sections.push(form_controls_section());
-    
-    // 3. Navigation Components
-    sections.push(navigation_components_section());
-    
-    // 4. Feedback & Status
-    sections.push(feedback_components_section());
-    
-    // 5. Cards & Containers
-    sections.push(cards_containers_section());
-    
-    // 6. Task & Learning Components
-    sections.push(learning_components_section());
-    
-    // 7. Visualization Components
-    sections.push(visualization_components_section());
-    
-    // 8. Demo-Aware Components
-    sections.push(demo_components_section());
-    
-    // 9. Modal & Overlay Components
-    sections.push(modal_components_section());
-    
-    // 10. Advanced Layouts
-    sections.push(layout_components_section());
-    
-    // Navigation back
-    sections.push(Components::simple_button("🔙 Back to Dashboard", |state: &mut AppState| {
-        state.current_screen = Screen::Dashboard;
-    }));
-    
-    Components::simple_flex_column(sections)
-}
-
-fn basic_components_section() -> ComponentOutput {
-    Components::card(
-        "🔤 Basic UI Components",
-        Components::simple_flex_column(vec![
-            Components::simple_label("Text and Labels:".to_string()),
-            Components::simple_label("This is a simple label".to_string()),
-            
-            Components::simple_label("Buttons:".to_string()),
-            Components::simple_flex_row(vec![
-                Components::simple_button("Primary", |_| println!("Primary clicked")),
-                Components::simple_button("Secondary", |_| println!("Secondary clicked")),
-                Components::simple_button("Danger ⚠️", |_| println!("Danger clicked")),
-            ]),
-            
-            Components::simple_label("Progress Indicators:".to_string()),
-            Components::progress_bar(0.75, "75% Complete"),
-            Components::progress_bar(0.33, "Loading..."),
-            Components::progress_bar(1.0, "Finished! ✅"),
-        ])
+    page_layout(
+        "🎨 Component Gallery",
+        Some("Exhaustive showcase of all UI components"),
+        tabbed_content
     )
 }
 
-fn form_controls_section() -> ComponentOutput {
-    Components::card(
-        "📝 Form Controls",
-        Components::simple_flex_column(vec![
-            Components::labeled_input(
-                "Username:",
-                "john_doe".to_string(),
-                |_state, value| println!("Username changed: {}", value)
-            ),
-            
-            Components::labeled_input(
-                "Email:",
-                "john@example.com".to_string(),
-                |_state, value| println!("Email changed: {}", value)
-            ),
-            
-            Components::checkbox(
-                true,
-                "Enable notifications",
-                |_state, checked| println!("Notifications: {}", checked)
-            ),
-            
-            Components::checkbox(
-                false,
-                "Dark mode",
-                |_state, checked| println!("Dark mode: {}", checked)
-            ),
-            
-            Components::theme_selector(
-                AppTheme::Light,
-                |_state, theme| println!("Theme changed: {:?}", theme)
-            ),
-        ])
-    )
-}
-
-fn navigation_components_section() -> ComponentOutput {
-    Components::card(
-        "🧭 Navigation",
-        Components::simple_flex_column(vec![
-            Components::simple_label("Navigation Bar:".to_string()),
-            Components::header_bar(
-                "Application Title",
-                |_state| println!("Settings clicked")
-            ),
-            
-            Components::simple_label("Bottom Navigation:".to_string()),
-            Components::bottom_nav_bar(
-                Screen::Dashboard,
-                |_state, screen| println!("Navigate to: {:?}", screen)
-            ),
-            
-            Components::simple_label("Navigation Buttons:".to_string()),
-            Components::simple_flex_row(vec![
-                Components::nav_button("Home", Screen::Dashboard, true, |_| {}),
-                Components::nav_button("Learn", Screen::Learning, false, |_| {}),
-                Components::nav_button("Profile", Screen::Profile, false, |_| {}),
-            ]),
-        ])
-    )
-}
-
-fn feedback_components_section() -> ComponentOutput {
-    Components::card(
-        "💬 Feedback & Status",
-        Components::simple_flex_column(vec![
-            Components::error_message(Some("❌ An error occurred while loading".to_string())),
-            Components::error_message(None),
-            
-            Components::success_message(Some("✅ Operation completed successfully!".to_string())),
-            Components::success_message(None),
-            
-            Components::toast_notification("🔔 New notification received", false),
-            Components::toast_notification("✅ File uploaded successfully", true),
-            
-            Components::loading_spinner(Some("Loading data...")),
-            Components::loading_overlay("Processing your request..."),
-            
-            Components::error_banner(
-                "Connection lost. Please check your internet.",
-                |_| println!("Error dismissed")
-            ),
-        ])
-    )
-}
-
-fn cards_containers_section() -> ComponentOutput {
-    Components::card(
-        "📦 Cards & Containers",
-        Components::simple_flex_column(vec![
-            Components::stat_card("Total Score", "1,234", AppColor::Primary),
-            Components::stat_card("Accuracy", "92.5%", AppColor::Success),
-            Components::stat_card("Time Spent", "2h 15m", AppColor::Info),
-            
-            Components::welcome_card(
-                "Alice",
-                "Ready to continue your learning journey?",
-                |_| println!("Start learning")
-            ),
-            
-            Components::activity_card("Completed Alphabet Practice", "10 mins ago", false),
-            Components::activity_card("🔥 New High Score!", "1 hour ago", true),
-            
-            Components::metric_display("Speed", "850ms", AppColor::Warning),
-            Components::metric_display("Streak", "7 days", AppColor::Success),
-            
-            Components::empty_state(
-                "📭",
-                "No Messages",
-                "You're all caught up!",
-                Some(Components::simple_button("Refresh", |_| {}))
-            ),
-        ])
-    )
-}
-
-fn learning_components_section() -> ComponentOutput {
-    use crate::models::{Task, TaskType};
-    use abcdeez_core::tasks::core::TaskType as CoreTaskType;
+fn core_components_tab(window_width: f64) -> ComponentOutput {
+    let mut items = vec![];
     
-    let sample_task = Task {
-        task_type: TaskType::Core(CoreTaskType::Successor { item: "B".to_string() }),
-        prompt: "What comes after 'B' in the alphabet?".to_string(),
-        options: vec!["A".to_string(), "C".to_string(), "D".to_string(), "E".to_string()],
-        correct_answer: "C".to_string(),
-        difficulty: 0.3,
-        operation: "next".to_string(),
+    // Spacers
+    items.push(Components::label("Spacers (visual representation):"));
+    items.push(Components::spacer(SpacerSize::Small));
+    items.push(Components::label("↑ Small spacer (8px)"));
+    items.push(Components::spacer(SpacerSize::Medium));
+    items.push(Components::label("↑ Medium spacer (16px)"));
+    items.push(Components::spacer(SpacerSize::Large));
+    items.push(Components::label("↑ Large spacer (24px)"));
+    items.push(Components::spacer(SpacerSize::XLarge));
+    items.push(Components::label("↑ XLarge spacer (32px)"));
+    
+    // Dividers
+    items.push(Components::label("Dividers:"));
+    items.push(Components::divider(Orientation::Horizontal));
+    items.push(Components::label("↑ Horizontal divider"));
+    
+    // Basic components
+    items.push(Components::label("Basic Components:"));
+    items.push(Components::simple_label("Simple label text".to_string()));
+    items.push(Components::label("Regular label"));
+    
+    // Buttons
+    items.push(Components::spacer(SpacerSize::Large));
+    items.push(Components::label("Buttons:"));
+    
+    let button_row = vec![
+        Components::simple_button("Simple", |_| {}),
+        Components::action_button("Primary", AppColor::Primary, |_| {}),
+        Components::action_button("Success", AppColor::Success, |_| {}),
+        Components::action_button("Warning", AppColor::Warning, |_| {}),
+        Components::action_button("Error", AppColor::Error, |_| {}),
+    ];
+    items.push(Components::simple_flex_row(button_row));
+    
+    // Progress bars
+    items.push(Components::spacer(SpacerSize::Large));
+    items.push(Components::label("Progress Bars:"));
+    items.push(Components::progress_bar(0.0, "Empty"));
+    items.push(Components::progress_bar(0.33, "33% Complete"));
+    items.push(Components::progress_bar(0.67, "67% Complete"));
+    items.push(Components::progress_bar(1.0, "Complete!"));
+    
+    // Empty states
+    items.push(Components::spacer(SpacerSize::Large));
+    items.push(Components::label("Empty States:"));
+    items.push(Components::empty_state(
+        "📭",
+        "No Data",
+        "Start adding items to see them here",
+        Some(Components::action_button("Add Item", AppColor::Primary, |_| {}))
+    ));
+    
+    // Loading states
+    items.push(Components::spacer(SpacerSize::Large));
+    items.push(Components::label("Loading States:"));
+    items.push(Components::loading_spinner(Some("Loading content...")));
+    items.push(Components::loading_overlay("Processing request..."));
+    
+    Components::simple_flex_column(items)
+}
+
+fn layout_components_tab(window_width: f64) -> ComponentOutput {
+    let mut items = vec![];
+    
+    items.push(Components::label("Layout Components:"));
+    items.push(Components::spacer(SpacerSize::Medium));
+    
+    // Grid layout
+    items.push(Components::label("Grid Layout (responsive):"));
+    let grid_items = vec![
+        Components::card("Item 1", Components::label("Grid item 1")),
+        Components::card("Item 2", Components::label("Grid item 2")),
+        Components::card("Item 3", Components::label("Grid item 3")),
+        Components::card("Item 4", Components::label("Grid item 4")),
+    ];
+    items.push(dashboard_grid(grid_items, window_width));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Two column layout
+    items.push(Components::label("Two Column Layout:"));
+    let left = Components::card("Left Column", Components::label("Left side content"));
+    let right = Components::card("Right Column", Components::label("Right side content"));
+    items.push(two_column_layout(left, right, window_width));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Split pane
+    items.push(Components::label("Split Pane (40/60):"));
+    let left_pane = Components::card("Left Pane", Components::label("40% width"));
+    let right_pane = Components::card("Right Pane", Components::label("60% width"));
+    items.push(Components::split_pane(left_pane, right_pane, 0.4));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Stack layout
+    items.push(Components::label("Stack Layout:"));
+    let stack_items = vec![
+        Components::card("First", Components::label("Stacked item 1")),
+        Components::card("Second", Components::label("Stacked item 2")),
+        Components::card("Third", Components::label("Stacked item 3")),
+    ];
+    items.push(Components::stack(stack_items, 12.0));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Centered container
+    items.push(Components::label("Centered Container (max-width: 600px):"));
+    items.push(Components::centered_container(
+        600.0,
+        Components::card("Centered", Components::label("This content has a maximum width"))
+    ));
+    
+    // Scrollable container
+    items.push(Components::spacer(SpacerSize::Large));
+    items.push(Components::label("Scrollable Container:"));
+    let many_items = (0..10).map(|i| Components::label(&format!("Item {}", i))).collect();
+    items.push(Components::scrollable(Components::simple_flex_column(many_items)));
+    
+    // FAB layout
+    items.push(Components::spacer(SpacerSize::Large));
+    items.push(Components::label("Floating Action Button:"));
+    let content_with_fab = with_fab(
+        Components::card("Content", Components::label("Main content with FAB")),
+        "➕ Add",
+        |_| {}
+    );
+    items.push(content_with_fab);
+    
+    Components::simple_flex_column(items)
+}
+
+fn cards_components_tab() -> ComponentOutput {
+    let mut items = vec![];
+    
+    // Stat cards with trends
+    items.push(Components::label("Stat Cards with Trends:"));
+    items.push(Components::spacer(SpacerSize::Small));
+    
+    let stat_cards = vec![
+        stat_card_with_trend("95%", "Accuracy", Trend::Up(5), AppColor::Success),
+        stat_card_with_trend("1,234", "Points", Trend::Neutral, AppColor::Primary),
+        stat_card_with_trend("45ms", "Speed", Trend::Down(10), AppColor::Warning),
+    ];
+    items.push(Components::simple_flex_row(stat_cards));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Metric cards
+    items.push(Components::label("Metric Cards:"));
+    let metric_cards = vec![
+        metric_card("🏆", "Level", "12", Some("Expert"), AppColor::Primary),
+        metric_card("🔥", "Streak", "7", Some("days"), AppColor::Error),
+        metric_card("⭐", "XP", "2,450", None, AppColor::Warning),
+    ];
+    items.push(Components::simple_flex_row(metric_cards));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Achievement cards
+    items.push(Components::label("Achievement Cards:"));
+    items.push(achievement_card("🎯", "Sharpshooter", "10 perfect sessions", true, None));
+    items.push(achievement_card("📚", "Bookworm", "Read 100 items", false, Some(0.65)));
+    items.push(achievement_card("⚡", "Speed Demon", "Complete tasks in < 1s", false, Some(0.3)));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Leaderboard cards
+    items.push(Components::label("Leaderboard Cards:"));
+    items.push(leaderboard_card(1, "Alice", 5420, Some("👑"), false));
+    items.push(leaderboard_card(2, "You", 4850, Some("🎯"), true));
+    items.push(leaderboard_card(3, "Bob", 4200, Some("🎮"), false));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Challenge cards
+    items.push(Components::label("Challenge Cards:"));
+    items.push(challenge_card(
+        "Daily Quest",
+        "Complete 20 tasks today",
+        ChallengeDifficulty::Easy,
+        100,
+        Some("5 hours"),
+        Some(0.75),
+        |_| {}
+    ));
+    items.push(challenge_card(
+        "Perfect Week",
+        "Maintain 100% accuracy for 7 days",
+        ChallengeDifficulty::Expert,
+        1000,
+        None,
+        Some(0.43),
+        |_| {}
+    ));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Session summary
+    items.push(Components::label("Session Summary:"));
+    items.push(session_summary_card(15, 42, 0.88, 420));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Feature cards
+    items.push(Components::label("Feature Cards:"));
+    items.push(feature_card(
+        "🚀",
+        "Quick Start",
+        "Jump right into learning",
+        "Start Now",
+        |_| {}
+    ));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Domain cards
+    items.push(Components::label("Domain Cards:"));
+    let domain_stats = DomainStats {
+        sessions: 45,
+        best_streak: 12,
+        mastery: 0.78,
     };
+    items.push(domain_card_enhanced(
+        "🔤",
+        "Alphabet",
+        "Master the ABCs",
+        "Easy",
+        true,
+        Some(domain_stats),
+        |_| {}
+    ));
     
-    Components::card(
-        "📚 Learning Components",
-        Components::simple_flex_column(vec![
-            Components::task_presenter(
-                &sample_task,
-                |_state, answer| println!("Answer selected: {}", answer)
-            ),
-            
-            Components::task_options(
-                vec!["Option A".to_string(), "Option B".to_string(), "Option C".to_string()],
-                |_state, idx| println!("Selected option {}", idx)
-            ),
-            
-            Components::learning_progress(5, 10, 0.8),
-            Components::learning_progress(0, 10, 0.0),
-            
-            Components::hint_button(0, |_| println!("Hint requested")),
-            Components::hint_button(1, |_| println!("More hints requested")),
-            Components::hint_button(2, |_| println!("Show answer requested")),
-            
-            Components::alphabet_sequence(
-                vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string()],
-                Some(2)
-            ),
-            
-            Components::comparison_visual("Apple", "Banana", true),
-            Components::comparison_visual("3", "7", false),
-            
-            Components::missing_item_visual("A", "C"),
-            Components::missing_item_visual("10", "30"),
-            
-            Components::path_visual(
-                "Start",
-                "Goal",
-                vec!["Step 1".to_string(), "Step 2".to_string(), "Step 3".to_string()]
-            ),
-        ])
-    )
+    Components::simple_flex_column(items)
 }
 
-fn visualization_components_section() -> ComponentOutput {
-    Components::card(
-        "📊 Visualizations",
-        Components::simple_flex_column(vec![
-            Components::simple_label("Mini Charts:".to_string()),
-            
-            sparkline(&[0.2, 0.4, 0.3, 0.7, 0.8, 0.6, 0.9, 0.85], 200, 40),
-            sparkline(&[1.0, 0.8, 0.6, 0.4, 0.2, 0.3, 0.5, 0.7], 200, 40),
-            
-            progress_ring_chart(0.75, "Completion", 100),
-            progress_ring_chart(0.33, "Progress", 100),
-            
-            Components::response_time_histogram(&vec![1200, 980, 1100, 750, 900, 1050, 800]),
-            
-            Components::simple_label("Performance Metrics:".to_string()),
-            Components::performance_chart(0.85, 20, 17, 950.0),
-            
-            Components::simple_label("Learning Analytics:".to_string()),
-            Components::learning_curve_display(&vec![
-                create_sample_response(true, 1000),
-                create_sample_response(false, 1200),
-                create_sample_response(true, 900),
-                create_sample_response(true, 850),
-            ]),
-            
-            Components::error_analysis_display(&vec![
-                create_sample_response(false, 1500),
-                create_sample_response(false, 1300),
-                create_sample_response(true, 1000),
-            ]),
-            
-            Components::strategy_analysis_display(vec![
-                ("Memorization", 0.75),
-                ("Pattern Recognition", 0.82),
-                ("Speed", 0.65),
-                ("Accuracy", 0.90),
-            ]),
-        ])
-    )
+fn forms_components_tab() -> ComponentOutput {
+    let mut items = vec![];
+    
+    // Form fields
+    items.push(Components::label("Form Fields:"));
+    items.push(form_field("Username", "john_doe".to_string(), Some("Enter username"), FieldType::Text, |_, _| {}));
+    items.push(form_field("Email", "".to_string(), Some("user@example.com"), FieldType::Email, |_, _| {}));
+    items.push(form_field("Password", "".to_string(), None, FieldType::Password, |_, _| {}));
+    items.push(form_field("Age", "25".to_string(), None, FieldType::Number, |_, _| {}));
+    items.push(form_field("Bio", "".to_string(), Some("Tell us about yourself"), FieldType::TextArea, |_, _| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Toggle switches
+    items.push(Components::label("Toggle Switches:"));
+    items.push(toggle_switch("Enable Notifications", true, |_, _| {}));
+    items.push(toggle_switch("Dark Mode", false, |_, _| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Sliders
+    items.push(Components::label("Sliders:"));
+    items.push(slider("Volume", 0.7, 0.0, 1.0, 0.1, |_, _| {}));
+    items.push(slider("Difficulty", 3.0, 1.0, 5.0, 1.0, |_, _| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Radio groups
+    items.push(Components::label("Radio Groups:"));
+    let options = vec![
+        ("small".to_string(), "Small".to_string()),
+        ("medium".to_string(), "Medium".to_string()),
+        ("large".to_string(), "Large".to_string()),
+    ];
+    items.push(radio_group("Size", options, &"medium".to_string(), |_, _| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Dropdowns
+    items.push(Components::label("Dropdowns:"));
+    let countries = vec![
+        ("us".to_string(), "United States".to_string()),
+        ("uk".to_string(), "United Kingdom".to_string()),
+        ("ca".to_string(), "Canada".to_string()),
+    ];
+    items.push(dropdown("Country", countries, Some(&"us".to_string()), Some("Select country"), |_, _| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Date and time pickers
+    items.push(Components::label("Date & Time Pickers:"));
+    items.push(date_picker("Birth Date", Some("1990-01-01".to_string()), |_, _| {}));
+    items.push(time_picker("Appointment Time", Some("14:30".to_string()), |_, _| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Multi-select
+    items.push(Components::label("Multi-Select:"));
+    let interests = vec![
+        ("coding".to_string(), "Coding".to_string()),
+        ("music".to_string(), "Music".to_string()),
+        ("sports".to_string(), "Sports".to_string()),
+    ];
+    items.push(multi_select("Interests", interests, vec!["coding".to_string()], |_, _| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // File upload
+    items.push(Components::label("File Upload:"));
+    items.push(file_upload("Avatar", vec![".jpg", ".png"], |_, _| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Color picker
+    items.push(Components::label("Color Picker:"));
+    items.push(color_picker("Theme Color", "#3B82F6".to_string(), |_, _| {}));
+    
+    Components::simple_flex_column(items)
 }
 
-fn demo_components_section() -> ComponentOutput {
-    Components::card(
-        "🎯 Demo-Aware Components",
-        Components::simple_flex_column(vec![
-            Components::simple_label("Components with demo highlights:".to_string()),
-            
-            Components::demo_button(
-                "demo_btn_1",
-                "Click Me!",
-                true,
-                Some("This button is highlighted".to_string())
-            ),
-            
-            Components::demo_button(
-                "demo_btn_2",
-                "Normal Button",
-                false,
-                None
-            ),
-            
-            Components::demo_card(
-                "demo_card_1",
-                "Highlighted Card",
-                Components::simple_label("This card has a tooltip".to_string()),
-                true,
-                Some("Important information here!".to_string())
-            ),
-            
-            Components::highlighted(
-                "highlight_1",
-                Components::simple_label("✨ Highlighted content".to_string()),
-                true,
-                Some("Pay attention to this!".to_string())
-            ),
-            
-            Components::highlighted(
-                "highlight_2",
-                Components::simple_label("Normal content".to_string()),
-                false,
-                None
-            ),
-        ])
-    )
+fn feedback_components_tab() -> ComponentOutput {
+    let mut items = vec![];
+    
+    // Toasts
+    items.push(Components::label("Toast Notifications:"));
+    items.push(toast("Success! Your changes have been saved.", ToastType::Success, Some(3000), None));
+    items.push(toast("Error: Unable to connect to server", ToastType::Error, Some(5000), Some(|_| {})));
+    items.push(toast("Warning: Low battery", ToastType::Warning, None, None));
+    items.push(toast("Info: New update available", ToastType::Info, None, None));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Progress indicators
+    items.push(Components::label("Progress Indicators:"));
+    items.push(progress_indicator("Loading data...", None, false));
+    items.push(progress_indicator("Uploading file...", Some(0.65), true));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Skeleton loaders
+    items.push(Components::label("Skeleton Loaders:"));
+    items.push(skeleton_loader(3, false));
+    items.push(skeleton_loader(2, true));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Alerts
+    items.push(Components::label("Alerts:"));
+    let alert_actions = vec![
+        AlertAction {
+            label: "Retry".to_string(),
+            color: AppColor::Primary,
+            on_click: Box::new(|_| {}),
+        },
+        AlertAction {
+            label: "Dismiss".to_string(),
+            color: AppColor::Secondary,
+            on_click: Box::new(|_| {}),
+        },
+    ];
+    items.push(alert("Success", "Operation completed successfully!", AlertType::Success, vec![]));
+    items.push(alert("Error", "Something went wrong", AlertType::Error, alert_actions));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Confirmation dialog
+    items.push(Components::label("Confirmation Dialog:"));
+    items.push(confirmation_dialog(
+        "Delete Item",
+        "Are you sure you want to delete this item? This action cannot be undone.",
+        "Delete",
+        "Cancel",
+        true,
+        |_| {},
+        |_| {}
+    ));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Snackbars
+    items.push(Components::label("Snackbars:"));
+    items.push(snackbar("File uploaded successfully", None, None));
+    items.push(snackbar("Network connection lost", Some("Retry"), Some(|_| {})));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Status badges
+    items.push(Components::label("Status Badges:"));
+    let badges = vec![
+        status_badge("Active", StatusType::Active),
+        status_badge("Inactive", StatusType::Inactive),
+        status_badge("Pending", StatusType::Pending),
+        status_badge("Completed", StatusType::Completed),
+    ];
+    items.push(Components::simple_flex_row(badges));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Loading overlay with progress
+    items.push(Components::label("Loading Overlay:"));
+    items.push(loading_overlay_with_progress(
+        "Processing",
+        "Please wait while we process your request...",
+        Some(0.45),
+        true,
+        Some(|_| {})
+    ));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Help tooltips
+    items.push(Components::label("Help Tooltips:"));
+    items.push(help_tooltip("Password must be 8+ characters", "Password requirements"));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Inline errors
+    items.push(Components::label("Inline Errors:"));
+    items.push(inline_error("Username already taken"));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Success indicators
+    items.push(Components::label("Success Indicators:"));
+    items.push(success_indicator("Registration complete!", true));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Step indicators
+    items.push(Components::label("Step Indicators:"));
+    items.push(step_indicator(2, 5, Some(vec!["Start", "Details", "Review", "Payment", "Done"])));
+    
+    Components::simple_flex_column(items)
 }
 
-fn modal_components_section() -> ComponentOutput {
-    Components::card(
-        "🗨️ Modals & Overlays",
-        Components::simple_flex_column(vec![
-            Components::confirm_modal(
-                "Confirm Action",
-                "Are you sure you want to proceed with this action?",
-                |_| println!("Confirmed!"),
-                |_| println!("Cancelled!")
-            ),
-            
-            Components::simple_label("Settings Section:".to_string()),
-            Components::settings_section(
-                "Preferences",
-                vec![
-                    Components::setting_row(
-                        "Notifications",
-                        Components::checkbox(true, "Enabled", |_, _| {})
-                    ),
-                    Components::setting_row(
-                        "Theme",
-                        Components::theme_selector(AppTheme::Auto, |_, _| {})
-                    ),
-                ]
-            ),
-        ])
-    )
+fn navigation_components_tab() -> ComponentOutput {
+    let mut items = vec![];
+    
+    // Header bar
+    items.push(Components::label("Header Bar:"));
+    items.push(Components::header_bar("Application Title", |_| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Navigation buttons
+    items.push(Components::label("Navigation Buttons:"));
+    let nav_buttons = vec![
+        Components::nav_button("Home", Screen::Dashboard, true, |_| {}),
+        Components::nav_button("Learning", Screen::Learning, false, |_| {}),
+        Components::nav_button("Progress", Screen::Progress, false, |_| {}),
+        Components::nav_button("Settings", Screen::Settings, false, |_| {}),
+    ];
+    items.push(Components::simple_flex_row(nav_buttons));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Tab bar
+    items.push(Components::label("Tab Bar:"));
+    let tabs = vec![
+        TabItem { label: "Overview".to_string(), icon: Some("📊".to_string()), badge_count: None },
+        TabItem { label: "Details".to_string(), icon: Some("📝".to_string()), badge_count: Some(3) },
+        TabItem { label: "History".to_string(), icon: Some("📜".to_string()), badge_count: None },
+    ];
+    items.push(Components::tab_bar(tabs, 0, |_, _| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Bottom navigation
+    items.push(Components::label("Bottom Navigation Bar:"));
+    items.push(Components::bottom_nav_bar(Screen::Dashboard, |_, _| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Sidebar navigation (simplified for gallery)
+    items.push(Components::label("Sidebar Navigation:"));
+    items.push(Components::sidebar_nav(Screen::Dashboard, |_, _| {}));
+    
+    Components::simple_flex_column(items)
 }
 
-fn layout_components_section() -> ComponentOutput {
-    Components::card(
-        "📐 Advanced Layouts",
-        Components::simple_flex_column(vec![
-            Components::simple_label("Centered Container:".to_string()),
-            Components::centered_container(
-                700.0,
-                Components::card(
-                    "Centered",
-                    Components::simple_label("This is centered with max width".to_string())
-                )
-            ),
-            
-            Components::simple_label("Stats Grid:".to_string()),
-            Components::stats_grid(vec![
-                Components::stat_card("Stat 1", "100", AppColor::Primary),
-                Components::stat_card("Stat 2", "200", AppColor::Success),
-                Components::stat_card("Stat 3", "300", AppColor::Warning),
-                Components::stat_card("Stat 4", "400", AppColor::Info),
-            ]),
-            
-            Components::simple_label("App Scaffold:".to_string()),
-            Components::app_scaffold(
-                Components::header_bar("App Title", |_| {}),
-                Components::simple_label("Main content area".to_string()),
-                Some(Components::simple_label("Footer content".to_string()))
-            ),
-            
-            Components::simple_label("Domain Cards:".to_string()),
-            Components::domain_card("Mathematics", "Practice arithmetic and algebra", false),
-            Components::domain_card("Language", "Learn vocabulary and grammar", true),
-            
-            Components::simple_label("Session Info:".to_string()),
-            Components::session_info("sess_123", "Active", "15:32", "Alphabet"),
-            
-            Components::simple_label("Task Card:".to_string()),
-            Components::task_card_display(
-                "What is 2 + 2?",
-                Some("Think about adding two items to two more items")
-            ),
-            
-            Components::simple_label("Answer Options:".to_string()),
-            Components::answer_options_display(
-                vec!["3".to_string(), "4".to_string(), "5".to_string(), "6".to_string()],
-                |_state, idx| println!("Selected answer index: {}", idx)
-            ),
-        ])
-    )
+fn learning_components_tab() -> ComponentOutput {
+    let mut items = vec![];
+    
+    // Learning progress
+    items.push(Components::label("Learning Progress:"));
+    items.push(Components::learning_progress(3, 10, 0.75));
+    items.push(Components::learning_progress(10, 10, 1.0));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Hint buttons
+    items.push(Components::label("Hint Buttons:"));
+    let hint_buttons = vec![
+        Components::hint_button(0, |_| {}),
+        Components::hint_button(1, |_| {}),
+        Components::hint_button(2, |_| {}),
+    ];
+    items.push(Components::simple_flex_row(hint_buttons));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Task visuals
+    items.push(Components::label("Task Visuals:"));
+    items.push(Components::alphabet_sequence(
+        vec!["A".to_string(), "B".to_string(), "C".to_string(), "D".to_string()],
+        Some(2)
+    ));
+    items.push(Components::comparison_visual("Apple", "Banana", true));
+    items.push(Components::missing_item_visual("1", "3"));
+    items.push(Components::path_visual(
+        "Start",
+        "End",
+        vec!["Step 1".to_string(), "Step 2".to_string()]
+    ));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Task options
+    items.push(Components::label("Task Options:"));
+    items.push(Components::task_options(
+        vec!["Option A".to_string(), "Option B".to_string(), "Option C".to_string(), "Option D".to_string()],
+        |_, _| {}
+    ));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Task card display
+    items.push(Components::label("Task Card:"));
+    items.push(Components::task_card_display(
+        "What comes after B in the alphabet?",
+        Some("Think about the order of letters")
+    ));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Answer options display
+    items.push(Components::label("Answer Options:"));
+    items.push(Components::answer_options_display(
+        vec!["A".to_string(), "C".to_string(), "D".to_string(), "E".to_string()],
+        |_, _| {}
+    ));
+    
+    Components::simple_flex_column(items)
 }
 
-// Helper function to create sample responses
+fn visualization_components_tab() -> ComponentOutput {
+    let mut items = vec![];
+    
+    // Charts
+    items.push(Components::label("Charts & Visualizations:"));
+    
+    items.push(Components::response_time_histogram(&vec![850, 920, 1100, 780, 950, 1200, 890, 1050]));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    items.push(Components::performance_chart(0.92, 50, 46, 875.5));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Mock response data
+    let responses = vec![
+        create_sample_response(true, 900),
+        create_sample_response(true, 850),
+        create_sample_response(false, 1200),
+        create_sample_response(true, 780),
+    ];
+    
+    items.push(Components::learning_curve_display(&responses));
+    items.push(Components::error_analysis_display(&responses));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Strategy analysis
+    items.push(Components::strategy_analysis_display(vec![
+        ("Pattern Recognition", 0.85),
+        ("Memory Recall", 0.72),
+        ("Speed", 0.90),
+        ("Accuracy", 0.88),
+    ]));
+    
+    Components::simple_flex_column(items)
+}
+
+fn advanced_components_tab() -> ComponentOutput {
+    let mut items = vec![];
+    
+    // Settings sections
+    items.push(Components::label("Settings Section:"));
+    items.push(Components::settings_section(
+        "Preferences",
+        vec![
+            Components::setting_row("Theme", Components::theme_selector(AppTheme::Auto, |_, _| {})),
+            Components::setting_row("Language", Components::label("English")),
+            Components::checkbox(true, "Enable animations", |_, _| {}),
+        ]
+    ));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // App scaffold
+    items.push(Components::label("App Scaffold:"));
+    items.push(Components::app_scaffold(
+        Components::header_bar("App Header", |_| {}),
+        Components::card("Content", Components::label("Main application content")),
+        Some(Components::label("Footer content"))
+    ));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Domain cards
+    items.push(Components::label("Domain Cards:"));
+    items.push(Components::domain_card("Mathematics", "Numbers and calculations", false));
+    items.push(Components::domain_card("Language", "Words and grammar", true));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Session info
+    items.push(Components::label("Session Info:"));
+    items.push(Components::session_info("session_123", "Active", "15:42", "Alphabet"));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Confirmation modal
+    items.push(Components::label("Confirmation Modal:"));
+    items.push(Components::confirm_modal(
+        "Confirm Action",
+        "Are you sure you want to proceed?",
+        |_| {},
+        |_| {}
+    ));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Error messages
+    items.push(Components::label("Error Messages:"));
+    items.push(Components::error_message(Some("An error occurred".to_string())));
+    items.push(Components::error_banner("Connection lost", |_| {}));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Success messages
+    items.push(Components::label("Success Messages:"));
+    items.push(Components::success_message(Some("Operation completed!".to_string())));
+    
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Toast notifications
+    items.push(Components::label("Toast Notifications:"));
+    items.push(Components::toast_notification("New message received", false));
+    items.push(Components::toast_notification("File uploaded", true));
+    
+    Components::simple_flex_column(items)
+}
+
+// Helper function
 fn create_sample_response(correct: bool, time_ms: u128) -> Response {
     Response {
         id: uuid::Uuid::new_v4(),

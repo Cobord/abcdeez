@@ -1,53 +1,93 @@
 // Welcome Screen with authentication options and quick start features
 
 use crate::auth::{standard_apple_signin_button, github_signin_button};
-use crate::components::{AppComponents, Component, ComponentOutput, Components};
+use crate::components::{AppComponents, Component, ComponentOutput, Components, AppColor, SpacerSize};
+use crate::components::layout::{page_layout, two_column_layout, content_container};
+use crate::components::cards::{feature_card};
+use crate::components::feedback::{toast, ToastType};
 use crate::state::{AppState, Screen};
 
-pub fn welcome_screen(state: &mut AppState) -> ComponentOutput {
-    // Check for triple click on title
-    let mut title_views = vec![];
-    
-    // Main title button (with easter egg triple-click)
-    title_views.push(Components::simple_button(
-        "🎓 Adaptive Learning System",
+pub fn welcome_screen(state: &mut AppState, window_width: f64) -> ComponentOutput {
+    // Main title with easter egg
+    let title = Components::simple_button(
+        "🎓 ABCDEEZ Learning System",
         |state: &mut AppState| {
             state.try_crab_triple_click();
         }
-    ));
+    );
     
-    // Subtitle
-    title_views.push(Components::simple_label(
-        "An intelligent learning system that adapts to your knowledge and optimizes your learning path using graph-based cognitive models.".to_string()
-    ));
+    let subtitle = Components::label(
+        "An intelligent adaptive learning system that optimizes your learning path using graph-based cognitive models"
+    );
     
-    // Login Card
-    let mut login_views = vec![];
+    // Create auth section
+    let auth_section = create_auth_section(state);
     
-    // Username input
-    login_views.push(Components::labeled_input(
-        "Username:",
+    // Create features section
+    let features_section = create_features_section(state);
+    
+    // Layout based on screen size
+    let main_content = if window_width > 900.0 {
+        two_column_layout(
+            auth_section,
+            features_section,
+            window_width
+        )
+    } else {
+        Components::simple_flex_column(vec![
+            auth_section,
+            Components::spacer(SpacerSize::Large),
+            features_section,
+        ])
+    };
+    
+    // Build complete layout
+    let content = Components::simple_flex_column(vec![
+        title,
+        Components::spacer(SpacerSize::Small),
+        subtitle,
+        Components::spacer(SpacerSize::XLarge),
+        main_content,
+    ]);
+    
+    // Wrap in content container for proper margins
+    content_container(content, window_width)
+}
+
+fn create_auth_section(state: &mut AppState) -> ComponentOutput {
+    let mut items = vec![];
+    
+    // Login form
+    items.push(Components::label("Sign In"));
+    items.push(Components::spacer(SpacerSize::Small));
+    
+    items.push(Components::labeled_input(
+        "Username or Email",
         state.username_input.clone(),
         |state: &mut AppState, value: String| {
             state.username_input = value;
         }
     ));
     
-    // Password input  
-    login_views.push(Components::labeled_input(
-        "Password:",
+    items.push(Components::spacer(SpacerSize::Small));
+    
+    items.push(Components::labeled_input(
+        "Password",
         state.password_input.clone(),
         |state: &mut AppState, value: String| {
             state.password_input = value;
         }
     ));
     
-    // Login button
+    items.push(Components::spacer(SpacerSize::Medium));
+    
+    // Login button with loading state
     if state.login_request_in_flight {
-        login_views.push(Components::simple_label("Logging in...".to_string()));
+        items.push(Components::loading_spinner(Some("Signing in...")));
     } else {
-        login_views.push(Components::simple_button(
-            "Login",
+        items.push(Components::action_button(
+            "Sign In",
+            AppColor::Primary,
             |state: &mut AppState| {
                 if !state.login_request_in_flight {
                     state.login();
@@ -56,88 +96,105 @@ pub fn welcome_screen(state: &mut AppState) -> ComponentOutput {
         ));
     }
     
-    // OAuth section separator
-    login_views.push(Components::simple_label("─── Or ───".to_string()));
+    items.push(Components::spacer(SpacerSize::Medium));
+    items.push(Components::divider(crate::components::Orientation::Horizontal));
+    items.push(Components::spacer(SpacerSize::Medium));
     
-    // Apple Sign In button (App Store compliant)
-    login_views.push(standard_apple_signin_button::<Components>(state));
+    // Social login options
+    items.push(Components::label("Or continue with"));
+    items.push(Components::spacer(SpacerSize::Small));
     
-    // GitHub Sign In button
-    login_views.push(github_signin_button::<Components>(state));
+    // OAuth buttons
+    items.push(standard_apple_signin_button::<Components>(state));
+    items.push(Components::spacer(SpacerSize::Small));
+    items.push(github_signin_button::<Components>(state));
     
-    let login_card = Components::card("Login", Components::simple_flex_column(login_views));
+    items.push(Components::spacer(SpacerSize::Medium));
     
-    // Quick Start Card
-    let mut quick_start_views = vec![];
+    // Sign up link
+    items.push(Components::simple_flex_row(vec![
+        Components::label("New to ABCDEEZ?"),
+        Components::simple_button("Create Account", |state| {
+            state.navigate(Screen::Signup);
+        }),
+    ]));
     
-    quick_start_views.push(Components::simple_label(
-        "Start learning immediately without creating an account".to_string()
-    ));
+    Components::card(
+        "Welcome Back",
+        Components::simple_flex_column(items)
+    )
+}
+
+fn create_features_section(state: &mut AppState) -> ComponentOutput {
+    let mut items = vec![];
     
-    // Guest mode button
-    quick_start_views.push(Components::simple_button(
-        "🚀 Start as Guest",
+    // Quick actions
+    items.push(Components::label("Quick Start"));
+    items.push(Components::spacer(SpacerSize::Small));
+    
+    // Guest mode card
+    let guest_card = feature_card(
+        "🚀",
+        "Try as Guest",
+        "Start learning immediately without an account",
+        "Start Now",
         |state: &mut AppState| {
-            // Proper guest/anonymous user pattern
-            state.current_user = None; // No fake user object
+            state.current_user = None;
             state.is_guest_mode = true;
             state.create_learner();
-            state.current_screen = Screen::DomainSelection;
+            state.navigate(Screen::DomainSelection);
         }
-    ));
-    
-    // Quick tour button
-    quick_start_views.push(Components::simple_button(
-        "🎯 Quick Tour",
-        |state: &mut AppState| {
-            // Start the interactive guided tour
-            state.demo_start();
-        }
-    ));
-    
-    // Training demo button
-    quick_start_views.push(Components::simple_button(
-        "📚 Training Demo",
-        |state: &mut AppState| {
-            // Start the full training demo
-            state.demo_start_training();
-        }
-    ));
-    
-    // Demo showcase button
-    quick_start_views.push(Components::simple_button(
-        "✨ Demo Showcase",
-        |state: &mut AppState| {
-            // Run a short automated demo training sequence
-            state.demo_showcase();
-            state.current_screen = Screen::Dashboard;
-        }
-    ));
-    
-    // Always-available navigation to avoid dead ends
-    quick_start_views.push(Components::simple_button(
-        "📊 Go to Dashboard",
-        |state: &mut AppState| {
-            state.current_screen = Screen::Dashboard;
-        }
-    ));
-    
-    let quick_start_card = Components::card(
-        "Quick Start",
-        Components::simple_flex_column(quick_start_views)
     );
     
-    // Combine all elements
-    let mut main_views = vec![];
-    main_views.extend(title_views);
-    main_views.push(login_card);
-    main_views.push(quick_start_card);
+    items.push(guest_card);
+    items.push(Components::spacer(SpacerSize::Medium));
     
-    // Add footer with version info
-    main_views.push(Components::simple_label(
-        "v1.0.0 - Cross-Platform Edition".to_string()
-    ));
+    // Interactive tour card
+    let tour_card = feature_card(
+        "🎯",
+        "Interactive Tour",
+        "Take a guided tour of all features",
+        "Start Tour",
+        |state: &mut AppState| {
+            state.demo_start();
+        }
+    );
     
-    // Fill horizontally, constrain to a readable max-width
-    Components::centered_container(800.0, Components::simple_flex_column(main_views))
+    items.push(tour_card);
+    items.push(Components::spacer(SpacerSize::Medium));
+    
+    // Demo mode card
+    let demo_card = feature_card(
+        "📚",
+        "Watch Demo",
+        "See the system in action with sample data",
+        "View Demo",
+        |state: &mut AppState| {
+            state.start_demo_training();
+            state.navigate(Screen::Learning);
+        }
+    );
+    
+    items.push(demo_card);
+    items.push(Components::spacer(SpacerSize::Large));
+    
+    // Key features list
+    items.push(Components::label("Key Features"));
+    items.push(Components::spacer(SpacerSize::Small));
+    
+    let features = vec![
+        "✨ Adaptive learning powered by AI",
+        "📊 Real-time progress tracking",
+        "🎮 Gamification with achievements",
+        "🏆 Global leaderboards",
+        "📈 Advanced analytics",
+        "🎯 Personalized learning paths",
+    ];
+    
+    for feature in features {
+        items.push(Components::label(feature));
+        items.push(Components::spacer(SpacerSize::Small));
+    }
+    
+    Components::simple_flex_column(items)
 }
