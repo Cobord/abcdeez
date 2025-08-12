@@ -217,17 +217,57 @@
     </style>
 </head>
 <body>
-    <div id="loading">
-        <div class="spinner"></div>
-        <h2 style="margin-top: 20px;">Loading ABCDEEZ...</h2>
+    <!-- App root element for xilem-web -->
+    <div id="app">
+        <div id="loading">
+            <div class="spinner"></div>
+            <h2 style="margin-top: 20px;">Loading ABCDEEZ...</h2>
+        </div>
     </div>
     
     <script type="module">
-        import init from './abcdeez.js';
+        import init, { run_web } from './abcdeez.js';
+        
+        // Register service worker with update handling
+        async function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.register('./service-worker.js');
+                    console.log('Service Worker registered:', registration);
+                    
+                    // Check for updates on page load
+                    registration.update();
+                    
+                    // Listen for new service worker activation
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'activated') {
+                                // New service worker activated, show update prompt
+                                if (confirm('New version available! Reload to update?')) {
+                                    window.location.reload();
+                                }
+                            }
+                        });
+                    });
+                } catch (error) {
+                    console.error('Service Worker registration failed:', error);
+                }
+            }
+        }
         
         async function run() {
-            // Hide loading screen once WASM loads
+            // Register service worker
+            await registerServiceWorker();
+            
+            // Initialize WASM
             await init();
+            
+            // The start function will be called automatically by wasm-bindgen
+            // If not, we can manually call run_web()
+            // run_web();
+            
+            // Hide loading screen
             document.getElementById('loading').style.display = 'none';
         }
         

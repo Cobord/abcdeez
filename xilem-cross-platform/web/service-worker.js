@@ -1,4 +1,6 @@
-const CACHE_NAME = 'abcdeez-v1.0.0';
+// Version will be replaced during build with git hash
+const CACHE_VERSION = 'v1';
+const CACHE_NAME = `abcdeez-${CACHE_VERSION}`;
 const urlsToCache = [
   '/app/',
   '/app/index.html',

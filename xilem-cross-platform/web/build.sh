@@ -13,11 +13,28 @@ fi
 echo "Building WASM module..."
 wasm-pack build --target web --out-name abcdeez --release
 
+# Generate build hash for cache busting
+BUILD_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "dev")
+BUILD_TIME=$(date +%s)
+echo "Build hash: $BUILD_HASH, Build time: $BUILD_TIME"
+
 # Copy PWA files to pkg directory
 echo "Copying PWA files..."
 cp manifest.json pkg/ 2>/dev/null || echo "Warning: manifest.json not found"
-cp service-worker.js pkg/ 2>/dev/null || echo "Warning: service-worker.js not found"
-cp index.html pkg/ 2>/dev/null || echo "Warning: index.html not found"
+
+# Update service worker with build hash
+if [ -f service-worker.js ]; then
+    sed "s/const CACHE_VERSION = 'v1'/const CACHE_VERSION = 'v1-$BUILD_HASH'/" service-worker.js > pkg/service-worker.js
+else
+    echo "Warning: service-worker.js not found"
+fi
+
+# Update index.html to include version in script imports
+if [ -f index.html ]; then
+    sed "s/abcdeez\.js/abcdeez.js?v=$BUILD_HASH/" index.html > pkg/index.html
+else
+    echo "Warning: index.html not found"
+fi
 
 # Create dist directory
 mkdir -p dist

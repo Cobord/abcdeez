@@ -55,7 +55,11 @@ jobs:
       - name: Build PWA
         run: |
           cd xilem-cross-platform/web
+          chmod +x build.sh
           ./build.sh
+          
+          # Add build info file for debugging
+          echo "{\"commit\": \"${{ github.sha }}\", \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > dist/build-info.json
           
       - name: Build Documentation
         run: |
