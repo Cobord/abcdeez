@@ -157,7 +157,7 @@ pub fn create_learning_curve(
             (thresholds.developing, "Developing", palette.warning),
         ];
 
-        for (threshold, label, color) in threshold_lines.iter() {
+        for (threshold, _label, color) in threshold_lines.iter() {
             if *threshold >= y_min && *threshold <= y_max {
                 chart.draw_series(std::iter::once(PathElement::new(
                     vec![(0.0, *threshold), (responses.len() as f64, *threshold)],
@@ -206,7 +206,7 @@ pub fn create_learning_curve(
             // Add summary statistics
             let total = responses.len();
             let correct = responses.iter().filter(|r| r.correct).count();
-            let overall_accuracy = correct as f64 / total as f64;
+            let _overall_accuracy = correct as f64 / total as f64;
 
             chart
                 .configure_series_labels()

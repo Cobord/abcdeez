@@ -88,6 +88,7 @@ pub enum AchievementEvent {
     },
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AchievementManager {
     achievements: Vec<Rc<RefCell<Achievement>>>,
 }

@@ -58,6 +58,7 @@ dependencies = [
  "uuid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "web-backend",
  "web-sys",
  "winit",
  "xilem",
@@ -67,7 +68,7 @@ dependencies = [
 
 [[package]]
 name = "abcdeez-core"
-version = "0.0.7"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "axum 0.7.9",
@@ -93,7 +94,7 @@ dependencies = [
 
 [[package]]
 name = "abcdeez-web"
-version = "0.0.7"
+version = "0.0.11"
 dependencies = [
  "abcdeez-app",
  "abcdeez-core",
@@ -392,6 +393,18 @@ name = "anymore"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a38750a2a9617d9f1a1428b408fb909f7256a2766c59b0b07993170959731bb"
+
+[[package]]
+name = "apple-signin"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb58ec98dd86ac0ddd4a903cd1838e0ae11f1e58a11c2ba9d62f4076e8155251"
+dependencies = [
+ "jsonwebtoken",
+ "reqwest",
+ "serde",
+ "serde_repr",
+]
 
 [[package]]
 name = "approx"
@@ -6513,6 +6526,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-serde"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
+dependencies = [
+ "serde",
+ "tracing-core",
+]
+
+[[package]]
 name = "tracing-subscriber"
 version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6522,6 +6545,8 @@ dependencies = [
  "nu-ansi-term",
  "once_cell",
  "regex",
+ "serde",
+ "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
@@ -6529,6 +6554,7 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+ "tracing-serde",
 ]
 
 [[package]]
@@ -7077,13 +7103,15 @@ dependencies = [
 
 [[package]]
 name = "web-backend"
-version = "0.0.7"
+version = "0.0.11"
 dependencies = [
  "abcdeez-core",
  "aes-gcm",
  "anyhow",
+ "apple-signin",
  "argon2",
  "async-trait",
+ "aws-lc-sys",
  "axum 0.8.4",
  "axum-extra",
  "base64",
@@ -8048,7 +8076,7 @@ dependencies = [
 
 [[package]]
 name = "xilem_abcdeez_desktop"
-version = "0.0.7"
+version = "0.0.11"
 dependencies = [
  "abcdeez-app",
  "winit",

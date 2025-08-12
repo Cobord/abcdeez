@@ -15,6 +15,7 @@ pub mod utils;
 pub mod websocket;
 
 use std::sync::Arc;
+use std::net::SocketAddr;
 
 use axum::{
     extract::State,
@@ -26,6 +27,7 @@ use axum::{
 };
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 use tracing::error;
+use tracing::{info};
 
 pub use state::AppState;
 
@@ -361,4 +363,129 @@ pub async fn create_test_state_sqlite() -> Arc<AppState> {
 
     let cache_conn = cache::connection_manager();
     Arc::new(state::AppState::new(pool, cache_conn, Arc::new(cfg)))
+}
+
+/// Options for running the backend embedded inside another process (e.g., native app)
+#[derive(Clone, Debug, Default)]
+pub struct EmbeddedOptions {
+    /// Port to bind the HTTP server to. Defaults to 3000
+    pub port: Option<u16>,
+    /// Database URL for SQLx. Defaults to a sandboxed SQLite file
+    pub database_url: Option<String>,
+    /// CORS origin to allow. Defaults to "*" for embedded testing
+    pub cors_origin: Option<String>,
+}
+
+/// Run the web server in-process using sensible defaults for local testing
+///
+/// This function runs until the process exits. Use it from a background
+/// Tokio runtime or dedicated thread in the embedding application.
+pub async fn run_embedded(options: Option<EmbeddedOptions>) -> anyhow::Result<()> {
+    // Initialize tracing if not already initialized
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let options = options.unwrap_or_default();
+
+    // Provide reasonable defaults via environment for embedded mode
+    // Only set if not already configured by caller
+    if std::env::var("ENVIRONMENT").is_err() {
+        std::env::set_var("ENVIRONMENT", "development");
+    }
+
+    if std::env::var("JWT_SECRET").is_err() {
+        // 64+ chars high-entropy test secret for local-only usage
+        std::env::set_var(
+            "JWT_SECRET",
+            "local_dev_testing_secret_please_do_not_use_in_prod_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        );
+    }
+
+    if let Some(port) = options.port {
+        std::env::set_var("PORT", port.to_string());
+    } else if std::env::var("PORT").is_err() {
+        std::env::set_var("PORT", "3000");
+    }
+
+    if let Some(db) = options.database_url {
+        std::env::set_var("DATABASE_URL", db);
+    } else if std::env::var("DATABASE_URL").is_err() {
+        // Use a local file within the process sandbox
+        std::env::set_var("DATABASE_URL", "sqlite://abcdeez_embedded.db");
+    }
+
+    if let Some(cors) = options.cors_origin {
+        std::env::set_var("CORS_ORIGIN", cors);
+    } else if std::env::var("CORS_ORIGIN").is_err() {
+        std::env::set_var("CORS_ORIGIN", "*");
+    }
+
+    // Explicitly disable TLS for embedded usage
+    if std::env::var("TLS_ENABLED").is_err() {
+        std::env::set_var("TLS_ENABLED", "false");
+    }
+
+    // Load configuration (now backed by our overrides)
+    let cfg = config::Config::from_env()?;
+
+    // Always validate JWT security in any environment
+    if let Err(e) = cfg.validate_jwt_security() {
+        return Err(anyhow::anyhow!(e));
+    }
+
+    info!(
+        port = cfg.port,
+        db = %cfg.database_url,
+        cors = %cfg.cors_origin,
+        "Starting embedded web-backend"
+    );
+
+    // Initialize database and run migrations
+    let db_pool = db::init_pool(&cfg.database_url).await?;
+    db::run_migrations(&db_pool).await?;
+
+    // In-memory cache
+    let cache_conn = cache::connection_manager();
+
+    // App state and router
+    let app_state = Arc::new(state::AppState::new(db_pool, cache_conn, Arc::new(cfg.clone())));
+    let app = build_router(app_state.clone());
+
+    // Start background monitors/workers (non-blocking)
+    {
+        let health_state = app_state.clone();
+        tokio::spawn(async move {
+            monitoring::health::start_health_monitor(health_state).await;
+        });
+    }
+    {
+        let perf_state = app_state.clone();
+        tokio::spawn(async move {
+            monitoring::performance::start_performance_monitor(perf_state).await;
+        });
+    }
+    {
+        let batch_state = app_state.clone();
+        tokio::spawn(async move {
+            batch_state.batch_job_service.start_worker().await;
+        });
+    }
+    {
+        let oauth_state = app_state.clone();
+        tokio::spawn(async move {
+            oauth_state
+                .batch_job_service
+                .start_oauth_validation_scheduler()
+                .await;
+        });
+    }
+
+    // Bind on loopback only for embedded usage
+    let http_addr = SocketAddr::from(([127, 0, 0, 1], cfg.port));
+    info!(%http_addr, "Embedded HTTP server listening (HTTP only)");
+
+    // Serve HTTP directly without TLS or ACME
+    let listener = tokio::net::TcpListener::bind(http_addr).await?;
+    axum::serve(listener, app).await?;
+
+    Ok(())
 }

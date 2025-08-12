@@ -23,6 +23,8 @@ pub trait AppComponents {
     fn stat_card(title: &str, value: &str, accent_color: AppColor) -> Self::Output;
     fn welcome_card(username: &str, message: &str, on_start: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
     fn activity_card(title: &str, time: &str, highlighted: bool) -> Self::Output;
+    fn action_button(text: &str, color: AppColor, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
+    fn empty() -> Self::Output;
     
     // Navigation components
     fn header_bar(title: &str, on_settings: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output;
@@ -76,10 +78,12 @@ pub trait AppComponents {
     fn card<V>(title: &str, content: V) -> Self::Output where V: Component<Output = Self::Output>;
     fn progress_bar(progress: f64, label: &str) -> Self::Output;
     fn metric_display(label: &str, value: &str, color: AppColor) -> Self::Output;
+    fn progress_card(title: &str, progress: f32, label: &str, color: AppColor) -> Self::Output;
     
     // Interactive components
     fn checkbox(checked: bool, label: &str, on_toggle: impl Fn(&mut AppState, bool) + Send + Sync + 'static) -> Self::Output;
     fn labeled_input(label: &str, value: String, on_change: impl Fn(&mut AppState, String) + Send + Sync + 'static) -> Self::Output;
+    fn label(text: &str) -> Self::Output;
     fn toast_notification(message: &str, is_success: bool) -> Self::Output;
     fn loading_overlay(message: &str) -> Self::Output;
     

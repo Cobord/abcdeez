@@ -2,5 +2,4 @@
 - RUSTFLAGS=-Awarnings cargo check -p web-backend
 - RUSTFLAGS=-Awarnings cargo check -p abcdeez-app
 - RUSTFLAGS=-Awarnings cargo check -p abcdeez-web
-
-
+- ./build-all.sh --desktop --web

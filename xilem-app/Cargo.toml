@@ -4,6 +4,7 @@ edition.workspace = true
 
 [features]
 default = ["desktop", "xilem-native"]
+embed-backend = ["dep:web-backend", "tokio-runtime"]
 desktop = ["websocket", "tokio-runtime", "audio", "storage"]
 web = ["xilem-web"]
 xilem-native = ["dep:xilem", "dep:xilem_core", "dep:masonry", "dep:masonry_winit", "dep:winit"]
@@ -29,7 +30,7 @@ wasm-bindgen = { version = "0.2", optional = true }
 web-sys = { version = "0.3", features = ["Document", "Element", "HtmlElement", "console"], optional = true }
 
 # Additional dependencies for the learning app
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
@@ -37,11 +38,12 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "blo
 tokio = { version = "1.0", default-features = false, features = ["rt", "macros", "sync", "time"], optional = true }
 anyhow = "1.0"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["json"] }
 rand = "0.8"
 
 # Include the core library
 abcdeez-core = { path = "../core" }
+web-backend = { path = "../web-backend", default-features = false, features = ["sqlite"], optional = true }
 
 # Visualization dependencies
 plotters = { version = "0.3", default-features = false, features = [

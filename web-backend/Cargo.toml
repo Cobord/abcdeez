@@ -12,10 +12,18 @@ license = false
 eula = false
 
 [features]
-default = ["sqlite"]
+default = ["sqlite", "tls"]
 sqlite = ["sqlx/sqlite"]
 postgres = ["sqlx/postgres"]
 runtime-multi-db = ["sqlite", "postgres"]  # Enable both for runtime selection
+tls = [
+    "dep:rustls",
+    "dep:rustls-pemfile",
+    "dep:tokio-rustls",
+    "dep:rcgen",
+    "dep:instant-acme",
+    "dep:aws-lc-sys",
+]
 
 [dependencies]
 # Core library
@@ -57,7 +65,7 @@ rand = { workspace = true }
 regex = "1.10"
 
 # Apple Sign In
-# apple-signin = "0.4"  # Temporarily disabled - version not found
+apple-signin = "0.1.1"
 
 # UUID and Time
 uuid = { workspace = true, features = ["v4", "serde"] }
@@ -98,9 +106,10 @@ rand_distr = "0.4"
 # Cryptography
 sha2 = "0.10"
 
-# TLS/SSL with automatic Let's Encrypt
-rustls = "0.23"
-rustls-pemfile = "2.1"
-tokio-rustls = "0.26"
-rcgen = "0.14"         # For self-signed certificate generation
-instant-acme = "0.8"   # Let's Encrypt ACME client
+# TLS/SSL with automatic Let's Encrypt (optional via feature = "tls")
+rustls = { version = "0.23", optional = true }
+rustls-pemfile = { version = "2.1", optional = true }
+tokio-rustls = { version = "0.26", optional = true }
+rcgen = { version = "0.14", optional = true }        # For self-signed certificate generation
+instant-acme = { version = "0.8", optional = true }  # Let's Encrypt ACME client
+aws-lc-sys = { version = "0.30.0", features = ["bindgen"], optional = true }

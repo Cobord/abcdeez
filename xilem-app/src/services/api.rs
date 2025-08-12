@@ -9,6 +9,10 @@ use uuid::Uuid;
 
 use crate::models::{Response, Session, Task, User};
 
+// When built with embedded backend, default to loopback for the in-process server
+#[cfg(feature = "embed-backend")]
+const DEFAULT_API_URL: &str = "http://127.0.0.1:3000/api";
+#[cfg(not(feature = "embed-backend"))]
 const DEFAULT_API_URL: &str = "http://localhost:3000/api";
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Logging configuration for ABCDEEZ app -->
+    <key>DEFAULT-OPTIONS</key>
+    <dict>
+        <key>Level</key>
+        <dict>
+            <key>Enable</key>
+            <string>Debug</string>
+            <key>Persist</key>
+            <string>Info</string>
+        </dict>
+    </dict>
+    
+    <!-- Category-specific configurations -->
+    <key>com.abcdeez.app</key>
+    <dict>
+        <!-- Default category -->
+        <key>default</key>
+        <dict>
+            <key>Level</key>
+            <dict>
+                <key>Enable</key>
+                <string>Debug</string>
+                <key>Persist</key>
+                <string>Default</string>
+            </dict>
+        </dict>
+        
+        <!-- UI category -->
+        <key>ui</key>
+        <dict>
+            <key>Level</key>
+            <dict>
+                <key>Enable</key>
+                <string>Info</string>
+                <key>Persist</key>
+                <string>Default</string>
+            </dict>
+        </dict>
+        
+        <!-- Network category -->
+        <key>network</key>
+        <dict>
+            <key>Level</key>
+            <dict>
+                <key>Enable</key>
+                <string>Debug</string>
+                <key>Persist</key>
+                <string>Info</string>
+            </dict>
+        </dict>
+        
+        <!-- Authentication category -->
+        <key>auth</key>
+        <dict>
+            <key>Level</key>
+            <dict>
+                <key>Enable</key>
+                <string>Debug</string>
+                <key>Persist</key>
+                <string>Default</string>
+            </dict>
+        </dict>
+        
+        <!-- Learning category -->
+        <key>learning</key>
+        <dict>
+            <key>Level</key>
+            <dict>
+                <key>Enable</key>
+                <string>Debug</string>
+                <key>Persist</key>
+                <string>Info</string>
+            </dict>
+        </dict>
+        
+        <!-- Gamification category -->
+        <key>gamification</key>
+        <dict>
+            <key>Level</key>
+            <dict>
+                <key>Enable</key>
+                <string>Info</string>
+                <key>Persist</key>
+                <string>Default</string>
+            </dict>
+        </dict>
+    </dict>
+</dict>
+</plist>

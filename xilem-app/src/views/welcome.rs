@@ -138,8 +138,6 @@ pub fn welcome_screen(state: &mut AppState) -> ComponentOutput {
         "v1.0.0 - Cross-Platform Edition".to_string()
     ));
     
-    Components::centered_container(
-        600.0,
-        Components::simple_flex_column(main_views)
-    )
+    // Fill horizontally, constrain to a readable max-width
+    Components::centered_container(800.0, Components::simple_flex_column(main_views))
 }

@@ -28,7 +28,7 @@ pub enum AppleSignInButtonType {
 /// Creates an App Store compliant Apple Sign In button
 pub fn apple_signin_button<C: AppComponents>(
     state: &AppState,
-    style: AppleSignInButtonStyle,
+    _style: AppleSignInButtonStyle,
     button_type: AppleSignInButtonType,
 ) -> C::Output {
     let button_text = match button_type {
@@ -59,8 +59,14 @@ pub fn apple_signin_button<C: AppComponents>(
     // Note: In a real implementation, we'd apply the proper colors based on style
     // For now, we'll use the simple_button component
     C::simple_button(button_text, |state: &mut AppState| {
+        tracing::info!("Apple Sign In button clicked in apple_signin.rs");
         if !state.oauth_login_in_flight {
+            tracing::info!("Not in flight, calling apple_sign_in()");
+            println!("BEFORE calling state.apple_sign_in()");
             state.apple_sign_in();
+            println!("AFTER calling state.apple_sign_in()");
+        } else {
+            tracing::warn!("OAuth login already in flight, ignoring click");
         }
     })
 }

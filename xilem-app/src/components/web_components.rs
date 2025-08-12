@@ -51,6 +51,19 @@ impl AppComponents for WebComponents {
         ))
     }
     
+    fn empty() -> Self::Output {
+        WebComponent(Box::new(el::div("")))
+    }
+    
+    fn action_button(text: &str, color: AppColor, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
+        WebComponent(Box::new(
+            el::button(text.to_string())
+                .attr("class", "action-button")
+                .attr("style", format!("background-color: {}", color_to_css(color)))
+                .on_click(move |state: &mut AppState, _event| on_click(state))
+        ))
+    }
+    
     fn activity_card(title: &str, time: &str, highlighted: bool) -> Self::Output {
         let class = if highlighted { "activity-card highlighted" } else { "activity-card" };
         WebComponent(Box::new(
@@ -78,19 +91,22 @@ impl AppComponents for WebComponents {
     
     fn bottom_nav_bar(current_screen: Screen, on_navigate: impl Fn(&mut AppState, Screen) + Send + Sync + 'static) -> Self::Output {
         let on_nav = std::sync::Arc::new(on_navigate);
+        let current_screen_1 = current_screen.clone();
+        let current_screen_2 = current_screen.clone();
+        let current_screen_3 = current_screen.clone();
         
         WebComponent(Box::new(
             el::nav((
                 Self::create_nav_btn("Dashboard", Screen::Dashboard, current_screen, on_nav.clone()),
-                Self::create_nav_btn("Learn", Screen::Learning, current_screen, on_nav.clone()),
-                Self::create_nav_btn("Progress", Screen::Progress, current_screen, on_nav.clone()),
-                Self::create_nav_btn("Profile", Screen::Profile, current_screen, on_nav.clone()),
+                Self::create_nav_btn("Learn", Screen::Learning, current_screen_1, on_nav.clone()),
+                Self::create_nav_btn("Progress", Screen::Progress, current_screen_2, on_nav.clone()),
+                Self::create_nav_btn("Profile", Screen::Profile, current_screen_3, on_nav.clone()),
             ))
             .attr("class", "bottom-nav")
         ))
     }
     
-    fn nav_button(label: &str, screen: Screen, is_active: bool, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
+    fn nav_button(label: &str, _screen: Screen, is_active: bool, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
         let class = if is_active { "nav-btn active" } else { "nav-btn" };
         WebComponent(Box::new(
             el::button(label.to_string())
@@ -304,7 +320,7 @@ impl AppComponents for WebComponents {
                     }),
             ))
             .attr("class", "auth-form")
-            .on_submit(move |state: &mut AppState, evt: web_sys::Event| {
+            .on_submit(move |_state: &mut AppState, evt: web_sys::Event| {
                 evt.prevent_default();
             })
         ))
@@ -335,7 +351,7 @@ impl AppComponents for WebComponents {
         ))
     }
     
-    fn theme_selector(current: AppTheme, on_change: impl Fn(&mut AppState, AppTheme) + Send + Sync + 'static) -> Self::Output {
+    fn theme_selector(_current: AppTheme, on_change: impl Fn(&mut AppState, AppTheme) + Send + Sync + 'static) -> Self::Output {
         let on_change = std::sync::Arc::new(on_change);
         
         // For now, just create without selected attribute - the select will handle the value
@@ -464,6 +480,31 @@ impl AppComponents for WebComponents {
         ))
     }
     
+    fn progress_card(title: &str, progress: f32, label: &str, color: AppColor) -> Self::Output {
+        let clamped_progress = progress.clamp(0.0, 1.0);
+        let percentage = (clamped_progress * 100.0) as u32;
+        
+        WebComponent(Box::new(
+            el::div((
+                el::h4(title.to_string()).attr("class", "progress-card-title"),
+                el::div(
+                    el::div("")
+                        .attr("class", "progress-fill")
+                        .attr("style", format!("width: {}%; background-color: {}", percentage, color_to_css(color)))
+                )
+                .attr("class", "progress-bar"),
+                el::div((
+                    el::span(label.to_string()).attr("class", "progress-label"),
+                    el::span(format!("{}%", percentage))
+                        .attr("class", "progress-percentage")
+                        .attr("style", format!("color: {}", color_to_css(color))),
+                ))
+                .attr("class", "progress-info"),
+            ))
+            .attr("class", "progress-card")
+        ))
+    }
+    
     fn metric_display(label: &str, value: &str, color: AppColor) -> Self::Output {
         WebComponent(Box::new(
             el::div((
@@ -490,6 +531,13 @@ impl AppComponents for WebComponents {
                 el::span(label.to_string()),
             ))
             .attr("class", "checkbox-wrapper")
+        ))
+    }
+    
+    fn label(text: &str) -> Self::Output {
+        WebComponent(Box::new(
+            el::span(text.to_string())
+                .attr("class", "label")
         ))
     }
     
@@ -777,12 +825,13 @@ impl WebComponents {
     ) -> WebDomView {
         let is_active = screen == current;
         let class = if is_active { "nav-btn active" } else { "nav-btn" };
+        let screen_clone = screen.clone();
         
         Box::new(
             el::button(label.to_string())
                 .attr("class", class)
-                .on_click(move |state: &mut AppState, _| {
-                    on_nav(state, screen);
+                .on_click(move |state: &mut AppState, _event| {
+                    on_nav(state, screen_clone.clone());
                 })
         )
     }

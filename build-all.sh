@@ -66,7 +66,7 @@ if [ "$BUILD_DESKTOP" = true ]; then
     
     # Use cargo-dist for desktop builds
     echo "Running cargo-dist build..."
-    cargo dist build --artifacts=local --no-local-paths
+    dist build --artifacts=local --no-local-paths
     
     echo "✓ Desktop builds complete"
 fi

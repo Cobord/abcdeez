@@ -1,3 +1,45 @@
+## iOS Integration via XCFramework
+
+This project now builds the Rust layer (`xilem_abcdeez_mobile`) into an XCFramework that you add to Xcode.
+
+### Build
+
+From `xilem-cross-platform/`:
+
+```sh
+./make_xcframework.sh          # Debug
+./make_xcframework.sh --release
+```
+
+Artifacts:
+
+- Static libs in `../target/aarch64-apple-ios{,-sim}/{debug,release}`
+- Mirrored to `./target/...` for legacy scripts
+- XCFramework at `dist/xilem_abcdeez_mobile.xcframework`
+
+### Add to Xcode
+
+Option A (recommended): Add a local SPM package with a Binary Target pointing to `dist/xilem_abcdeez_mobile.xcframework`.
+
+Option B: Drag `dist/xilem_abcdeez_mobile.xcframework` into the project and set Embed to "Do Not Embed".
+
+Remove the legacy Cargo build phase/target ("cargo_ios"). Xcode will only link the XCFramework.
+
+### Notes
+
+- Embedded backend is HTTP-only; app starts it on 127.0.0.1:3000.
+- For changes in Rust, re-run the script and rebuild in Xcode.
+
+### Keep Xcode’s Run button in sync (optional)
+
+If you want Xcode to auto-refresh the XCFramework when Rust sources change, add a pre-build Run Script phase to your app target that calls:
+
+```
+${SRCROOT}/xilem-cross-platform/ios-prebuild-rust.sh
+```
+
+This script hashes Rust sources and only runs `make_xcframework.sh` when something changed and the configuration (Debug/Release) requires a different build.
+
 # xilem cross-platform
 
 Example setup for using xilem on android, iOS, and desktop

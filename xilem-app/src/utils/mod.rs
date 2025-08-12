@@ -6,3 +6,4 @@
 // - validation.rs for input validation
 
 pub mod easter_egg;
+pub mod app_callback;

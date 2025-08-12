@@ -1,0 +1,21 @@
+{
+    "applinks": {
+        "details": [
+            {
+                "appIDs": ["992772WV7K.online.fg-goose.abcdeez"],
+                "components": [
+                    {
+                        "/": "/auth/*",
+                        "comment": "Matches any URL path starting with /auth/"
+                    }
+                ]
+            }
+        ]
+    },
+    "webcredentials": {
+        "apps": ["992772WV7K.online.fg-goose.abcdeez"]
+    },
+    "appclips": {
+        "apps": []
+    }
+}

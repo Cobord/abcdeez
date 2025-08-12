@@ -46,6 +46,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn welcome_card(username: &str, message: &str, on_start: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
+        
         NativeComponent(Box::new(
             sized_box(
                 flex((
@@ -67,6 +68,26 @@ impl AppComponents for NativeComponents {
             )
             .background_color(map_color(AppColor::Surface))
             .corner_radius(12.0)
+        ))
+    }
+    
+    fn empty() -> Self::Output {
+        NativeComponent(Box::new(flex(())))
+    }
+    
+    fn action_button(text: &str, color: AppColor, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
+        
+        NativeComponent(Box::new(
+            button(
+                label(text)
+                    .text_size(14.0)
+                    .weight(xilem::FontWeight::MEDIUM)
+                    .color(Color::WHITE),
+                move |state: &mut AppState| on_click(state)
+            )
+            .background_color(map_color(color))
+            .corner_radius(8.0)
+            .padding(10.0)
         ))
     }
     
@@ -94,6 +115,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn header_bar(title: &str, on_settings: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
+        
         NativeComponent(Box::new(
             flex_row((
                 label(title)
@@ -112,6 +134,7 @@ impl AppComponents for NativeComponents {
     
     fn bottom_nav_bar(_current_screen: Screen, _on_navigate: impl Fn(&mut AppState, Screen) + Send + Sync + 'static) -> Self::Output {
         // Simplified - would need to handle multiple nav items
+        
         NativeComponent(Box::new(
             flex_row(())
                 .main_axis_alignment(MainAxisAlignment::SpaceEvenly)
@@ -127,6 +150,7 @@ impl AppComponents for NativeComponents {
             Color::from_rgb8(128, 128, 128)
         };
         
+        
         NativeComponent(Box::new(
             button(label(label_text).color(color), on_click)
                 .padding(10.0)
@@ -134,6 +158,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn task_presenter(task: &Task, _on_answer: impl Fn(&mut AppState, String) + Send + Sync + 'static) -> Self::Output {
+        
         NativeComponent(Box::new(
             flex((
                 label(task.prompt.as_str())
@@ -151,12 +176,14 @@ impl AppComponents for NativeComponents {
     
     fn task_options(_options: Vec<String>, _on_select: impl Fn(&mut AppState, usize) + Send + Sync + 'static) -> Self::Output {
         // Simplified - would need to create buttons for each option
+        
         NativeComponent(Box::new(
             grid((), 2, 2).spacing(15.0)
         ))
     }
     
     fn learning_progress(current: usize, total: usize, accuracy: f64) -> Self::Output {
+        
         NativeComponent(Box::new(
             flex_row((
                 label(format!("Task {}/{}", current, total))
@@ -171,6 +198,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn hint_button(_hint_level: usize, on_hint: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
+        
         NativeComponent(Box::new(
             button(label("Hint").color(Color::WHITE), on_hint)
                 .padding(10.0)
@@ -187,6 +215,7 @@ impl AppComponents for NativeComponents {
         on_submit: impl Fn(&mut AppState) + Send + Sync + 'static,
     ) -> Self::Output {
         // Split into nested flex to avoid tuple size limit
+        
         NativeComponent(Box::new(
             flex((
                 flex((
@@ -229,6 +258,7 @@ impl AppComponents for NativeComponents {
             .gap(15.0)) as Box<AnyWidgetView<AppState>>
         };
         
+        
         NativeComponent(Box::new(
             sized_box(content)
                 .padding(20.0)
@@ -238,6 +268,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn setting_row(label_text: &str, control: Self::Output) -> Self::Output {
+        
         NativeComponent(Box::new(
             flex_row((
                 label(label_text).text_size(14.0).flex(1.0),
@@ -259,7 +290,7 @@ impl AppComponents for NativeComponents {
             Box::new(
                 flex((
                     header.build().0,
-                    sized_box(content.build().0).expand(),
+                    sized_box(content.build().0).expand_width().expand_height(),
                     footer.build().0,
                 ))
                 .direction(Axis::Vertical)
@@ -269,7 +300,7 @@ impl AppComponents for NativeComponents {
             Box::new(
                 flex((
                     header.build().0,
-                    sized_box(content.build().0).expand(),
+                    sized_box(content.build().0).expand_width().expand_height(),
                 ))
                 .direction(Axis::Vertical)
                 .must_fill_major_axis(true)
@@ -280,40 +311,53 @@ impl AppComponents for NativeComponents {
     }
     
     fn centered_container(max_width: f64, child: Self::Output) -> Self::Output {
+        // Responsive max-width wrapper: fill width but constrain content
         NativeComponent(Box::new(
-            sized_box(child.build().0)
-                .width(max_width)
+            flex_row((
+                FlexSpacer::Flex(1.0),
+                sized_box(child.build().0)
+                    .width(max_width)
+                    .expand_height(),
+                FlexSpacer::Flex(1.0),
+            ))
+            .must_fill_major_axis(true)
         ))
     }
     
     fn stats_grid(stats: Vec<Self::Output>) -> Self::Output {
         // Convert to tuple for up to 4 stats
-        let grid = match stats.len() {
+            let grid = match stats.len() {
             0 => Box::new(label("")) as Box<AnyWidgetView<AppState>>,
             1 => Box::new(stats.into_iter().next().unwrap().build().0) as Box<AnyWidgetView<AppState>>,
             2 => {
                 let mut iter = stats.into_iter();
-                Box::new(flex_row((
+                    Box::new(flex_row((
                     iter.next().unwrap().build().0,
                     iter.next().unwrap().build().0,
-                )).main_axis_alignment(MainAxisAlignment::SpaceEvenly)) as Box<AnyWidgetView<AppState>>
+                    ))
+                    .main_axis_alignment(MainAxisAlignment::SpaceEvenly)
+                    .must_fill_major_axis(true)) as Box<AnyWidgetView<AppState>>
             },
             3 => {
                 let mut iter = stats.into_iter();
-                Box::new(flex_row((
+                    Box::new(flex_row((
                     iter.next().unwrap().build().0,
                     iter.next().unwrap().build().0,
                     iter.next().unwrap().build().0,
-                )).main_axis_alignment(MainAxisAlignment::SpaceEvenly)) as Box<AnyWidgetView<AppState>>
+                    ))
+                    .main_axis_alignment(MainAxisAlignment::SpaceEvenly)
+                    .must_fill_major_axis(true)) as Box<AnyWidgetView<AppState>>
             },
             _ => {
                 let mut iter = stats.into_iter();
-                Box::new(flex_row((
+                    Box::new(flex_row((
                     iter.next().unwrap().build().0,
                     iter.next().unwrap().build().0,
                     iter.next().unwrap().build().0,
                     iter.next().unwrap().build().0,
-                )).main_axis_alignment(MainAxisAlignment::SpaceEvenly)) as Box<AnyWidgetView<AppState>>
+                    ))
+                    .main_axis_alignment(MainAxisAlignment::SpaceEvenly)
+                    .must_fill_major_axis(true)) as Box<AnyWidgetView<AppState>>
             }
         };
         
@@ -321,6 +365,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn loading_spinner(message: Option<&str>) -> Self::Output {
+        
         let content = if let Some(msg) = message {
             Box::new(
                 flex((
@@ -384,6 +429,7 @@ impl AppComponents for NativeComponents {
     
     fn alphabet_sequence(items: Vec<String>, highlight_index: Option<usize>) -> Self::Output {
         // For now, handle up to 5 items with tuples
+        
         let sequence = match items.len() {
             0 => Box::new(label("")) as Box<AnyWidgetView<AppState>>,
             1 => {
@@ -465,6 +511,7 @@ impl AppComponents for NativeComponents {
     fn comparison_visual(left: &str, right: &str, show_order: bool) -> Self::Output {
         let arrow = if show_order { "→" } else { "?" };
         
+        
         NativeComponent(Box::new(
             flex_row((
                 sized_box(label(left).text_size(28.0))
@@ -487,6 +534,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn missing_item_visual(before: &str, after: &str) -> Self::Output {
+        
         NativeComponent(Box::new(
             flex_row((
                 sized_box(label(before).text_size(28.0))
@@ -512,6 +560,7 @@ impl AppComponents for NativeComponents {
     
     fn path_visual(start: &str, end: &str, path: Vec<String>) -> Self::Output {
         // For simplicity, just show start and end
+        
         NativeComponent(Box::new(
             flex_row((
                 sized_box(label(start).text_size(24.0))
@@ -539,14 +588,15 @@ impl AppComponents for NativeComponents {
     
     fn simple_label(text: String) -> Self::Output {
         NativeComponent(Box::new(
-                label(text)
-                    .color(map_color(AppColor::Text))
+            label(text)
+                .color(map_color(AppColor::Text))
         ))
     }
     
     fn simple_flex_column(items: Vec<Self::Output>) -> Self::Output {
         // Convert Vec of NativeComponents to Vec of AnyWidgetView
         let views: Vec<Box<AnyWidgetView<AppState>>> = items.into_iter().map(|c| c.0).collect();
+        
         NativeComponent(Box::new(
             flex(views).direction(Axis::Vertical).gap(10.0)
         ))
@@ -554,12 +604,14 @@ impl AppComponents for NativeComponents {
     
     fn simple_flex_row(items: Vec<Self::Output>) -> Self::Output {
         let views: Vec<Box<AnyWidgetView<AppState>>> = items.into_iter().map(|c| c.0).collect();
+        
         NativeComponent(Box::new(
             flex(views).direction(Axis::Horizontal).gap(10.0)
         ))
     }
     
     fn simple_button(text: &str, on_click: impl Fn(&mut AppState) + Send + Sync + 'static) -> Self::Output {
+        
         NativeComponent(Box::new(
             button(label(text), on_click)
                 .padding(10.0)
@@ -569,6 +621,7 @@ impl AppComponents for NativeComponents {
     
     // Additional ported components from old app
     fn card<V>(title: &str, content: V) -> Self::Output where V: Component<Output = Self::Output> {
+        
         NativeComponent(Box::new(
             sized_box(
                 flex((
@@ -589,6 +642,7 @@ impl AppComponents for NativeComponents {
     
     fn progress_bar(progress: f64, label_text: &str) -> Self::Output {
         let percentage = (progress * 100.0) as u32;
+        
         NativeComponent(Box::new(
             flex((
                 label(label_text).text_size(12.0).color(map_color(AppColor::Text)),
@@ -596,7 +650,7 @@ impl AppComponents for NativeComponents {
                 sized_box(
                     flex(())
                 )
-                .width(200.0)
+                .expand_width()
                 .height(8.0)
                 .background_color(Color::from_rgb8(229, 231, 235))
                 .corner_radius(4.0),
@@ -608,7 +662,59 @@ impl AppComponents for NativeComponents {
         ))
     }
     
+    fn progress_card(title: &str, progress: f32, label_text: &str, color: AppColor) -> Self::Output {
+        let clamped_progress = progress.clamp(0.0, 1.0);
+        let percentage = (clamped_progress * 100.0) as u32;
+        
+        
+        NativeComponent(Box::new(
+            sized_box(
+                flex((
+                    label(title)
+                        .text_size(14.0)
+                        .weight(xilem::FontWeight::MEDIUM),
+                    FlexSpacer::Fixed(8.0),
+                    // Progress bar container
+                    sized_box(
+                        // Progress fill
+                        sized_box(flex(()))
+                            .expand_width()
+                            .height(8.0)
+                            .background_color(map_color(color))
+                            .corner_radius(4.0)
+                    )
+                    .expand_width()
+                    .height(8.0)
+                    .background_color(Color::from_rgb8(229, 231, 235))
+                    .corner_radius(4.0),
+                    FlexSpacer::Fixed(8.0),
+                    flex((
+                        label(label_text)
+                            .text_size(12.0)
+                            .color(map_color(AppColor::TextMuted)),
+                        FlexSpacer::Fixed(5.0),
+                        label(format!("{}%", percentage))
+                            .text_size(12.0)
+                            .weight(xilem::FontWeight::BOLD)
+                            .color(map_color(color)),
+                    ))
+                    .direction(Axis::Horizontal)
+                    .cross_axis_alignment(CrossAxisAlignment::Center),
+                ))
+                .direction(Axis::Vertical)
+                .cross_axis_alignment(CrossAxisAlignment::Start)
+                .gap(5.0)
+            )
+            .background_color(Color::from_rgb8(255, 255, 255))
+            .border_color(Color::from_rgb8(229, 231, 235))
+            .border_width(1.0)
+            .corner_radius(8.0)
+            .padding(15.0)
+        ))
+    }
+    
     fn metric_display(label_text: &str, value: &str, color: AppColor) -> Self::Output {
+        
         NativeComponent(Box::new(
             flex((
                 label(label_text)
@@ -626,12 +732,22 @@ impl AppComponents for NativeComponents {
     
     fn checkbox(checked: bool, label_text: &str, _on_toggle: impl Fn(&mut AppState, bool) + Send + Sync + 'static) -> Self::Output {
         let check_mark = if checked { "☑" } else { "☐" };
+        
         NativeComponent(Box::new(
             flex_row((
                 label(check_mark).text_size(16.0).color(map_color(AppColor::Text)),
                 label(label_text).text_size(14.0).color(map_color(AppColor::Text)),
             ))
             .gap(8.0)
+        ))
+    }
+    
+    fn label(text: &str) -> Self::Output {
+        
+        NativeComponent(Box::new(
+            label(text)
+                .text_size(14.0)
+                .color(map_color(AppColor::Text))
         ))
     }
     
@@ -655,6 +771,7 @@ impl AppComponents for NativeComponents {
             map_color(AppColor::Error)
         };
         
+        
         NativeComponent(Box::new(
             sized_box(
                 label(message)
@@ -668,6 +785,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn loading_overlay(message: &str) -> Self::Output {
+        
         NativeComponent(Box::new(
             flex((
                 sized_box(spinner()).width(40.0).height(40.0),
@@ -680,6 +798,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn nav_bar(current_screen: &str) -> Self::Output {
+        
         NativeComponent(Box::new(
             sized_box(
                 label(format!("📍 {}", current_screen))
@@ -692,6 +811,7 @@ impl AppComponents for NativeComponents {
     
     fn error_message(message: Option<String>) -> Self::Output {
         if let Some(msg) = message {
+            
             NativeComponent(Box::new(
                 sized_box(
                     label(format!("❌ {}", msg))
@@ -707,6 +827,7 @@ impl AppComponents for NativeComponents {
     
     fn success_message(message: Option<String>) -> Self::Output {
         if let Some(msg) = message {
+            
             NativeComponent(Box::new(
                 sized_box(
                     label(format!("✅ {}", msg))
@@ -752,6 +873,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn demo_button(element_id: &str, text: &str, has_highlight: bool, tooltip: Option<String>) -> Self::Output {
+        
         let button_view = NativeComponent(Box::new(
             button(label(text), |_| {})
                 .padding(10.0)
@@ -773,6 +895,7 @@ impl AppComponents for NativeComponents {
         on_confirm: impl Fn(&mut AppState) + Send + Sync + 'static,
         on_cancel: impl Fn(&mut AppState) + Send + Sync + 'static,
     ) -> Self::Output {
+        
         NativeComponent(Box::new(
             sized_box(
                 flex((
@@ -807,6 +930,7 @@ impl AppComponents for NativeComponents {
             0
         };
         
+        
         NativeComponent(Box::new(
             flex((
                 label("Response Time Histogram")
@@ -830,6 +954,7 @@ impl AppComponents for NativeComponents {
         let correct = responses.iter().filter(|r| r.correct).count();
         let total = responses.len();
         
+        
         NativeComponent(Box::new(
             flex((
                 label("Learning Curve")
@@ -847,6 +972,7 @@ impl AppComponents for NativeComponents {
     
     fn error_analysis_display(responses: &[crate::models::Response]) -> Self::Output {
         let errors = responses.iter().filter(|r| !r.correct).count();
+        
         
         NativeComponent(Box::new(
             flex((
@@ -870,6 +996,7 @@ impl AppComponents for NativeComponents {
             .collect();
         
         let content = if strategies_text.is_empty() {
+            
             Box::new(flex((
                 label("Strategy Analysis")
                     .text_size(16.0)
@@ -881,6 +1008,7 @@ impl AppComponents for NativeComponents {
             ))
             .direction(Axis::Vertical)) as Box<AnyWidgetView<AppState>>
         } else if strategies_text.len() == 1 {
+            
             Box::new(flex((
                 label("Strategy Analysis")
                     .text_size(16.0)
@@ -892,6 +1020,7 @@ impl AppComponents for NativeComponents {
             ))
             .direction(Axis::Vertical)) as Box<AnyWidgetView<AppState>>
         } else if strategies_text.len() == 2 {
+            
             Box::new(flex((
                 label("Strategy Analysis")
                     .text_size(16.0)
@@ -905,6 +1034,7 @@ impl AppComponents for NativeComponents {
             .direction(Axis::Vertical)
             .gap(5.0)) as Box<AnyWidgetView<AppState>>
         } else {
+            
             Box::new(flex((
                 label("Strategy Analysis")
                     .text_size(16.0)
@@ -931,6 +1061,7 @@ impl AppComponents for NativeComponents {
             map_color(AppColor::Surface)
         };
         
+        
         NativeComponent(Box::new(
             sized_box(
                 flex((
@@ -953,6 +1084,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn session_info(session_id: &str, status: &str, duration: &str, domain: &str) -> Self::Output {
+        
         NativeComponent(Box::new(
             flex((
                 label(format!("Session: {}", session_id))
@@ -993,6 +1125,7 @@ impl AppComponents for NativeComponents {
             ) as Box<AnyWidgetView<AppState>>
         };
         
+        
         NativeComponent(Box::new(
             sized_box(content)
                 .padding(15.0)
@@ -1003,6 +1136,7 @@ impl AppComponents for NativeComponents {
     
     fn answer_options_display(options: Vec<String>, _on_select: impl Fn(&mut AppState, usize) + Send + Sync + 'static) -> Self::Output {
         // For simplicity, just display the options
+        
         let buttons = options.into_iter().take(4).enumerate().map(|(i, opt)| {
             Box::new(
                 button(label(opt), move |_| {
@@ -1044,6 +1178,7 @@ impl AppComponents for NativeComponents {
     }
     
     fn performance_chart(accuracy: f64, total_responses: usize, correct: usize, avg_time: f64) -> Self::Output {
+        
         NativeComponent(Box::new(
             sized_box(
                 flex((

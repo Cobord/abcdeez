@@ -5,6 +5,7 @@ pub mod auth;
 pub mod components;
 pub mod demo;
 pub mod gamification;
+pub mod logging;
 pub mod models;
 pub mod platform;
 pub mod services;
@@ -17,8 +18,8 @@ pub mod viz;
 // Only enable the native run function if xilem-native is set, regardless of xilem-web.
 #[cfg(feature = "xilem-native")]
 pub fn run(ev: xilem::EventLoopBuilder) -> Result<(), winit::error::EventLoopError> {
-    // Initialize tracing for debugging
-    tracing_subscriber::fmt::init();
+    // Initialize platform-specific logging
+    crate::logging::init_logging();
     tracing::info!("Starting ABCDEEZ Learning App");
 
     // Create initial application state

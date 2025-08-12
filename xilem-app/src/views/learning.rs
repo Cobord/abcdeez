@@ -3,6 +3,7 @@
 use crate::state::{AppState, LoadingKey, Screen, SessionState};
 use crate::models::{Task, ResponseMetrics};
 use crate::components::{Components, AppComponents, AppColor, ComponentOutput};
+use crate::utils::easter_egg::CrabTrigger;
 
 pub fn learning_view(state: &mut AppState) -> ComponentOutput {
     let header = learning_header(state);
@@ -123,10 +124,39 @@ fn submit_response(state: &mut AppState, answer: String, task: Task) {
     if let Some(session) = &mut state.session {
         let is_correct = answer == task.correct_answer;
         
+        tracing::debug!(
+            task_type = ?task.task_type,
+            difficulty = task.difficulty,
+            correct = is_correct,
+            user_answer = %answer,
+            "Response submitted"
+        );
+        
+        // Update streak tracking
         if is_correct {
+            session.struggle_indicators.consecutive_correct += 1;
             session.struggle_indicators.consecutive_errors = 0;
+            
+            // Check for perfect streak achievement
+            let streak = session.struggle_indicators.consecutive_correct;
+            if streak >= 10 && !state.easter_egg_manager.crab.active {
+                tracing::info!(streak = streak, "Perfect streak achieved! Activating Little Crab");
+                state.easter_egg_manager.crab.activate(CrabTrigger::PerfectStreak);
+            }
+            
+            // Little Crab celebrates success
+            if state.easter_egg_manager.crab.active {
+                let accuracy = calculate_accuracy(&session.performance_buffer);
+                state.easter_egg_manager.crab.celebrate_success(streak, accuracy as f32);
+            }
         } else {
             session.struggle_indicators.consecutive_errors += 1;
+            session.struggle_indicators.consecutive_correct = 0;
+            
+            // Little Crab offers encouragement during struggles
+            if state.easter_egg_manager.crab.active && session.struggle_indicators.consecutive_errors >= 3 {
+                state.easter_egg_manager.crab.offer_encouragement(session.struggle_indicators.consecutive_errors);
+            }
         }
         
         session.performance_buffer.push(ResponseMetrics {
@@ -137,6 +167,14 @@ fn submit_response(state: &mut AppState, answer: String, task: Task) {
         });
         
         session.tasks_completed += 1;
+        
+        // Little Crab reacts to domain changes
+        if state.easter_egg_manager.crab.active {
+            if let Some(domain) = &session.domain {
+                state.easter_egg_manager.crab.react_to_domain(&domain.to_string());
+            }
+        }
+        
         load_next_task(state);
     }
 }
@@ -161,6 +199,7 @@ fn create_mock_session(state: &mut AppState) {
             "F".to_string(),
             "G".to_string(),
         ]),
+        domain: Some("alphabet".to_string()),
         start_time: chrono::Utc::now(),
         tasks_completed: 0,
         current_task: Some(create_mock_alphabet_task()),
@@ -168,6 +207,9 @@ fn create_mock_session(state: &mut AppState) {
         hint_level: 0,
         struggle_indicators: Default::default(),
         performance_buffer: Vec::new(),
+        responses_total: 0,
+        responses_correct: 0,
+        total_hints_used: 0,
     };
     
     state.session = Some(session);

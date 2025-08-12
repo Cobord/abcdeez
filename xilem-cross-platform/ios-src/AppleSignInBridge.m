@@ -139,23 +139,40 @@
     UIWindow *keyWindow = nil;
     
     if (@available(iOS 15.0, *)) {
-        NSArray<UIWindowScene *> *windowScenes = [[[UIApplication sharedApplication] connectedScenes] allObjects];
-        for (UIWindowScene *windowScene in windowScenes) {
-            if (windowScene.activationState == UISceneActivationStateForegroundActive) {
-                keyWindow = windowScene.keyWindow;
-                break;
+        NSSet *scenes = [[UIApplication sharedApplication] connectedScenes];
+        for (UIScene *scene in scenes) {
+            if ([scene isKindOfClass:[UIWindowScene class]]) {
+                UIWindowScene *windowScene = (UIWindowScene *)scene;
+                if (windowScene.activationState == UISceneActivationStateForegroundActive) {
+                    keyWindow = windowScene.keyWindow;
+                    if (!keyWindow && windowScene.windows.count > 0) {
+                        keyWindow = windowScene.windows.firstObject;
+                    }
+                    if (keyWindow) break;
+                }
             }
         }
     }
     
-    // Fallback for older iOS versions or if no key window found
+    // Fallback for iOS 13-14
     if (!keyWindow) {
-        keyWindow = [[UIApplication sharedApplication] keyWindow];
+        if (@available(iOS 13.0, *)) {
+            NSArray *windows = [[UIApplication sharedApplication] windows];
+            for (UIWindow *window in windows) {
+                if (window.isKeyWindow) {
+                    keyWindow = window;
+                    break;
+                }
+            }
+        }
     }
     
     // Final fallback - get the first window
-    if (!keyWindow && [[UIApplication sharedApplication] windows].count > 0) {
-        keyWindow = [[[UIApplication sharedApplication] windows] firstObject];
+    if (!keyWindow) {
+        NSArray *windows = [[UIApplication sharedApplication] windows];
+        if (windows.count > 0) {
+            keyWindow = windows.firstObject;
+        }
     }
     
     return keyWindow ?: [[UIWindow alloc] init];

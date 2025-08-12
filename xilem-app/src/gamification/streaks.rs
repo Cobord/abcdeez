@@ -23,7 +23,7 @@ impl StreakInfo {
     }
     
     pub fn update(&mut self, practiced_today: bool) {
-        let today = Utc::now();
+        let _today = Utc::now();
         
         if practiced_today {
             self.practice_today();

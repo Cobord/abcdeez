@@ -3,6 +3,7 @@ use chrono::Timelike;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
+use crate::utils::app_callback::{AppCallback0, register_callback0};
 use crate::state::{AppState, Screen};
 
 /// Represents a single step in the demo
@@ -192,7 +193,7 @@ pub struct DemoController {
     pub tooltips: HashMap<String, String>,
     pub state: DemoState,
     pub analytics: DemoAnalytics,
-    pub callbacks: HashMap<String, Box<dyn Fn(&mut AppState) + Send + Sync>>,
+    pub callbacks: HashMap<String, AppCallback0>,
     pub step_timer: Option<Instant>,
     pub auto_advance_timer: Option<Instant>,
     pub user_interactions: VecDeque<UserInteraction>,
@@ -266,8 +267,27 @@ impl DemoController {
     }
     
     fn register_default_callbacks(&mut self) {
-        // Register common callbacks that demos can use
-        // Note: In real implementation, these would modify AppState
+        // Example callbacks (persisted by name)
+        fn go_to_dashboard(state: &mut AppState) {
+            state.current_screen = Screen::Dashboard;
+        }
+        fn start_learning(state: &mut AppState) {
+            state.current_screen = Screen::Learning;
+        }
+
+        // Register globally so deserialized callbacks can be resolved
+        register_callback0("go_to_dashboard", go_to_dashboard);
+        register_callback0("start_learning", start_learning);
+
+        // Store handles in the controller (fun_name persisted; ptr skipped)
+        self.callbacks.insert(
+            "go_to_dashboard".to_string(),
+            AppCallback0::new("go_to_dashboard", go_to_dashboard),
+        );
+        self.callbacks.insert(
+            "start_learning".to_string(),
+            AppCallback0::new("start_learning", start_learning),
+        );
     }
     
     fn init_default_scenarios(&mut self) {
@@ -709,19 +729,19 @@ impl DemoController {
     /// Validate a step condition
     fn validate_step(&self, validation: &StepValidation) -> Result<bool, String> {
         match validation {
-            StepValidation::ElementExists(id) => {
+            StepValidation::ElementExists(_id) => {
                 // In real implementation, check if element exists in DOM
                 Ok(true)
             }
-            StepValidation::ElementHasValue { element, value } => {
+            StepValidation::ElementHasValue { element: _, value: _ } => {
                 // In real implementation, check element value
                 Ok(true)
             }
-            StepValidation::StateCondition(condition) => {
+            StepValidation::StateCondition(_condition) => {
                 // In real implementation, evaluate state condition
                 Ok(true)
             }
-            StepValidation::CustomValidation(name) => {
+            StepValidation::CustomValidation(_name) => {
                 // In real implementation, call custom validation
                 Ok(true)
             }

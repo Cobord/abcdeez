@@ -12,7 +12,7 @@ name = "xilem_abcdeez_mobile"
 crate-type = ["staticlib", "cdylib", "lib"]
 
 [dependencies]
-abcdeez-app = { path = "../../xilem-app" }
+abcdeez-app = { path = "../../xilem-app", features = ["embed-backend", "xilem-native"] }
 winit.workspace = true
 pollster = "0.3.0"
 

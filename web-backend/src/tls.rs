@@ -1,3 +1,5 @@
+#![cfg(feature = "tls")]
+
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

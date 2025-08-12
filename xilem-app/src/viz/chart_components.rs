@@ -15,7 +15,7 @@ pub fn learning_curve_component(responses: &[Response]) -> ComponentOutput {
         Ok(image_data) => {
             // Convert RGB buffer to base64 for embedding
             let base64_image = STANDARD.encode(&image_data);
-            let data_url = format!("data:image/bmp;base64,{}", base64_image);
+            let _data_url = format!("data:image/bmp;base64,{}", base64_image);
             
             // For now, we'll display as a label with the status
             // In a real implementation, we'd create an image component
@@ -46,7 +46,7 @@ pub fn response_time_histogram_component(response_times: &[u128]) -> ComponentOu
     match charts::create_response_time_histogram(response_times, width, height) {
         Ok(image_data) => {
             let base64_image = STANDARD.encode(&image_data);
-            let data_url = format!("data:image/bmp;base64,{}", base64_image);
+            let _data_url = format!("data:image/bmp;base64,{}", base64_image);
             
             Components::card(
                 "Response Time Distribution",
@@ -73,7 +73,7 @@ pub fn performance_heatmap_component(responses: &[Response]) -> ComponentOutput 
     match charts::create_performance_heatmap(responses, width, height) {
         Ok(image_data) => {
             let base64_image = STANDARD.encode(&image_data);
-            let data_url = format!("data:image/bmp;base64,{}", base64_image);
+            let _data_url = format!("data:image/bmp;base64,{}", base64_image);
             
             Components::card(
                 "Performance Heatmap",
@@ -156,7 +156,7 @@ pub fn metrics_radar_component(state: &AppState) -> ComponentOutput {
     match charts::create_metrics_radar_chart(&metrics, width, height) {
         Ok(image_data) => {
             let base64_image = STANDARD.encode(&image_data);
-            let data_url = format!("data:image/bmp;base64,{}", base64_image);
+            let _data_url = format!("data:image/bmp;base64,{}", base64_image);
             
             Components::card(
                 "Performance Radar",

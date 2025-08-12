@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Sign in with Apple capability -->
+    <key>com.apple.developer.applesignin</key>
+    <array>
+        <string>Default</string>
+    </array>
+    
+    <!-- Associated Domains for Universal Links and Sign in with Apple on Web -->
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>applinks:abcdeez.fg-goose.online</string>
+        <string>applinks:staging.abcdeez.fg-goose.online</string>
+        <string>webcredentials:abcdeez.fg-goose.online</string>
+        <string>webcredentials:staging.abcdeez.fg-goose.online</string>
+    </array>
+    
+    <!-- Keychain Access Groups -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)online.fg-goose.abcdeez</string>
+    </array>
+</dict>
+</plist>

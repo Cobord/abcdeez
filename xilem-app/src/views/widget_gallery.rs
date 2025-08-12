@@ -361,7 +361,7 @@ fn layout_components_section() -> ComponentOutput {
         Components::simple_flex_column(vec![
             Components::simple_label("Centered Container:".to_string()),
             Components::centered_container(
-                400.0,
+                700.0,
                 Components::card(
                     "Centered",
                     Components::simple_label("This is centered with max width".to_string())

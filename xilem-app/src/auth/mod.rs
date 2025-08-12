@@ -1,9 +1,11 @@
 // Authentication module with Apple Sign In and guest mode support
 
+pub mod apple;
 pub mod apple_signin;
 #[cfg(target_os = "ios")]
 pub mod ios;
 
+pub use apple::{sign_in_with_apple, AppleAuthResult, AppleSignInResponse};
 pub use apple_signin::*;
 #[cfg(target_os = "ios")]
 pub use ios::*;

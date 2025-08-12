@@ -92,5 +92,5 @@ fi
 
 echo ""
 echo "To distribute via cargo-dist, run:"
-echo "  cargo dist build"
-echo "  cargo dist upload"
+echo "  dist build"
+echo "  dist upload"

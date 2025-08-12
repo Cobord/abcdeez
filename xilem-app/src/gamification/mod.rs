@@ -12,14 +12,13 @@ pub use powerups::{PowerUp, PowerUpEffect};
 pub use streaks::StreakInfo;
 
 use std::collections::HashMap;
-use std::cell::RefCell;
-use std::rc::Rc;
-use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Main gamification controller
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GamificationManager {
     pub achievement_manager: AchievementManager,
-    pub user_profiles: HashMap<String, Rc<RefCell<GamificationProfile>>>,
+    pub user_profiles: HashMap<String, GamificationProfile>,
     pub leaderboards: HashMap<LeaderboardType, Vec<LeaderboardEntry>>,
 }
 
@@ -32,20 +31,41 @@ impl GamificationManager {
         }
     }
     
-    pub fn get_or_create_profile(&mut self, user_id: &str) -> &RefCell<GamificationProfile> {
+    pub fn get_or_create_profile(&mut self, user_id: &str) -> &mut GamificationProfile {
         self.user_profiles.entry(user_id.to_string())
-            .or_insert_with(|| Rc::new(RefCell::new(GamificationProfile::new(user_id))))
+            .or_insert_with(|| GamificationProfile::new(user_id))
     }
     
-    pub fn check_achievements(&mut self, user_id: &str, event: &AchievementEvent) -> Vec<Achievement> {
-        let profile = self.get_or_create_profile(user_id).clone();
-        let mut profile = profile.borrow_mut();
-        self.achievement_manager.check_achievements(&mut *profile, event)
+    pub fn process_event(&mut self, user_id: &str, event: AchievementEvent) -> Vec<Achievement> {
+        // First check achievements
+        let unlocked = {
+            let profile = self.user_profiles.entry(user_id.to_string())
+                .or_insert_with(|| GamificationProfile::new(user_id));
+            self.achievement_manager.check_achievements(profile, &event)
+        };
+        
+        // Then award XP for achievements
+        if !unlocked.is_empty() {
+            let profile = self.get_or_create_profile(user_id);
+            for achievement in &unlocked {
+                let xp = (achievement.points as f32 * achievement.rarity.multiplier()) as u32;
+                profile.add_experience(xp);
+            }
+        }
+        
+        unlocked
+    }
+    
+    pub fn update_leaderboards(&mut self) {
+        // Update all leaderboard types
+        self.update_leaderboard(LeaderboardType::Global);
+        self.update_leaderboard(LeaderboardType::Weekly);
+        self.update_leaderboard(LeaderboardType::Monthly);
     }
     
     pub fn update_leaderboard(&mut self, leaderboard_type: LeaderboardType) {
         let mut entries: Vec<LeaderboardEntry> = self.user_profiles.values()
-            .map(|profile| LeaderboardEntry::from_profile(&profile.borrow()))
+            .map(|profile| LeaderboardEntry::from_profile(profile))
             .collect();
         
         // Sort by score descending
@@ -81,14 +101,17 @@ impl GamificationManager {
     
     pub fn award_experience(&mut self, user_id: &str, xp: u32) {
         let profile = self.get_or_create_profile(user_id);
-        let mut profile = profile.borrow_mut();
         profile.add_experience(xp);
     }
     
     pub fn activate_power_up(&mut self, user_id: &str, power_up_id: &str) -> Result<(), String> {
         let profile = self.get_or_create_profile(user_id);
-        let mut profile = profile.borrow_mut();
         profile.activate_power_up(power_up_id)
+    }
+    
+    pub fn update_streak(&mut self, user_id: &str, practiced_today: bool) {
+        let profile = self.get_or_create_profile(user_id);
+        profile.update_streak(practiced_today);
     }
 }
 

@@ -1,4 +1,4 @@
-use web_backend::{build_router, cache, config, db, monitoring, tls, AppState};
+use web_backend::{build_router, cache, config, db, monitoring, AppState};
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -101,40 +101,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await;
     });
 
-    // Setup TLS if configured
-    let tls_manager = tls::TlsManager::new(Arc::new(config.clone()));
-    let tls_acceptor = tls_manager.create_tls_acceptor().await?;
-
-    // Start certificate renewal scheduler
-    let renewal_config = Arc::new(config.clone());
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(86400)); // Check daily
-        loop {
-            interval.tick().await;
-            let renewal_manager = tls::TlsManager::new(renewal_config.clone());
-            if let Err(e) = renewal_manager.check_certificate_renewal().await {
-                error!("Certificate renewal check failed: {}", e);
-            }
-        }
-    });
-
-    // Server addresses
+    // Server address (HTTP)
     let http_addr = SocketAddr::from(([0, 0, 0, 0], config.port));
-    let https_addr = SocketAddr::from(([0, 0, 0, 0], config.tls_port));
-
-    // Add ACME challenge route to the app
-    let app = app.route(
-        "/.well-known/acme-challenge/:token",
-        axum::routing::get(tls::handle_acme_challenge),
-    );
 
     info!(
-        "Starting server with TLS support - HTTP: {}, HTTPS: {}",
-        http_addr, https_addr
+        "Starting server (HTTP only) on {}",
+        http_addr
     );
 
-    // Start server with TLS support
-    tls::serve_with_tls(app, http_addr, https_addr, tls_acceptor).await?;
+    // Start server without TLS
+    let listener = tokio::net::TcpListener::bind(http_addr).await?;
+    axum::serve(listener, app).await?;
 
     Ok(())
 }

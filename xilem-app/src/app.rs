@@ -5,6 +5,9 @@ use crate::views::{auth, dashboard, learning, settings, welcome, widget_gallery}
 use crate::components::{Components, AppComponents, ComponentOutput};
 
 pub fn app_logic(state: &mut AppState) -> ComponentOutput {
+    // Process any pending authentication events
+    state.process_auth_events();
+    
     // Update easter egg manager
     state.easter_egg_manager.update(0.016); // ~60fps frame time
     

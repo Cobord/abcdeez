@@ -13,29 +13,35 @@
 		55892F1396056740E1AF9685 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = AF7DE91055EBD05ED77E57F9 /* main.m */; };
 		55B7188F81C3C4183F81D3AE /* libc++.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = A39528EB2CCB182F5328223A /* libc++.tbd */; };
 		57CD6306253C7A940098CD4A /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 57CD6305253C7A940098CD4A /* AudioToolbox.framework */; };
+		ABCD102 /* AppleSignInBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = ABCD002 /* AppleSignInBridge.m */; };
+		ABCD104 /* RustAuthBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = ABCD004 /* RustAuthBridge.m */; };
+		ABCD106 /* AppleLoggingBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = ABCD006 /* AppleLoggingBridge.m */; };
+		ABCD107 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD007 /* Logger.swift */; };
+		ABCD108 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ABCD109 /* AuthenticationServices.framework */; };
+		B0F0F0F0F0F0F0F0F0F0F0F0 /* xilem_abcdeez_mobile.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = B0F0F0F0F0F0F0F0F0F0F0E0 /* xilem_abcdeez_mobile.xcframework */; };
 		CD7E157A2C2DFB95001AA2D9 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CD7E15792C2DFB95001AA2D9 /* CoreGraphics.framework */; };
 		CD7E157C2C2DFBAE001AA2D9 /* CoreText.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CD7E157B2C2DFBAE001AA2D9 /* CoreText.framework */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXContainerItemProxy section */
-		26BF2C4863C966DABAB40DC8 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 8DBF1E2B5C613DA41701F6D9 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = D08AEBE0B1A9C9A7B8C7B33F;
-			remoteInfo = cargo_ios;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		160DB77300A3F1806F024D47 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		55EAC02897847195D2F44C15 /* xilem_abcdeez_mobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = xilem_abcdeez_mobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		57CD6305253C7A940098CD4A /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
 		8EE7F1E3B0303533925D7E33 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		929E79F12E4AC34B00EA3C6B /* xilem_abcdeez_mobile.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = xilem_abcdeez_mobile.entitlements; sourceTree = "<group>"; };
 		96A1E5B62F48B379829E8A0D /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		9F1B41978FA53999AA836D0F /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		A39528EB2CCB182F5328223A /* libc++.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = "libc++.tbd"; path = "usr/lib/libc++.tbd"; sourceTree = SDKROOT; };
+		ABCD001 /* AppleSignInBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppleSignInBridge.h; sourceTree = "<group>"; };
+		ABCD002 /* AppleSignInBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppleSignInBridge.m; sourceTree = "<group>"; };
+		ABCD003 /* RustAuthBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RustAuthBridge.h; sourceTree = "<group>"; };
+		ABCD004 /* RustAuthBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RustAuthBridge.m; sourceTree = "<group>"; };
+		ABCD005 /* AppleLoggingBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppleLoggingBridge.h; sourceTree = "<group>"; };
+		ABCD006 /* AppleLoggingBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppleLoggingBridge.m; sourceTree = "<group>"; };
+		ABCD007 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		ABCD109 /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
 		AF7DE91055EBD05ED77E57F9 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		B0F0F0F0F0F0F0F0F0F0F0E0 /* xilem_abcdeez_mobile.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = xilem_abcdeez_mobile.xcframework; path = dist/xilem_abcdeez_mobile.xcframework; sourceTree = "<group>"; };
 		CD7E15792C2DFB95001AA2D9 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		CD7E157B2C2DFBAE001AA2D9 /* CoreText.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreText.framework; path = System/Library/Frameworks/CoreText.framework; sourceTree = SDKROOT; };
 		FE71FBCAA714DB4F42459106 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
@@ -46,6 +52,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B0F0F0F0F0F0F0F0F0F0F0F0 /* xilem_abcdeez_mobile.xcframework in Frameworks */,
 				CD7E157A2C2DFB95001AA2D9 /* CoreGraphics.framework in Frameworks */,
 				442540D056ADB9AE61A0A590 /* Security.framework in Frameworks */,
 				134866208A035F8615C99114 /* Metal.framework in Frameworks */,
@@ -53,6 +60,7 @@
 				CD7E157C2C2DFBAE001AA2D9 /* CoreText.framework in Frameworks */,
 				55B7188F81C3C4183F81D3AE /* libc++.tbd in Frameworks */,
 				57CD6306253C7A940098CD4A /* AudioToolbox.framework in Frameworks */,
+				ABCD108 /* AuthenticationServices.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -73,6 +81,13 @@
 				160DB77300A3F1806F024D47 /* bindings.h */,
 				8EE7F1E3B0303533925D7E33 /* Info.plist */,
 				AF7DE91055EBD05ED77E57F9 /* main.m */,
+				ABCD001 /* AppleSignInBridge.h */,
+				ABCD002 /* AppleSignInBridge.m */,
+				ABCD003 /* RustAuthBridge.h */,
+				ABCD004 /* RustAuthBridge.m */,
+				ABCD005 /* AppleLoggingBridge.h */,
+				ABCD006 /* AppleLoggingBridge.m */,
+				ABCD007 /* Logger.swift */,
 			);
 			path = "ios-src";
 			sourceTree = "<group>";
@@ -80,6 +95,7 @@
 		8F2E3E6040EAD2EC9F3FA530 = {
 			isa = PBXGroup;
 			children = (
+				929E79F12E4AC34B00EA3C6B /* xilem_abcdeez_mobile.entitlements */,
 				4F1D6F28B8A5D1927AB0ADED /* ios-src */,
 				EB028409C2D0655412DA6E44 /* Frameworks */,
 				321F7D6A765B38E746C35105 /* Products */,
@@ -96,35 +112,20 @@
 				96A1E5B62F48B379829E8A0D /* Metal.framework */,
 				9F1B41978FA53999AA836D0F /* Security.framework */,
 				FE71FBCAA714DB4F42459106 /* UIKit.framework */,
+				ABCD109 /* AuthenticationServices.framework */,
+				B0F0F0F0F0F0F0F0F0F0F0E0 /* xilem_abcdeez_mobile.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
-/* Begin PBXLegacyTarget section */
-		D08AEBE0B1A9C9A7B8C7B33F /* cargo_ios */ = {
-			isa = PBXLegacyTarget;
-			buildArgumentsString = build_rust_deps.sh;
-			buildConfigurationList = AA00A0CFDB11F37F2BA3FC2E /* Build configuration list for PBXLegacyTarget "cargo_ios" */;
-			buildPhases = (
-				FE045B3D04D57B713A565FF8 /* Sources */,
-			);
-			buildToolPath = /bin/sh;
-			buildWorkingDirectory = .;
-			dependencies = (
-			);
-			name = cargo_ios;
-			passBuildSettingsInEnvironment = 1;
-			productName = cargo_ios;
-		};
-/* End PBXLegacyTarget section */
-
 /* Begin PBXNativeTarget section */
 		3BDB8152E4962373181B4FE5 /* xilem_abcdeez_mobile */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E714A1AEAAE517C348B5BD27 /* Build configuration list for PBXNativeTarget "xilem_abcdeez_mobile" */;
 			buildPhases = (
+				B0B0B0B0B0B0B0B0B0B0B0B0 /* Prebuild Rust (XCFramework) */,
 				9F13800790AD9DBC2BC0F116 /* Sources */,
 				D5A822CB2D6847BA8800BE4C /* Frameworks */,
 				57CD630D253C80E60098CD4A /* Resources */,
@@ -132,7 +133,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				19D4B9C22ADC6705B5132B4C /* PBXTargetDependency */,
 			);
 			name = xilem_abcdeez_mobile;
 			productName = xilem_abcdeez_mobile;
@@ -161,7 +161,6 @@
 			projectRoot = "";
 			targets = (
 				3BDB8152E4962373181B4FE5 /* xilem_abcdeez_mobile */,
-				D08AEBE0B1A9C9A7B8C7B33F /* cargo_ios */,
 			);
 		};
 /* End PBXProject section */
@@ -176,31 +175,50 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+        B0B0B0B0B0B0B0B0B0B0B0B0 /* Prebuild Rust (XCFramework) */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+            inputFileListPaths = (
+            );
+			inputPaths = (
+                "$(SRCROOT)/ios-prebuild-rust.sh",
+                "$(SRCROOT)",
+                "$(SRCROOT)/mobile",
+                "$(SRCROOT)/../xilem-app",
+                "$(SRCROOT)/../web-backend",
+                "$(SRCROOT)/../core",
+			);
+			name = "Prebuild Rust (XCFramework)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+                "$(DERIVED_FILE_DIR)/rust.prebuild.stamp",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+            shellPath = /bin/bash;
+            shellScript = "set -e\n# Ensure cargo is on PATH for sandboxed script\nexport PATH=\"$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin\"\nexport CARGO_HOME=\"$HOME/.cargo\"\nexport RUSTUP_HOME=\"$HOME/.rustup\"\n\necho 'Running Rust prebuild...'\n\"${SRCROOT}/ios-prebuild-rust.sh\"\n# write a stamp file so sandbox sees an output\necho done > \"${DERIVED_FILE_DIR}/rust.prebuild.stamp\"\n";
+            alwaysOutOfDate = 1;
+            showEnvVarsInLog = 1;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		9F13800790AD9DBC2BC0F116 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				55892F1396056740E1AF9685 /* main.m in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		FE045B3D04D57B713A565FF8 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
+				ABCD102 /* AppleSignInBridge.m in Sources */,
+				ABCD104 /* RustAuthBridge.m in Sources */,
+				ABCD106 /* AppleLoggingBridge.m in Sources */,
+				ABCD107 /* Logger.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		19D4B9C22ADC6705B5132B4C /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = D08AEBE0B1A9C9A7B8C7B33F /* cargo_ios */;
-			targetProxy = 26BF2C4863C966DABAB40DC8 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		4AD7BC6FDD56FF18FA6DA7D7 /* Debug */ = {
@@ -240,7 +258,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -271,6 +289,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++11";
 				CLANG_CXX_LIBRARY = "libc++";
+				CODE_SIGN_ENTITLEMENTS = xilem_abcdeez_mobile.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 992772WV7K;
@@ -297,7 +316,6 @@
 					"$(inherited)",
 					"./target/x86_64-apple-ios/release",
 				);
-				// For Mac Catalyst (iPad app running on Mac)
 				"LIBRARY_SEARCH_PATHS[sdk=macosx*][arch=arm64]" = (
 					"$(inherited)",
 					"./target/aarch64-apple-ios-macabi/release",
@@ -311,9 +329,11 @@
 					"-lxilem_abcdeez_mobile",
 					"-lc++abi",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = online.fg-goose.abcdeez;
+				PRODUCT_BUNDLE_IDENTIFIER = "online.fg-goose.abcdeez";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "ios-src/xilem_abcdeez_mobile-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -355,7 +375,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -372,25 +392,13 @@
 			};
 			name = Release;
 		};
-		8265913A25816D964A847F1B /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.rust.cargo-ios";
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
 		A2D5B73DD30D562B6F366526 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++11";
 				CLANG_CXX_LIBRARY = "libc++";
+				CODE_SIGN_ENTITLEMENTS = xilem_abcdeez_mobile.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 992772WV7K;
@@ -430,25 +438,14 @@
 					"-lxilem_abcdeez_mobile",
 					"-lc++abi",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = online.fg-goose.abcdeez;
+				PRODUCT_BUNDLE_IDENTIFIER = "online.fg-goose.abcdeez";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "ios-src/xilem_abcdeez_mobile-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
-		};
-		FEA9B18D9236F9F6DC6DF799 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.rust.cargo-ios";
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
@@ -458,15 +455,6 @@
 			buildConfigurations = (
 				4AD7BC6FDD56FF18FA6DA7D7 /* Debug */,
 				79E3C28F06346EA58420A93D /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
-		AA00A0CFDB11F37F2BA3FC2E /* Build configuration list for PBXLegacyTarget "cargo_ios" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				8265913A25816D964A847F1B /* Debug */,
-				FEA9B18D9236F9F6DC6DF799 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
