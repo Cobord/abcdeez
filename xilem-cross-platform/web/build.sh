@@ -21,6 +21,7 @@ echo "Build hash: $BUILD_HASH, Build time: $BUILD_TIME"
 # Copy PWA files to pkg directory
 echo "Copying PWA files..."
 cp manifest.json pkg/ 2>/dev/null || echo "Warning: manifest.json not found"
+cp styles.css pkg/ 2>/dev/null || echo "Warning: styles.css not found"
 
 # Update service worker with build hash
 if [ -f service-worker.js ]; then

@@ -26,7 +26,7 @@ pub fn app_logic(state: &mut AppState) -> ComponentOutput {
         Screen::Dashboard => dashboard::dashboard_view(state, window_width),
         Screen::Learning | Screen::Training => learning::learning_view(state, window_width),
         Screen::Settings | Screen::Profile => settings::settings_view(state, window_width),
-        Screen::WidgetGallery => widget_gallery::widget_gallery(window_width),
+        Screen::WidgetGallery => widget_gallery::widget_gallery(state, window_width),
         Screen::Visualizations => {
             use crate::viz::visualization_dashboard;
             visualization_dashboard(state, window_width)

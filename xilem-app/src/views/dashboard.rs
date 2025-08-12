@@ -12,12 +12,7 @@ pub fn dashboard_view(state: &mut AppState, window_width: f64) -> ComponentOutpu
         .map(|u| u.username.as_str())
         .unwrap_or("Guest");
     
-    let header = Components::header_bar(
-        "ABCDEEZ Dashboard",
-        |state| {
-            state.navigate(Screen::Settings);
-        }
-    );
+    // Header and navigation now handled by adaptive_app_layout
     
     // Gamification profile info
     let profile = state.get_current_user_profile();
@@ -202,12 +197,7 @@ pub fn dashboard_view(state: &mut AppState, window_width: f64) -> ComponentOutpu
         ]
     );
     
-    let bottom_nav = Components::bottom_nav_bar(
-        Screen::Dashboard,
-        |state, screen| {
-            state.navigate(screen);
-        }
-    );
+    // Bottom nav handled by adaptive_app_layout
     
     // Build main content with responsive layout
     let mut content_items = vec![
@@ -245,14 +235,11 @@ pub fn dashboard_view(state: &mut AppState, window_width: f64) -> ComponentOutpu
     let content = Components::simple_flex_column(content_items);
     
     // Use page layout for consistent structure
-    let page_content = page_layout(
+    page_layout(
         "ABCDEEZ Dashboard",
         Some(&format!("Welcome back, {}!", username)),
         content
-    );
-    
-    // Fill screen; center content with max-width in components
-    Components::app_scaffold(header, page_content, Some(bottom_nav))
+    )
 }
 
 // Helper functions

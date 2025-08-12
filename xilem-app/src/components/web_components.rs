@@ -671,6 +671,7 @@ impl AppComponents for WebComponents {
         WebComponent(Box::new(
             el::span(text.to_string())
                 .attr("class", "label")
+                .attr("style", format!("color: {}; font-size: 14px;", color_to_css(AppColor::Text)))
         ))
     }
     
@@ -972,16 +973,16 @@ impl WebComponents {
 
 fn color_to_css(color: AppColor) -> &'static str {
     match color {
-        AppColor::Primary => "#0066cc",
-        AppColor::Secondary => "#6c757d",
-        AppColor::Success => "#28a745",
-        AppColor::Warning => "#ffc107",
-        AppColor::Error => "#dc3545",
-        AppColor::Info => "#17a2b8",
-        AppColor::Surface => "#f8f9fa",
-        AppColor::Background => "#ffffff",
-        AppColor::Text => "#212529",
-        AppColor::TextMuted => "#6c757d",
+        AppColor::Primary => "#3b82f6",      // rgb(59, 130, 246)
+        AppColor::Secondary => "#9333ea",    // rgb(147, 51, 234)
+        AppColor::Success => "#22c55e",      // rgb(34, 197, 94)
+        AppColor::Warning => "#fb923c",      // rgb(251, 146, 60)
+        AppColor::Error => "#ef4444",        // rgb(239, 68, 68)
+        AppColor::Info => "#17a2b8",         // rgb(23, 162, 184)
+        AppColor::Surface => "#ffffff",      // rgb(255, 255, 255)
+        AppColor::Background => "#f9fafb",   // rgb(249, 250, 251)
+        AppColor::Text => "#111827",         // rgb(17, 24, 39)
+        AppColor::TextMuted => "#808080",    // rgb(128, 128, 128)
     }
 }
 

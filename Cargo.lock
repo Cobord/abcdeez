@@ -68,7 +68,7 @@ dependencies = [
 
 [[package]]
 name = "abcdeez-core"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "anyhow",
  "axum 0.7.9",
@@ -94,7 +94,7 @@ dependencies = [
 
 [[package]]
 name = "abcdeez-web"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "abcdeez-app",
  "abcdeez-core",
@@ -7103,7 +7103,7 @@ dependencies = [
 
 [[package]]
 name = "web-backend"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "abcdeez-core",
  "aes-gcm",
@@ -8076,7 +8076,7 @@ dependencies = [
 
 [[package]]
 name = "xilem_abcdeez_desktop"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "abcdeez-app",
  "winit",

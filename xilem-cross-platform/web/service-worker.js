@@ -4,6 +4,7 @@ const CACHE_NAME = `abcdeez-${CACHE_VERSION}`;
 const urlsToCache = [
   '/app/',
   '/app/index.html',
+  '/app/styles.css',
   '/app/manifest.json',
   '/app/abcdeez.js',
   '/app/abcdeez_bg.wasm',

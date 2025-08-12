@@ -163,6 +163,20 @@ fn create_features_section(state: &mut AppState) -> ComponentOutput {
     items.push(tour_card);
     items.push(Components::spacer(SpacerSize::Medium));
     
+    // Widget gallery card
+    let gallery_card = feature_card(
+        "🎨",
+        "Component Gallery",
+        "Explore all UI components and features",
+        "View Gallery",
+        |state: &mut AppState| {
+            state.navigate(Screen::WidgetGallery);
+        }
+    );
+    
+    items.push(gallery_card);
+    items.push(Components::spacer(SpacerSize::Medium));
+    
     // Demo mode card
     let demo_card = feature_card(
         "📚",

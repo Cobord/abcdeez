@@ -1,7 +1,7 @@
 // Exhaustive widget gallery showcasing ALL components in the new component library
 
 use crate::components::{Component, ComponentOutput, Components, AppComponents, AppColor, AppTheme, SpacerSize, Orientation, TabItem};
-use crate::components::layout::{page_layout, dashboard_grid, tab_layout, two_column_layout, content_container, with_fab};
+use crate::components::layout::{page_layout, dashboard_grid, tab_layout_with_state, two_column_layout, content_container, with_fab};
 use crate::components::cards::{stat_card_with_trend, Trend, metric_card, achievement_card, leaderboard_card, challenge_card, ChallengeDifficulty, session_summary_card, feature_card, domain_card_enhanced, DomainStats};
 use crate::components::forms::{form_field, FieldType, toggle_switch, slider, radio_group, dropdown, date_picker, time_picker, multi_select, file_upload, color_picker, form_with_validation, FormField};
 use crate::components::feedback::{toast, ToastType, progress_indicator, skeleton_loader, alert, AlertType, AlertAction, confirmation_dialog, snackbar, status_badge, StatusType, loading_overlay_with_progress, help_tooltip, inline_error, success_indicator, step_indicator};
@@ -10,7 +10,7 @@ use crate::models::Response;
 use crate::demo::NotificationType;
 
 /// Exhaustive widget gallery showcasing ALL components
-pub fn widget_gallery(window_width: f64) -> ComponentOutput {
+pub fn widget_gallery(state: &mut AppState, window_width: f64) -> ComponentOutput {
     let tabs = vec![
         ("Core", core_components_tab(window_width)),
         ("Layout", layout_components_tab(window_width)),
@@ -23,7 +23,7 @@ pub fn widget_gallery(window_width: f64) -> ComponentOutput {
         ("Advanced", advanced_components_tab()),
     ];
     
-    let tabbed_content = tab_layout(tabs, 0);
+    let tabbed_content = tab_layout_with_state(state, "widget_gallery", tabs);
     
     page_layout(
         "🎨 Component Gallery",
@@ -110,7 +110,8 @@ fn core_components_tab(window_width: f64) -> ComponentOutput {
     items.push(Components::spacer(SpacerSize::Large));
     items.push(Components::label("Loading States:"));
     items.push(Components::loading_spinner(Some("Loading content...")));
-    items.push(Components::loading_overlay("Processing request..."));
+    // Note: loading_overlay is commented out as it covers the entire screen in web
+    // items.push(Components::loading_overlay("Processing request..."));
     
     Components::simple_flex_column(items)
 }

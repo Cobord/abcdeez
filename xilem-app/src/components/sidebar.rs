@@ -144,19 +144,17 @@ pub fn build_navigation_structure(state: &AppState) -> Vec<NavGroup> {
         collapsed: false,
     });
     
-    // Developer tools (debug mode only)
-    if cfg!(debug_assertions) {
-        groups.push(NavGroup {
-            title: "Developer".to_string(),
-            items: vec![
-                NavItem::new("Widget Gallery", Screen::WidgetGallery)
-                    .with_icon("🎨"),
-                NavItem::new("Demo Mode", Screen::Dashboard)  // Will trigger demo
-                    .with_icon("🎭"),
-            ],
-            collapsed: false,
-        });
-    }
+    // Developer tools (always show for now - can add debug check later)
+    groups.push(NavGroup {
+        title: "Developer".to_string(),
+        items: vec![
+            NavItem::new("Widget Gallery", Screen::WidgetGallery)
+                .with_icon("🎨"),
+            NavItem::new("Demo Mode", Screen::Dashboard)  // Will trigger demo
+                .with_icon("🎭"),
+        ],
+        collapsed: false,
+    });
     
     groups
 }

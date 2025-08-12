@@ -12,6 +12,11 @@ pub fn adaptive_app_layout(
 ) -> ComponentOutput {
     let breakpoint = Breakpoint::from_width(window_width);
     
+    // Skip adaptive layout for welcome screen to keep it simple
+    if matches!(state.current_screen, Screen::Welcome | Screen::Login | Screen::Signup) {
+        return content;
+    }
+    
     match breakpoint {
         Breakpoint::Mobile => mobile_layout(state, content),
         Breakpoint::Tablet => tablet_layout(state, content, window_width),
@@ -242,37 +247,3 @@ pub fn tab_layout_with_state(
     Components::simple_flex_column(vec![tab_bar, content])
 }
 
-/// Create a tab layout (legacy - for compatibility)
-pub fn tab_layout(
-    tabs: Vec<(&str, ComponentOutput)>,
-    current_index: usize,
-) -> ComponentOutput {
-    use crate::components::TabItem;
-    
-    // Build tab items
-    let tab_items: Vec<TabItem> = tabs.iter()
-        .map(|(label, _)| TabItem {
-            label: label.to_string(),
-            icon: None,
-            badge_count: None,
-        })
-        .collect();
-    
-    // Get current content or empty
-    let content = if current_index < tabs.len() {
-        tabs.into_iter().nth(current_index).map(|(_, c)| c).unwrap_or(Components::empty())
-    } else {
-        Components::empty()
-    };
-    
-    // Create tab bar (simplified - would need state management in real app)
-    let tab_bar = Components::tab_bar(
-        tab_items,
-        current_index,
-        |_state, _index| {
-            // Tab switching would be handled here
-        }
-    );
-    
-    Components::simple_flex_column(vec![tab_bar, content])
-}
