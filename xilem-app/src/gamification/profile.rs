@@ -18,6 +18,10 @@ pub struct GamificationProfile {
     pub statistics: UserStatistics,
     pub weekly_goals: WeeklyGoals,
     pub power_ups: Vec<PowerUp>,
+    pub friends: Vec<String>,
+    pub leaderboard_rank: u32,
+    pub all_achievements_count: usize,
+    pub pending_friend_requests: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +83,8 @@ pub struct WeeklyGoals {
     pub streak_goal: u32,
     pub current_streak: u32,
     pub bonus_multiplier: f32,
+    pub xp_goal: u32,
+    pub xp_earned: u32,
 }
 
 impl GamificationProfile {
@@ -111,8 +117,14 @@ impl GamificationProfile {
                 streak_goal: 7,
                 current_streak: 0,
                 bonus_multiplier: 1.0,
+                xp_goal: 1000,
+                xp_earned: 0,
             },
             power_ups: Vec::new(),
+            friends: Vec::new(),
+            leaderboard_rank: 0,
+            all_achievements_count: 50, // Total available achievements
+            pending_friend_requests: 0,
         }
     }
     

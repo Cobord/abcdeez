@@ -9,6 +9,7 @@ pub struct StreakInfo {
     pub last_practice: Option<DateTime<Utc>>,
     pub freeze_charges: u32,
     pub frozen_days: Vec<DateTime<Utc>>,
+    pub completed_today: bool,
 }
 
 impl StreakInfo {
@@ -19,11 +20,14 @@ impl StreakInfo {
             last_practice: None,
             freeze_charges: 3,
             frozen_days: Vec::new(),
+            completed_today: false,
         }
     }
     
     pub fn update(&mut self, practiced_today: bool) {
         let _today = Utc::now();
+        
+        self.completed_today = practiced_today;
         
         if practiced_today {
             self.practice_today();

@@ -186,11 +186,11 @@ fn create_task_visual(task: &Task) -> ComponentOutput {
             CoreTaskType::Predecessor { item } => {
                 Components::comparison_visual("?", item, true)
             },
-            CoreTaskType::Distance { from, to } => {
+            CoreTaskType::ShortestDistance { from, to } => {
                 Components::path_visual(from, to, vec!["?".to_string()])
             },
-            CoreTaskType::Compare { left, right } => {
-                Components::comparison_visual(left, right, false)
+            CoreTaskType::Comparability { a, b } => {
+                Components::comparison_visual(a, b, false)
             },
             _ => Components::label(&task.prompt),
         },

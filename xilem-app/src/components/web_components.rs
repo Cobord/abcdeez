@@ -143,7 +143,10 @@ impl AppComponents for WebComponents {
     }
     
     fn sidebar_nav(current_screen: Screen, on_navigate: impl Fn(&mut AppState, Screen) + Send + Sync + 'static) -> Self::Output {
-        use crate::components::sidebar::{sidebar_navigation, SidebarConfig};
+        use std::sync::Arc;
+        
+        // Wrap the callback in Arc for cloning
+        let on_navigate = Arc::new(on_navigate);
         
         // Create a placeholder sidebar for web
         let items = vec![

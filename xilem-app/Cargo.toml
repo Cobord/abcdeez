@@ -27,7 +27,7 @@ masonry_winit = { git = "https://github.com/linebender/xilem.git", optional = tr
 # Web dependencies (xilem_web)
 xilem_web = { version = "0.3.0", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
-web-sys = { version = "0.3", features = ["Document", "Element", "HtmlElement", "console"], optional = true }
+web-sys = { version = "0.3", features = ["Document", "Element", "HtmlElement", "console", "Window", "Location", "History", "Event", "EventTarget"], optional = true }
 
 # Additional dependencies for the learning app
 serde = { version = "1.0", features = ["derive", "rc"] }

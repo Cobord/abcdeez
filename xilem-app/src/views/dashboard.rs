@@ -180,43 +180,8 @@ pub fn dashboard_view(state: &mut AppState, window_width: f64) -> ComponentOutpu
         vec![]
     };
     
-    // Build responsive grid layout for stats
-    let all_stats = [
-        session_metrics,
-        gamification_stats,
-        cognitive_metrics,
-    ].concat();
-    
-    let stats_grid = dashboard_grid(all_stats, window_width);
-    
-    let gamification_section = Components::settings_section(
-        "Gamification",
-        gamification_stats
-    );
-    
-    let cognitive_section = if !cognitive_metrics.is_empty() {
-        Components::settings_section("Cognitive Performance", cognitive_metrics)
-    } else {
-        Components::empty()
-    };
-    
-    let goals_section = if !weekly_goals.is_empty() {
-        Components::settings_section("Weekly Goals", weekly_goals)
-    } else {
-        Components::empty()
-    };
-    
-    let achievements_section = if !recent_achievements.is_empty() {
-        Components::settings_section("Recent Achievements", recent_achievements)
-    } else {
-        Components::empty()
-    };
-    
-    let powerups_section = if !active_powerups.is_empty() {
-        Components::settings_section("Active Power-ups", active_powerups)
-    } else {
-        Components::empty()
-    };
+    // Build responsive grid layout for main stats only
+    let stats_grid = dashboard_grid(session_metrics, window_width);
     
     // Quick actions with new features
     let quick_actions = Components::settings_section(
@@ -252,7 +217,13 @@ pub fn dashboard_view(state: &mut AppState, window_width: f64) -> ComponentOutpu
         Components::spacer(SpacerSize::Large),
     ];
     
-    // Add sections if not empty
+    // Add additional sections
+    if !gamification_stats.is_empty() {
+        content_items.push(Components::settings_section("Gamification", gamification_stats));
+    }
+    if !cognitive_metrics.is_empty() {
+        content_items.push(Components::settings_section("Cognitive Performance", cognitive_metrics));
+    }
     if !weekly_goals.is_empty() {
         content_items.push(Components::settings_section("Weekly Goals", weekly_goals));
     }

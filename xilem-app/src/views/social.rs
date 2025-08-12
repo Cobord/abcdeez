@@ -494,9 +494,9 @@ fn find_friends_tab(state: &mut AppState) -> ComponentOutput {
                 Components::label(&format!("🎯 {}", reason)),
                 Components::label(&format!("⭐ {} XP", xp)),
                 Components::spacer(SpacerSize::Small),
-                Components::action_button("Add Friend", AppColor::Primary, |state| {
-                    tracing::info!("Sending friend request to {}", name);
-                    state.add_error(format!("Friend request sent to {}", name), true);
+                Components::action_button("Add Friend", AppColor::Primary, move |state| {
+                    tracing::info!("Sending friend request");
+                    state.add_error("Friend request sent".to_string(), true);
                     // TODO: Actually send friend request
                 }),
             ])
@@ -525,12 +525,12 @@ fn friend_card(name: &str, level: &str, last_seen: &str, is_online: bool, xp: u3
             },
             Components::spacer(SpacerSize::Small),
             Components::simple_flex_row(vec![
-                Components::action_button("Challenge", AppColor::Primary, |state| {
-                    tracing::info!("Challenging friend {}", name);
+                Components::action_button("Challenge", AppColor::Primary, move |state| {
+                    tracing::info!("Challenging friend");
                     state.navigate(Screen::Challenges);
                 }),
-                Components::action_button("Compare", AppColor::Info, |state| {
-                    tracing::info!("Comparing stats with {}", name);
+                Components::action_button("Compare", AppColor::Info, move |state| {
+                    tracing::info!("Comparing stats with friend");
                     state.navigate(Screen::Analytics);
                 }),
             ]),

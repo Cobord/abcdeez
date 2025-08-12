@@ -170,7 +170,7 @@ fn create_features_section(state: &mut AppState) -> ComponentOutput {
         "See the system in action with sample data",
         "View Demo",
         |state: &mut AppState| {
-            state.start_demo_training();
+            state.demo_start_training();
             state.navigate(Screen::Learning);
         }
     );

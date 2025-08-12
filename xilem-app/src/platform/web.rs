@@ -5,6 +5,9 @@ use crate::state::AppState;
 use crate::components::Component;
 use super::{PlatformView, PlatformRunner};
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsCast;
+
 // Type alias for type-erased web views
 type WebDomView = Box<AnyDomView<AppState>>;
 
@@ -17,7 +20,34 @@ impl PlatformView for WebView {
 pub struct WebRunner;
 
 impl PlatformRunner for WebRunner {
-    fn run(app_state: AppState) -> Result<(), Box<dyn std::error::Error>> {
+    fn run(mut app_state: AppState) -> Result<(), Box<dyn std::error::Error>> {
+        // Initialize with deep link if available
+        app_state.init_with_deep_link();
+        
+        // Log the initial navigation state
+        #[cfg(target_arch = "wasm32")]
+        {
+            let window = web_sys::window().unwrap();
+            if let Ok(location) = window.location().href() {
+                web_sys::console::log_1(&format!("🔗 Initial URL: {}", location).into());
+                web_sys::console::log_1(&format!("📍 Starting screen: {:?}", app_state.current_screen).into());
+            }
+            
+            // Listen for popstate events (browser back/forward buttons)
+            let closure = wasm_bindgen::closure::Closure::wrap(Box::new(move |_event: web_sys::Event| {
+                web_sys::console::log_1(&format!("🔙 Browser navigation event detected").into());
+                
+                if let Some(window) = web_sys::window() {
+                    if let Ok(location) = window.location().href() {
+                        web_sys::console::log_1(&format!("📍 New URL from browser navigation: {}", location).into());
+                    }
+                }
+            }) as Box<dyn FnMut(_)>);
+            
+            window.add_event_listener_with_callback("popstate", closure.as_ref().unchecked_ref()).unwrap();
+            closure.forget(); // Keep the closure alive
+        }
+        
         // Get the root element from DOM
         let root = web_sys::window()
             .unwrap()

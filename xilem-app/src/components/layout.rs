@@ -36,10 +36,11 @@ fn desktop_layout(
         show_search: true,
     };
     
+    let sidebar_width = sidebar_config.width;
     let sidebar = sidebar_navigation(state, sidebar_config);
     
     // Calculate content area width
-    let content_width = window_width - sidebar_config.width - 40.0; // 40px for margins
+    let content_width = window_width - sidebar_width - 40.0; // 40px for margins
     
     // Wrap content with proper spacing
     let content_area = Components::centered_container(
@@ -221,10 +222,12 @@ pub fn tab_layout_with_state(
         })
         .collect();
     
-    // Get current content
-    let content = tabs.get(current_index)
-        .map(|(_, content)| content.clone())
-        .unwrap_or_else(|| Components::empty());
+    // Get current content or empty
+    let content = if current_index < tabs.len() {
+        tabs.into_iter().nth(current_index).map(|(_, c)| c).unwrap_or(Components::empty())
+    } else {
+        Components::empty()
+    };
     
     // Create tab bar with state management
     let screen_key_clone = screen_key.to_string();
@@ -255,10 +258,12 @@ pub fn tab_layout(
         })
         .collect();
     
-    // Get current content
-    let content = tabs.get(current_index)
-        .map(|(_, content)| content.clone())
-        .unwrap_or_else(|| Components::empty());
+    // Get current content or empty
+    let content = if current_index < tabs.len() {
+        tabs.into_iter().nth(current_index).map(|(_, c)| c).unwrap_or(Components::empty())
+    } else {
+        Components::empty()
+    };
     
     // Create tab bar (simplified - would need state management in real app)
     let tab_bar = Components::tab_bar(

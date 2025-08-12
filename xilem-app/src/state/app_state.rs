@@ -16,6 +16,7 @@ use crate::gamification::{GamificationManager, AchievementEvent};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum LoadingKey {
     Login,
+    Signup,
     Session,
     Task,
     Analytics,
@@ -93,6 +94,55 @@ impl Screen {
             _ => "",
         }
     }
+    
+    /// Parse a Screen from a URL fragment/hash
+    pub fn from_url_fragment(fragment: &str) -> Option<Screen> {
+        // Remove # if present and convert to lowercase for case-insensitive matching
+        let clean_fragment = fragment.trim_start_matches('#').to_lowercase();
+        
+        match clean_fragment.as_str() {
+            "login" => Some(Screen::Login),
+            "signup" | "sign-up" => Some(Screen::Signup),
+            "dashboard" => Some(Screen::Dashboard),
+            "learning" => Some(Screen::Learning),
+            "welcome" => Some(Screen::Welcome),
+            "domain-selection" | "domains" => Some(Screen::DomainSelection),
+            "training" => Some(Screen::Training),
+            "progress" => Some(Screen::Progress),
+            "analytics" => Some(Screen::Analytics),
+            "visualizations" | "viz" => Some(Screen::Visualizations),
+            "leaderboard" => Some(Screen::Leaderboard),
+            "challenges" => Some(Screen::Challenges),
+            "friends" => Some(Screen::Friends),
+            "settings" => Some(Screen::Settings),
+            "profile" => Some(Screen::Profile),
+            "widget-gallery" | "widgets" => Some(Screen::WidgetGallery),
+            _ => None,
+        }
+    }
+    
+    /// Get the URL fragment for this screen
+    pub fn to_url_fragment(&self) -> &str {
+        match self {
+            Screen::Login => "login",
+            Screen::Signup => "signup",
+            Screen::Dashboard => "dashboard",
+            Screen::Learning => "learning",
+            Screen::Welcome => "welcome",
+            Screen::DomainSelection => "domain-selection",
+            Screen::Training => "training",
+            Screen::Progress => "progress",
+            Screen::Analytics => "analytics",
+            Screen::Visualizations => "visualizations",
+            Screen::Leaderboard => "leaderboard",
+            Screen::Challenges => "challenges",
+            Screen::Friends => "friends",
+            Screen::Settings => "settings",
+            Screen::Profile => "profile",
+            Screen::WidgetGallery => "widget-gallery",
+            _ => "dashboard",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -150,6 +200,7 @@ pub struct AppState {
     pub session: Option<SessionState>,
     pub learner_model: Option<LearnerModel>,
     pub adaptive_service: Option<AdaptiveLearningService>,
+    #[serde(skip)]
     pub current_task_start_time: Option<std::time::Instant>,
 
     // Navigation
@@ -166,6 +217,7 @@ pub struct AppState {
     // UI State
     pub loading: HashSet<LoadingKey>,
     pub errors: Vec<AppError>,
+    pub notifications: Vec<(String, crate::demo::NotificationType)>,
     pub theme: Theme,
     pub theme_mode: ThemeMode,
     // Responsive UI metrics
@@ -238,6 +290,7 @@ impl Default for AppState {
             settings_toggles: HashMap::new(),
             loading: HashSet::new(),
             errors: Vec::new(),
+            notifications: Vec::new(),
             theme: Theme::default(),
             theme_mode: ThemeMode::Light,
             ui_scale: 1.0,
@@ -273,12 +326,64 @@ impl AppState {
     
     pub fn navigate(&mut self, screen: Screen) {
         self.navigation_stack.push(self.current_screen.clone());
-        self.current_screen = screen;
+        self.current_screen = screen.clone();
+        
+        // Update browser URL on web platform
+        #[cfg(target_arch = "wasm32")]
+        self.update_browser_url(&screen);
     }
 
     pub fn navigate_back(&mut self) {
         if let Some(previous) = self.navigation_stack.pop() {
-            self.current_screen = previous;
+            self.current_screen = previous.clone();
+            
+            // Update browser URL on web platform
+            #[cfg(target_arch = "wasm32")]
+            self.update_browser_url(&previous);
+        }
+    }
+    
+    /// Handle deep link navigation from URL
+    pub fn handle_deep_link(&mut self, url: &str) {
+        // Parse the URL and extract the fragment
+        if let Some(fragment_start) = url.find('#') {
+            let fragment = &url[fragment_start + 1..];
+            
+            // Parse the screen from the fragment
+            if let Some(screen) = Screen::from_url_fragment(fragment) {
+                // Navigate directly to the screen without pushing to history
+                self.current_screen = screen;
+            }
+        }
+    }
+    
+    /// Initialize app state with deep link if available
+    pub fn init_with_deep_link(&mut self) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(window) = web_sys::window() {
+                if let Ok(location) = window.location().href() {
+                    self.handle_deep_link(&location);
+                }
+            }
+        }
+    }
+    
+    /// Update browser URL when navigating (web platform only)
+    #[cfg(target_arch = "wasm32")]
+    fn update_browser_url(&self, screen: &Screen) {
+        if let Some(window) = web_sys::window() {
+            if let Some(history) = window.history().ok() {
+                let fragment = screen.to_url_fragment();
+                let new_url = format!("#{}", fragment);
+                
+                // Use replaceState to update URL without triggering navigation
+                let _ = history.replace_state_with_url(
+                    &wasm_bindgen::JsValue::NULL,
+                    "",
+                    Some(&new_url)
+                );
+            }
         }
     }
 
@@ -292,6 +397,15 @@ impl AppState {
 
     pub fn clear_errors(&mut self) {
         self.errors.clear();
+    }
+    
+    pub fn add_notification(&mut self, message: &str, notification_type: crate::demo::NotificationType) {
+        self.notifications.push((message.to_string(), notification_type));
+        tracing::info!("Notification: {} ({:?})", message, notification_type);
+    }
+    
+    pub fn clear_notifications(&mut self) {
+        self.notifications.clear();
     }
 
     pub fn is_loading(&self, key: LoadingKey) -> bool {

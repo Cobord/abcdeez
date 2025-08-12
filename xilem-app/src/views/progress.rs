@@ -12,10 +12,10 @@ pub fn progress_view(state: &mut AppState, window_width: f64) -> ComponentOutput
     
     // Build tabs for different progress views
     let tabs = vec![
-        ("Overview", overview_tab(state, &profile, window_width)),
-        ("Daily", daily_progress_tab(state, &profile)),
-        ("Weekly", weekly_progress_tab(state, &profile)),
-        ("Achievements", achievements_tab(state, &profile)),
+        ("Overview", overview_tab(state, profile, window_width)),
+        ("Daily", daily_progress_tab(state, profile)),
+        ("Weekly", weekly_progress_tab(state, profile)),
+        ("Achievements", achievements_tab(state, profile)),
     ];
     
     // Create tabbed layout with state management
@@ -29,13 +29,13 @@ pub fn progress_view(state: &mut AppState, window_width: f64) -> ComponentOutput
     )
 }
 
-fn overview_tab(state: &AppState, profile: &Option<crate::gamification::profile::GamificationProfile>, window_width: f64) -> ComponentOutput {
+fn overview_tab(state: &AppState, profile: Option<&crate::gamification::profile::GamificationProfile>, window_width: f64) -> ComponentOutput {
     let mut items = vec![];
     
     if let Some(profile) = profile {
         // Progress to next level
         let level_progress = Components::progress_bar(
-            profile.get_progress_to_next_level(),
+            profile.get_progress_to_next_level() as f64,
             &format!("Level {} → Level {}", profile.level, profile.level + 1)
         );
         items.push(level_progress);
@@ -127,7 +127,7 @@ fn overview_tab(state: &AppState, profile: &Option<crate::gamification::profile:
     Components::simple_flex_column(items)
 }
 
-fn daily_progress_tab(_state: &AppState, profile: &Option<crate::gamification::profile::GamificationProfile>) -> ComponentOutput {
+fn daily_progress_tab(_state: &AppState, profile: Option<&crate::gamification::profile::GamificationProfile>) -> ComponentOutput {
     let mut items = vec![];
     
     if let Some(profile) = profile {
@@ -175,8 +175,8 @@ fn daily_progress_tab(_state: &AppState, profile: &Option<crate::gamification::p
             items.push(Components::checkbox(
                 completed,
                 goal,
-                |state, checked| {
-                    tracing::info!("Daily goal '{}' marked as {}", goal, if checked { "complete" } else { "incomplete" });
+                move |state, checked| {
+                    tracing::info!("Daily goal marked as {}", if checked { "complete" } else { "incomplete" });
                     // TODO: Actually update goal completion status
                 }
             ));
@@ -193,7 +193,7 @@ fn daily_progress_tab(_state: &AppState, profile: &Option<crate::gamification::p
     Components::simple_flex_column(items)
 }
 
-fn weekly_progress_tab(_state: &AppState, profile: &Option<crate::gamification::profile::GamificationProfile>) -> ComponentOutput {
+fn weekly_progress_tab(_state: &AppState, profile: Option<&crate::gamification::profile::GamificationProfile>) -> ComponentOutput {
     let mut items = vec![];
     
     if let Some(profile) = profile {
@@ -243,7 +243,7 @@ fn weekly_progress_tab(_state: &AppState, profile: &Option<crate::gamification::
     Components::simple_flex_column(items)
 }
 
-fn achievements_tab(_state: &AppState, profile: &Option<crate::gamification::profile::GamificationProfile>) -> ComponentOutput {
+fn achievements_tab(_state: &AppState, profile: Option<&crate::gamification::profile::GamificationProfile>) -> ComponentOutput {
     let mut items = vec![];
     
     if let Some(profile) = profile {

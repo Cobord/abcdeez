@@ -162,7 +162,7 @@ where
     
     Components::setting_row(
         label,
-        Components::labeled_input(&display_value, display_value, on_change)
+        Components::labeled_input(&display_value, display_value.clone(), on_change)
     )
 }
 
@@ -179,7 +179,7 @@ where
     
     Components::setting_row(
         label,
-        Components::labeled_input(&display_value, display_value, on_change)
+        Components::labeled_input(&display_value, display_value.clone(), on_change)
     )
 }
 
@@ -258,7 +258,7 @@ where
 {
     Components::setting_row(
         label,
-        Components::labeled_input(&value, value, on_change)
+        Components::labeled_input(&value, value.clone(), on_change)
     )
 }
 

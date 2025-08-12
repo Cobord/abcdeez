@@ -7,6 +7,7 @@ use crate::components::forms::{form_field, FieldType, toggle_switch, slider, rad
 use crate::components::feedback::{toast, ToastType, progress_indicator, skeleton_loader, alert, AlertType, AlertAction, confirmation_dialog, snackbar, status_badge, StatusType, loading_overlay_with_progress, help_tooltip, inline_error, success_indicator, step_indicator};
 use crate::state::{AppState, Screen};
 use crate::models::Response;
+use crate::demo::NotificationType;
 
 /// Exhaustive widget gallery showcasing ALL components
 pub fn widget_gallery(window_width: f64) -> ComponentOutput {
@@ -60,11 +61,26 @@ fn core_components_tab(window_width: f64) -> ComponentOutput {
     items.push(Components::label("Buttons:"));
     
     let button_row = vec![
-        Components::simple_button("Simple", |_| {}),
-        Components::action_button("Primary", AppColor::Primary, |_| {}),
-        Components::action_button("Success", AppColor::Success, |_| {}),
-        Components::action_button("Warning", AppColor::Warning, |_| {}),
-        Components::action_button("Error", AppColor::Error, |_| {}),
+        Components::simple_button("Simple", |state: &mut AppState| {
+            tracing::info!("Simple button clicked");
+            state.add_notification("Simple button clicked!", NotificationType::Info);
+        }),
+        Components::action_button("Primary", AppColor::Primary, |state: &mut AppState| {
+            tracing::info!("Primary action triggered");
+            state.add_notification("Primary action executed", NotificationType::Success);
+        }),
+        Components::action_button("Success", AppColor::Success, |state: &mut AppState| {
+            tracing::info!("Success action triggered");
+            state.add_notification("Success! Operation completed", NotificationType::Success);
+        }),
+        Components::action_button("Warning", AppColor::Warning, |state: &mut AppState| {
+            tracing::info!("Warning action triggered");
+            state.add_notification("Warning: Check your settings", NotificationType::Warning);
+        }),
+        Components::action_button("Error", AppColor::Error, |state: &mut AppState| {
+            tracing::info!("Error action triggered");
+            state.add_error("Error: This is a demo error".to_string(), false);
+        }),
     ];
     items.push(Components::simple_flex_row(button_row));
     
@@ -83,7 +99,11 @@ fn core_components_tab(window_width: f64) -> ComponentOutput {
         "📭",
         "No Data",
         "Start adding items to see them here",
-        Some(Components::action_button("Add Item", AppColor::Primary, |_| {}))
+        Some(Components::action_button("Add Item", AppColor::Primary, |state: &mut AppState| {
+            tracing::info!("Add item clicked from empty state");
+            state.add_notification("Opening add item dialog...", NotificationType::Info);
+            // In a real app, this would open a dialog or navigate to an add item screen
+        }))
     ));
     
     // Loading states
@@ -355,10 +375,22 @@ fn feedback_components_tab() -> ComponentOutput {
     
     // Toasts
     items.push(Components::label("Toast Notifications:"));
-    items.push(toast("Success! Your changes have been saved.", ToastType::Success, Some(3000), None));
-    items.push(toast("Error: Unable to connect to server", ToastType::Error, Some(5000), Some(|_| {})));
-    items.push(toast("Warning: Low battery", ToastType::Warning, None, None));
-    items.push(toast("Info: New update available", ToastType::Info, None, None));
+    items.push(toast("Success! Your changes have been saved.", ToastType::Success, Some(3000), Some(|state: &mut AppState| {
+        tracing::info!("Success toast dismissed");
+        state.add_notification("Success toast was dismissed", NotificationType::Info);
+    })));
+    items.push(toast("Error: Unable to connect to server", ToastType::Error, Some(5000), Some(|state: &mut AppState| {
+        tracing::info!("Error toast dismissed, retrying connection");
+        state.add_error("Retrying connection...".to_string(), false);
+    })));
+    items.push(toast("Warning: Low battery", ToastType::Warning, None, Some(|state: &mut AppState| {
+        tracing::info!("Warning acknowledged");
+        state.add_notification("Battery warning acknowledged", NotificationType::Warning);
+    })));
+    items.push(toast("Info: New update available", ToastType::Info, None, Some(|state: &mut AppState| {
+        tracing::info!("Navigating to settings for update");
+        state.navigate(Screen::Settings);
+    })));
     
     items.push(Components::spacer(SpacerSize::Large));
     
@@ -411,8 +443,15 @@ fn feedback_components_tab() -> ComponentOutput {
     
     // Snackbars
     items.push(Components::label("Snackbars:"));
-    items.push(snackbar("File uploaded successfully", None, None));
-    items.push(snackbar("Network connection lost", Some("Retry"), Some(|_| {})));
+    items.push(snackbar("File uploaded successfully", None, Some(|state: &mut AppState| {
+        tracing::info!("Snackbar dismissed");
+        state.add_notification("Upload confirmed", NotificationType::Success);
+    })));
+    items.push(snackbar("Network connection lost", Some("Retry"), Some(|state: &mut AppState| {
+        tracing::info!("Retrying network connection");
+        state.add_notification("Retrying connection...", NotificationType::Info);
+        // In a real app, this would trigger a reconnection attempt
+    })));
     
     items.push(Components::spacer(SpacerSize::Large));
     
@@ -435,7 +474,10 @@ fn feedback_components_tab() -> ComponentOutput {
         "Please wait while we process your request...",
         Some(0.45),
         true,
-        Some(|_| {})
+        Some(|state: &mut AppState| {
+            tracing::info!("Loading cancelled by user");
+            state.add_notification("Process cancelled", NotificationType::Warning);
+        })
     ));
     
     items.push(Components::spacer(SpacerSize::Large));

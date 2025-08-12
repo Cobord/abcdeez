@@ -1205,6 +1205,151 @@ impl AppComponents for NativeComponents {
             .corner_radius(10.0)
         ))
     }
+    
+    fn spacer(size: super::SpacerSize) -> Self::Output {
+        use super::SpacerSize;
+        let spacing = match size {
+            SpacerSize::Small => 5.0,
+            SpacerSize::Medium => 10.0,
+            SpacerSize::Large => 20.0,
+            SpacerSize::XLarge => 30.0,
+        };
+        // Use an empty sized box with the desired height as a spacer
+        NativeComponent(Box::new(
+            sized_box(flex(()))
+                .height(spacing)
+                .width(0.0)
+        ))
+    }
+    
+    fn divider(orientation: super::Orientation) -> Self::Output {
+        use super::Orientation;
+        let (width, height) = match orientation {
+            Orientation::Horizontal => (f64::INFINITY, 1.0),
+            Orientation::Vertical => (1.0, f64::INFINITY),
+        };
+        NativeComponent(Box::new(
+            sized_box(flex(()))
+                .width(width)
+                .height(height)
+                .background_color(Color::from_rgb8(230, 230, 230))
+        ))
+    }
+    
+    fn sidebar_nav(current_screen: Screen, on_navigate: impl Fn(&mut AppState, Screen) + Send + Sync + 'static) -> Self::Output {
+        // Simple sidebar implementation
+        use std::sync::Arc;
+        let on_navigate = Arc::new(on_navigate);
+        let on_navigate_dashboard = Arc::clone(&on_navigate);
+        let on_navigate_settings = Arc::clone(&on_navigate);
+        
+        NativeComponent(Box::new(
+            flex((
+                label("Navigation")
+                    .text_size(16.0)
+                    .weight(xilem::FontWeight::BOLD),
+                FlexSpacer::Fixed(20.0),
+                button("Dashboard", move |state: &mut AppState| {
+                    on_navigate_dashboard(state, Screen::Dashboard);
+                }),
+                FlexSpacer::Fixed(10.0),
+                button("Settings", move |state: &mut AppState| {
+                    on_navigate_settings(state, Screen::Settings);
+                }),
+            ))
+            .direction(Axis::Vertical)
+            .padding(20.0)
+            .background_color(map_color(AppColor::Surface))
+        ))
+    }
+    
+    fn tab_bar(tabs: Vec<super::TabItem>, current_index: usize, on_select: impl Fn(&mut AppState, usize) + Send + Sync + 'static) -> Self::Output {
+        // Simple tab bar implementation
+        let mut tab_buttons = vec![];
+        
+        for (i, tab) in tabs.iter().enumerate() {
+            let is_selected = i == current_index;
+            let color = if is_selected {
+                map_color(AppColor::Primary)
+            } else {
+                map_color(AppColor::TextMuted)
+            };
+            
+            let tab_label = if let Some(ref icon) = tab.icon {
+                format!("{} {}", icon, tab.label)
+            } else {
+                tab.label.clone()
+            };
+            
+            tab_buttons.push(
+                label(tab_label)
+                    .color(color)
+                    .text_size(14.0)
+            );
+            
+            if i < tabs.len() - 1 {
+                tab_buttons.push(label(" | ").color(map_color(AppColor::TextMuted)));
+            }
+        }
+        
+        NativeComponent(Box::new(
+            flex_row(tab_buttons)
+                .gap(10.0)
+                .padding(10.0)
+        ))
+    }
+    
+    fn split_pane(left: Self::Output, right: Self::Output, split_ratio: f64) -> Self::Output {
+        NativeComponent(Box::new(
+            flex_row((
+                sized_box(left.0).flex(split_ratio),
+                FlexSpacer::Fixed(10.0),
+                sized_box(right.0).flex(1.0 - split_ratio),
+            ))
+        ))
+    }
+    
+    fn scrollable(content: Self::Output) -> Self::Output {
+        // Xilem doesn't have built-in scrolling yet, so we just pass through
+        content
+    }
+    
+    fn grid_layout(items: Vec<Self::Output>, cols: usize) -> Self::Output {
+        // Simple grid implementation using nested flex
+        let mut rows = vec![];
+        let mut current_row = vec![];
+        let items_len = items.len();
+        
+        for (i, item) in items.into_iter().enumerate() {
+            current_row.push(item.0);
+            
+            if (i + 1) % cols == 0 || i == items_len - 1 {
+                rows.push(Box::new(
+                    flex_row(current_row)
+                        .gap(10.0)
+                ) as Box<AnyWidgetView<AppState>>);
+                current_row = vec![];
+            }
+        }
+        
+        NativeComponent(Box::new(
+            flex(rows)
+                .direction(Axis::Vertical)
+                .gap(10.0)
+        ))
+    }
+    
+    fn stack(items: Vec<Self::Output>, spacing: f64) -> Self::Output {
+        let views: Vec<Box<AnyWidgetView<AppState>>> = items.into_iter()
+            .map(|item| item.0)
+            .collect();
+        
+        NativeComponent(Box::new(
+            flex(views)
+                .direction(Axis::Vertical)
+                .gap(spacing)
+        ))
+    }
 }
 
 // Helper function to map app colors to xilem colors

@@ -206,11 +206,11 @@ fn signup_form(state: &mut AppState) -> ComponentOutput {
     // Confirm password field
     items.push(form_field(
         "Confirm Password",
-        state.auth_password_confirm.clone(),
+        state.auth_confirm_password.clone(),
         Some("Re-enter password"),
         FieldType::Password,
         |state: &mut AppState, value| {
-            state.auth_password_confirm = value;
+            state.auth_confirm_password = value;
         }
     ));
     
@@ -242,7 +242,7 @@ fn signup_form(state: &mut AppState) -> ComponentOutput {
                     return;
                 }
                 
-                if state.auth_password != state.auth_password_confirm {
+                if state.auth_password != state.auth_confirm_password {
                     tracing::error!("Password confirmation mismatch");
                     state.add_error("Passwords do not match".to_string(), true);
                     return;
@@ -267,7 +267,7 @@ fn signup_form(state: &mut AppState) -> ComponentOutput {
                 
                 // Clear sensitive data
                 state.auth_password.clear();
-                state.auth_password_confirm.clear();
+                state.auth_confirm_password.clear();
                 state.set_loading(LoadingKey::Signup, false);
                 state.navigate(Screen::Welcome);
             }

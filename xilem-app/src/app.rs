@@ -7,8 +7,8 @@ use crate::components::layout::adaptive_app_layout;
 
 pub fn app_logic(state: &mut AppState) -> ComponentOutput {
     // Get window dimensions (with defaults for now)
-    let window_width = state.window_width.unwrap_or(1200.0);
-    let window_height = state.window_height.unwrap_or(800.0);
+    let window_width = state.window_width;
+    let window_height = state.window_height;
     // Process any pending authentication events
     state.process_auth_events();
     
