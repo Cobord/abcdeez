@@ -22,8 +22,9 @@ pub fn run(ev: xilem::EventLoopBuilder) -> Result<(), winit::error::EventLoopErr
     crate::logging::init_logging();
     tracing::info!("Starting ABCDEEZ Learning App");
 
-    // Create initial application state
-    let initial_state = crate::state::AppState::default();
+    // Create initial application state and check for deep links
+    let mut initial_state = crate::state::AppState::default();
+    initial_state.init_with_deep_link();
 
     // Create the Xilem application using the native platform wrapper
     let app = xilem::Xilem::new_simple(
@@ -56,7 +57,8 @@ pub fn run_web() {
     // Initialize web logging
     tracing_wasm::set_as_global_default();
 
-    let app_state = state::AppState::new();
+    let mut app_state = state::AppState::new();
+    app_state.init_with_deep_link();
     CurrentPlatformRunner::run(app_state).expect("Failed to start web app");
 }
 
