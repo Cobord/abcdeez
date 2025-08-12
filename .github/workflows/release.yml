@@ -41,19 +41,8 @@ permissions:
 on:
   pull_request:
   push:
-    branches: [ dev ]  # Auto-deploy to staging from dev
     tags:
       - '**[0-9]+.[0-9]+.[0-9]+*'
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Target environment'
-        required: false
-        default: 'staging'
-        type: choice
-        options:
-          - staging
-          - production
 
 jobs:
   # Run 'dist plan' (or host) to determine what tasks we need to do
@@ -61,10 +50,9 @@ jobs:
     runs-on: "ubuntu-22.04"
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
-      tag: ${{ !github.event.pull_request && startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-      tag-flag: ${{ !github.event.pull_request && startsWith(github.ref, 'refs/tags/') && format('--tag={0}', github.ref_name) || '' }}
-      publishing: ${{ !github.event.pull_request && startsWith(github.ref, 'refs/tags/') }}
-      staging: ${{ github.ref == 'refs/heads/dev' }}
+      tag: ${{ !github.event.pull_request && github.ref_name || '' }}
+      tag-flag: ${{ !github.event.pull_request && format('--tag={0}', github.ref_name) || '' }}
+      publishing: ${{ !github.event.pull_request }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -89,19 +77,7 @@ jobs:
       # but also really annoying to build CI around when it needs secrets to work right.)
       - id: plan
         run: |
-          # Determine the tag to use
-          if [ "${{ github.ref }}" = "refs/heads/dev" ]; then
-            # For dev branch, use the latest tag (dist requires exact version match)
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.1")
-            echo "Using tag for dev branch: $LATEST_TAG"
-            dist host --steps=create --tag=$LATEST_TAG --output-format=json > plan-dist-manifest.json
-          elif [ "${{ github.event.pull_request }}" = "true" ]; then
-            # For pull requests, just run plan
-            dist plan --output-format=json > plan-dist-manifest.json
-          else
-            # For actual tags, use the tag name
-            dist host --steps=create --tag=${{ github.ref_name }} --output-format=json > plan-dist-manifest.json
-          fi
+          dist ${{ (!github.event.pull_request && format('host --steps=create --tag={0}', github.ref_name)) || 'plan' }} --output-format=json > plan-dist-manifest.json
           echo "dist ran successfully"
           cat plan-dist-manifest.json
           echo "manifest=$(jq -c "." plan-dist-manifest.json)" >> "$GITHUB_OUTPUT"
@@ -301,40 +277,6 @@ jobs:
           echo "$ANNOUNCEMENT_BODY" > $RUNNER_TEMP/notes.txt
 
           gh release create "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
-
-  # Deploy to staging when pushing to dev branch
-  deploy-staging:
-    needs:
-      - plan
-      - build-local-artifacts
-      - build-global-artifacts
-    if: ${{ needs.plan.outputs.staging == 'true' && (needs.build-global-artifacts.result == 'skipped' || needs.build-global-artifacts.result == 'success') && (needs.build-local-artifacts.result == 'skipped' || needs.build-local-artifacts.result == 'success') }}
-    runs-on: ubuntu-latest
-    environment:
-      name: staging
-      url: https://staging.abcdeez.fg-goose.online
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: artifacts-*
-          path: staging-artifacts/
-          merge-multiple: true
-      
-      - name: Deploy to Staging
-        run: |
-          echo "Deploying build artifacts to staging environment"
-          echo "Artifacts available in staging-artifacts/"
-          ls -la staging-artifacts/ || echo "No artifacts found"
-          
-      - name: Notify Staging Deployment
-        run: |
-          echo "✅ Staging deployment completed"
-          echo "🌐 URL: https://staging.abcdeez.fg-goose.online"
-          echo "📦 Branch: dev"
-          echo "🔨 Commit: ${{ github.sha }}"
 
   announce:
     needs:
